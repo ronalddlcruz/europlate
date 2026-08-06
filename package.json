@@ -8,6 +8,7 @@
     "seed": "node scripts/seed.js"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.110.7",
     "bcryptjs": "^2.4.3",
     "jsonwebtoken": "^9.0.2",
     "pg": "^8.11.3"
