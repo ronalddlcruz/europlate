@@ -4,13 +4,18 @@
  * Requiere: Authorization: Bearer <jwt>
  */
 const jwt     = require('jsonwebtoken');
-const { createClient } = require('@supabase/supabase-js');
+const { Pool } = require('pg');
 
-function getSupabase() {
-  return createClient(
-    process.env.SUPABASE_URL,
-    process.env.SUPABASE_SECRET_KEY
-  );
+let pool;
+function getPool() {
+  if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL no est\u00e1 definida');
+  if (!pool) {
+    pool = new Pool({
+      connectionString: process.env.DATABASE_URL,
+      ssl: process.env.DATABASE_URL.includes('localhost') ? false : { rejectUnauthorized: false },
+    });
+  }
+  return pool;
 }
 
 const CORS_HEADERS = {
@@ -40,26 +45,25 @@ exports.handler = async (event) => {
   }
 
   try {
-    const supabase = getSupabase();
+    const db = getPool();
 
     // ── GET: obtener estado ───────────────────────────────────────────────
     if (event.httpMethod === 'GET') {
-      const { data: users, error: uErr } = await supabase
-        .from('users')
-        .select('id, email, name, role')
-        .eq('id', payload.id)
-        .eq('estado', 'Activo')
-        .limit(1);
+      const { rows: users } = await db.query(
+        `SELECT id, email, name, role
+         FROM users
+         WHERE id = $1 AND estado = 'Activo'
+         LIMIT 1`,
+        [payload.id]
+      );
 
-      if (uErr || !users || !users.length) {
+      if (!users.length) {
         return { statusCode: 401, headers: CORS_HEADERS, body: JSON.stringify({ error: 'Usuario no activo' }) };
       }
 
-      const { data: stateRows } = await supabase
-        .from('app_state')
-        .select('data')
-        .eq('id', 'main')
-        .limit(1);
+      const { rows: stateRows } = await db.query(
+        `SELECT data FROM app_state WHERE id = 'main' LIMIT 1`
+      );
 
       return {
         statusCode: 200,
@@ -83,11 +87,15 @@ exports.handler = async (event) => {
         return { statusCode: 400, headers: CORS_HEADERS, body: JSON.stringify({ error: 'state requerido' }) };
       }
 
-      const { error: upsertErr } = await supabase
-        .from('app_state')
-        .upsert({ id: 'main', data: state, updated_at: new Date().toISOString(), updated_by: payload.email });
-
-      if (upsertErr) throw upsertErr;
+      await db.query(
+        `INSERT INTO app_state (id, data, updated_at, updated_by)
+         VALUES ('main', $1::jsonb, NOW(), $2)
+         ON CONFLICT (id) DO UPDATE
+           SET data = EXCLUDED.data,
+               updated_at = EXCLUDED.updated_at,
+               updated_by = EXCLUDED.updated_by`,
+        [JSON.stringify(state), payload.email]
+      );
 
       return {
         statusCode: 200,

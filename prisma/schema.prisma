@@ -1,0 +1,482 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url = env("SUPABASE_DATABASE_URL")
+  directUrl = env("SUPABASE_DIRECT_URL")
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum ProductStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum SupplierType {
+  NATIONAL
+  FOREIGN
+}
+
+enum ProductRoleType {
+  MERCHANDISE
+  SUPPLY
+  FINISHED_PRODUCT
+}
+
+enum ProductVariantType {
+  WITH_VARIANTS
+  BASIC
+}
+
+enum AttributeDataType {
+  TEXT
+  NUMBER
+}
+
+enum ProductIdentifierType {
+  BARCODE
+  INTERNAL
+  SUPPLIER
+}
+
+enum InventoryMovementType {
+  PURCHASE_RECEIPT
+  IMPORT_RECEIPT
+  SALE_OUT
+  PRODUCTION_CONSUMPTION
+  PRODUCTION_OUTPUT
+  TRANSFER_IN
+  TRANSFER_OUT
+  ADJUSTMENT_IN
+  ADJUSTMENT_OUT
+  INITIAL_STOCK
+}
+
+enum PurchaseStatus {
+  DRAFT
+  APPROVED
+  RECEIVED
+  CANCELLED
+}
+
+enum ImportStatus {
+  IN_TRANSIT
+  RECEIVED
+  CANCELLED
+}
+
+enum ProductionStatus {
+  PLANNED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+model Company {
+  id String @id @default(cuid())
+  name String
+  taxId String? @unique
+  currency String @default("PEN")
+  users User[]
+  warehouses Warehouse[]
+  suppliers Supplier[]
+  customsAgents CustomsAgent[]
+  purchases Purchase[]
+  imports Import[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model User {
+  id String @id @default(cuid())
+  companyId String
+  name String
+  email String @unique
+  passwordHash String
+  status UserStatus @default(ACTIVE)
+  company Company @relation(fields: [companyId], references: [id])
+  roles UserRole[]
+  permissions UserPermission[]
+  sessions Session[]
+  auditLogs AuditLog[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([companyId, status])
+}
+
+model Role {
+  id String @id @default(cuid())
+  key String @unique
+  name String
+  users UserRole[]
+  permissions RolePermission[]
+}
+
+model Permission {
+  id String @id @default(cuid())
+  key String @unique
+  module String
+  action String
+  roles RolePermission[]
+  users UserPermission[]
+}
+
+model UserRole {
+  userId String
+  roleId String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  @@id([userId, roleId])
+}
+
+model RolePermission {
+  roleId String
+  permissionId String
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  @@id([roleId, permissionId])
+}
+
+model UserPermission {
+  userId String
+  permissionId String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  @@id([userId, permissionId])
+}
+
+model Session {
+  id String @id @default(cuid())
+  userId String
+  tokenHash String @unique
+  expiresAt DateTime
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  @@index([userId, expiresAt])
+}
+
+model AuditLog {
+  id String @id @default(cuid())
+  userId String?
+  action String
+  module String
+  detail Json?
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now())
+  @@index([module, createdAt])
+}
+
+model Unit {
+  id String @id @default(cuid())
+  code String @unique
+  description String
+  status ProductStatus @default(ACTIVE)
+  presentations ProductPresentation[]
+}
+
+model Category {
+  id String @id @default(cuid())
+  name String @unique
+  products Product[]
+  subcategories Subcategory[]
+}
+
+model Subcategory {
+  id String @id @default(cuid())
+  categoryId String
+  name String
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  products Product[]
+  @@unique([categoryId, name])
+}
+
+model Brand {
+  id String @id @default(cuid())
+  name String @unique
+  products Product[]
+}
+
+model Product {
+  id String @id @default(cuid())
+  code String @unique
+  name String
+  categoryId String?
+  subcategoryId String?
+  brandId String?
+  status ProductStatus @default(ACTIVE)
+  roles ProductRoleType[]
+  variantType ProductVariantType @default(WITH_VARIANTS)
+  immediateConsumption Boolean @default(true)
+  category Category? @relation(fields: [categoryId], references: [id])
+  subcategory Subcategory? @relation(fields: [subcategoryId], references: [id])
+  brand Brand? @relation(fields: [brandId], references: [id])
+  attributes ProductAttribute[]
+  presentations ProductPresentation[]
+  identifiers ProductIdentifier[]
+  stocks Stock[]
+  movements InventoryMovement[]
+  purchaseItems PurchaseItem[]
+  importItems ImportItem[]
+  productionOrders ProductionOrder[]
+  materials ProductionMaterial[]
+  @@index([name, status])
+}
+
+model ProductAttribute {
+  id String @id @default(cuid())
+  productId String
+  name String
+  dataType AttributeDataType @default(TEXT)
+  suffix String?
+  required Boolean @default(false)
+  status ProductStatus @default(ACTIVE)
+  useInSubtotal Boolean @default(false)
+  position Int @default(0)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  @@unique([productId, name])
+}
+
+model ProductPresentation {
+  id String @id @default(cuid())
+  productId String
+  unitId String
+  code String @unique
+  name String
+  factor Decimal @default(1) @db.Decimal(14, 3)
+  minimumStock Decimal @default(0) @db.Decimal(14, 3)
+  currentStock Decimal @default(0) @db.Decimal(14, 3)
+  status ProductStatus @default(ACTIVE)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  unit Unit @relation(fields: [unitId], references: [id])
+  purchaseItems PurchaseItem[]
+  importItems ImportItem[]
+  @@index([productId, status])
+}
+
+model ProductIdentifier {
+  id String @id @default(cuid())
+  productId String
+  presentationId String?
+  type ProductIdentifierType @default(BARCODE)
+  value String @unique
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  @@index([productId, type])
+}
+
+model Warehouse {
+  id String @id @default(cuid())
+  companyId String
+  name String
+  location String?
+  status ProductStatus @default(ACTIVE)
+  company Company @relation(fields: [companyId], references: [id])
+  stocks Stock[]
+  movements InventoryMovement[]
+  purchaseItems PurchaseItem[]
+  importItems ImportItem[]
+  @@unique([companyId, name])
+}
+
+model Stock {
+  id String @id @default(cuid())
+  productId String
+  warehouseId String
+  quantity Decimal @default(0) @db.Decimal(14, 3)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  warehouse Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  @@unique([productId, warehouseId])
+}
+
+model InventoryMovement {
+  id String @id @default(cuid())
+  productId String
+  warehouseId String
+  type InventoryMovementType
+  quantity Decimal @db.Decimal(14, 3)
+  reference String?
+  note String?
+  product Product @relation(fields: [productId], references: [id])
+  warehouse Warehouse @relation(fields: [warehouseId], references: [id])
+  createdAt DateTime @default(now())
+  @@index([warehouseId, createdAt])
+}
+
+model StockTransfer {
+  id String @id @default(cuid())
+  productId String
+  fromWarehouseId String
+  toWarehouseId String
+  quantity Decimal @db.Decimal(14, 3)
+  note String?
+  createdAt DateTime @default(now())
+}
+
+model InventoryAdjustment {
+  id String @id @default(cuid())
+  productId String
+  warehouseId String
+  previousQuantity Decimal @db.Decimal(14, 3)
+  newQuantity Decimal @db.Decimal(14, 3)
+  reason String
+  createdAt DateTime @default(now())
+}
+
+model Supplier {
+  id String @id @default(cuid())
+  companyId String
+  name String
+  taxId String?
+  email String?
+  phone String?
+  type SupplierType @default(NATIONAL)
+  status ProductStatus @default(ACTIVE)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  purchases Purchase[]
+  imports Import[]
+  @@index([companyId, name])
+}
+
+model CustomsAgent {
+  id String @id @default(cuid())
+  companyId String
+  name String
+  ruc String?
+  contactName String?
+  phone String?
+  email String?
+  status ProductStatus @default(ACTIVE)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  imports Import[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([companyId, ruc])
+  @@index([companyId, name])
+}
+
+model Purchase {
+  id String @id @default(cuid())
+  companyId String
+  supplierId String
+  number String @unique
+  supplierInvoiceNumber String
+  status PurchaseStatus @default(DRAFT)
+  currency String @default("PEN")
+  purchaseDate DateTime
+  receiptDate DateTime
+  total Decimal @default(0) @db.Decimal(14, 2)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  supplier Supplier @relation(fields: [supplierId], references: [id])
+  items PurchaseItem[]
+  documents PurchaseDocument[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model PurchaseItem {
+  id String @id @default(cuid())
+  purchaseId String
+  productId String
+  presentationId String
+  warehouseId String
+  quantity Decimal @db.Decimal(14, 3)
+  unitPrice Decimal @db.Decimal(14, 4)
+  purchase Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+  presentation ProductPresentation @relation(fields: [presentationId], references: [id])
+  warehouse Warehouse @relation(fields: [warehouseId], references: [id])
+}
+
+model PurchaseDocument {
+  id String @id @default(cuid())
+  purchaseId String
+  fileName String
+  mimeType String?
+  size Int?
+  storageKey String?
+  purchase Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+}
+
+model Import {
+  id String @id @default(cuid())
+  companyId String
+  supplierId String
+  customsAgentId String?
+  number String @unique
+  containerNumber String
+  duaNumber String
+  purchaseOrderNumber String
+  countryOfOrigin String
+  status ImportStatus @default(RECEIVED)
+  currency String @default("USD")
+  arrivalDate DateTime?
+  customsCostUsd Decimal @default(0) @db.Decimal(14, 2)
+  customsCostPen Decimal @default(0) @db.Decimal(14, 2)
+  totalUsd Decimal @default(0) @db.Decimal(14, 2)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  supplier Supplier @relation(fields: [supplierId], references: [id])
+  customsAgent CustomsAgent? @relation(fields: [customsAgentId], references: [id])
+  items ImportItem[]
+  documents ImportDocument[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([companyId, duaNumber])
+  @@index([companyId, status, createdAt])
+  @@index([supplierId])
+}
+
+model ImportItem {
+  id String @id @default(cuid())
+  importId String
+  productId String
+  presentationId String
+  warehouseId String
+  quantity Decimal @db.Decimal(14, 3)
+  unitCostUsd Decimal @db.Decimal(14, 4)
+  import Import @relation(fields: [importId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+  presentation ProductPresentation @relation(fields: [presentationId], references: [id])
+  warehouse Warehouse @relation(fields: [warehouseId], references: [id])
+  @@index([importId])
+}
+
+model ImportDocument {
+  id String @id @default(cuid())
+  importId String
+  fileName String
+  mimeType String?
+  size Int?
+  storageKey String?
+  linkUrl String?
+  import Import @relation(fields: [importId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+}
+
+model ProductionOrder {
+  id String @id @default(cuid())
+  number String @unique
+  productId String
+  quantity Decimal @db.Decimal(14, 3)
+  scheduledAt DateTime
+  status ProductionStatus @default(PLANNED)
+  product Product @relation(fields: [productId], references: [id])
+  materials ProductionMaterial[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ProductionMaterial {
+  id String @id @default(cuid())
+  orderId String
+  productId String
+  quantity Decimal @db.Decimal(14, 3)
+  order ProductionOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+}

@@ -1,4 +1,8 @@
 node_modules/
 .env
+prisma/.env
 .netlify/
 *.log
+.pnpm-store/
+dist/
+server/dist/

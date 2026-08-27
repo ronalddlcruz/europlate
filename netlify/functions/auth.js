@@ -5,13 +5,18 @@
  */
 const bcrypt  = require('bcryptjs');
 const jwt     = require('jsonwebtoken');
-const { createClient } = require('@supabase/supabase-js');
+const { Pool } = require('pg');
 
-function getSupabase() {
-  return createClient(
-    process.env.SUPABASE_URL,
-    process.env.SUPABASE_SECRET_KEY
-  );
+let pool;
+function getPool() {
+  if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL no est\u00e1 definida');
+  if (!pool) {
+    pool = new Pool({
+      connectionString: process.env.DATABASE_URL,
+      ssl: process.env.DATABASE_URL.includes('localhost') ? false : { rejectUnauthorized: false },
+    });
+  }
+  return pool;
 }
 
 const CORS_HEADERS = {
@@ -40,18 +45,17 @@ exports.handler = async (event) => {
   }
 
   try {
-    const supabase = getSupabase();
+    const db = getPool();
 
     // 1. Buscar usuario
-    const { data: users, error: userErr } = await supabase
-      .from('users')
-      .select('*')
-      .eq('estado', 'Activo')
-      .ilike('email', email.trim())
-      .limit(1);
-
-    if (userErr) throw userErr;
-    if (!users || users.length === 0) {
+    const { rows: users } = await db.query(
+      `SELECT id, email, name, role, password_hash
+       FROM users
+       WHERE estado = 'Activo' AND lower(email) = lower($1)
+       LIMIT 1`,
+      [email.trim()]
+    );
+    if (!users.length) {
       return { statusCode: 401, headers: CORS_HEADERS, body: JSON.stringify({ error: 'Credenciales inválidas' }) };
     }
 
@@ -71,11 +75,9 @@ exports.handler = async (event) => {
     );
 
     // 4. Obtener estado de la app
-    const { data: stateRows } = await supabase
-      .from('app_state')
-      .select('data')
-      .eq('id', 'main')
-      .limit(1);
+    const { rows: stateRows } = await db.query(
+      `SELECT data FROM app_state WHERE id = 'main' LIMIT 1`
+    );
 
     const state = stateRows && stateRows.length ? stateRows[0].data : null;
 

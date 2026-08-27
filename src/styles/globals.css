@@ -1,0 +1,18 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base { * { @apply border-border; } html, body, #root { @apply min-h-full; } body { @apply m-0 min-w-[320px] overflow-x-hidden bg-page font-sans text-ink antialiased; } button, input { font: inherit; } }
+
+/* Inventario conserva el lienzo abierto y la tabla plana de la versión local original. */
+.inventory-module { background: #f0f4f9; min-height: calc(100vh - 58px); padding: 0 1rem 1.5rem; }
+.inventory-surface { padding: 2rem 1.5rem; border: 1px solid #dde4ef; border-radius: 10px; background: #fff; box-shadow: 0 1px 6px rgba(30, 50, 100, .08); }
+@media (min-width: 640px) { .inventory-module { padding-left: 1.75rem; padding-right: 1.75rem; } }
+
+/* Panel reutilizado por los módulos con el acabado del index.html legado. */
+.card { background: #fff; border: 1px solid #dde4ef; border-radius: 10px; padding: 20px; box-shadow: 0 1px 6px rgba(30, 50, 100, .08); }
+
+/* Todos los módulos comparten un ancho legible y centrado. Las tablas mantienen
+   su desplazamiento solamente dentro de su propia tarjeta en pantallas angostas. */
+.page-frame { width: 100%; max-width: 1500px; margin-inline: auto; }
