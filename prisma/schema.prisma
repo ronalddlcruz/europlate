@@ -98,6 +98,7 @@ model Company {
   productionOrders ProductionOrder[]
   stockTransfers StockTransfer[]
   inventoryAdjustments InventoryAdjustment[]
+  exchangeRates ExchangeRate[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -117,6 +118,7 @@ model User {
   inventoryMovements InventoryMovement[]
   stockTransfers StockTransfer[]
   inventoryAdjustments InventoryAdjustment[]
+  createdExchangeRates ExchangeRate[] @relation("ExchangeRateCreator")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@index([companyId, status])
@@ -182,6 +184,22 @@ model AuditLog {
   user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
   createdAt DateTime @default(now())
   @@index([module, createdAt])
+}
+
+model ExchangeRate {
+  id String @id @default(cuid())
+  companyId String
+  createdByUserId String?
+  effectiveDate DateTime @db.Date
+  value Decimal @db.Decimal(14, 4)
+  source String?
+  note String?
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdBy User? @relation("ExchangeRateCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([companyId, effectiveDate])
+  @@index([companyId, effectiveDate])
 }
 
 model Unit {

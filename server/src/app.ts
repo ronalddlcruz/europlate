@@ -9,6 +9,8 @@ import { purchaseRoutes } from './modules/purchases/routes/purchase.routes.js'
 import { importRoutes } from './modules/imports/routes/import.routes.js'
 import { productionRoutes } from './modules/production/routes/production.routes.js'
 import { inventoryRoutes } from './modules/inventory/routes/inventory.routes.js'
+import { userRoutes } from './modules/users/routes/user.routes.js'
+import { exchangeRateRoutes } from './modules/exchange-rates/routes/exchange-rate.routes.js'
 import { AppError } from './shared/errors/app-error.js'
 export function createApp() {
   const app = express()
@@ -24,6 +26,8 @@ export function createApp() {
   app.use('/api/imports', importRoutes)
   app.use('/api/production', productionRoutes)
   app.use('/api/inventory', inventoryRoutes)
+  app.use('/api/users', userRoutes)
+  app.use('/api/exchange-rates', exchangeRateRoutes)
   app.use((error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) => {
     if (error instanceof AppError) return response.status(error.statusCode).json({ error: { code: error.code, message: error.message } })
     if (error instanceof Error && error.name === 'ZodError') return response.status(422).json({ error: { code: 'VALIDATION_ERROR', message: 'La información enviada no es válida.' } })
