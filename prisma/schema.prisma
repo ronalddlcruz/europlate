@@ -79,6 +79,11 @@ enum ProductionStatus {
   CANCELLED
 }
 
+enum ProductionMaterialStatus {
+  RESERVED
+  CONSUMED
+}
+
 model Company {
   id String @id @default(cuid())
   name String
@@ -90,6 +95,9 @@ model Company {
   customsAgents CustomsAgent[]
   purchases Purchase[]
   imports Import[]
+  productionOrders ProductionOrder[]
+  stockTransfers StockTransfer[]
+  inventoryAdjustments InventoryAdjustment[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -106,6 +114,9 @@ model User {
   permissions UserPermission[]
   sessions Session[]
   auditLogs AuditLog[]
+  inventoryMovements InventoryMovement[]
+  stockTransfers StockTransfer[]
+  inventoryAdjustments InventoryAdjustment[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@index([companyId, status])
@@ -226,6 +237,8 @@ model Product {
   importItems ImportItem[]
   productionOrders ProductionOrder[]
   materials ProductionMaterial[]
+  stockTransfers StockTransfer[]
+  inventoryAdjustments InventoryAdjustment[]
   @@index([name, status])
 }
 
@@ -257,6 +270,11 @@ model ProductPresentation {
   unit Unit @relation(fields: [unitId], references: [id])
   purchaseItems PurchaseItem[]
   importItems ImportItem[]
+  productionOrders ProductionOrder[] @relation("ProductionOutputPresentation")
+  productionMaterials ProductionMaterial[] @relation("ProductionMaterialPresentation")
+  inventoryMovements InventoryMovement[]
+  stockTransfers StockTransfer[]
+  inventoryAdjustments InventoryAdjustment[]
   @@index([productId, status])
 }
 
@@ -275,12 +293,18 @@ model Warehouse {
   companyId String
   name String
   location String?
+  description String?
   status ProductStatus @default(ACTIVE)
   company Company @relation(fields: [companyId], references: [id])
   stocks Stock[]
   movements InventoryMovement[]
   purchaseItems PurchaseItem[]
   importItems ImportItem[]
+  productionOrders ProductionOrder[] @relation("ProductionOutputWarehouse")
+  productionMaterials ProductionMaterial[] @relation("ProductionMaterialWarehouse")
+  outboundTransfers StockTransfer[] @relation("TransferOrigin")
+  inboundTransfers StockTransfer[] @relation("TransferDestination")
+  inventoryAdjustments InventoryAdjustment[]
   @@unique([companyId, name])
 }
 
@@ -298,12 +322,16 @@ model InventoryMovement {
   id String @id @default(cuid())
   productId String
   warehouseId String
+  presentationId String?
+  createdByUserId String?
   type InventoryMovementType
   quantity Decimal @db.Decimal(14, 3)
   reference String?
   note String?
   product Product @relation(fields: [productId], references: [id])
   warehouse Warehouse @relation(fields: [warehouseId], references: [id])
+  presentation ProductPresentation? @relation(fields: [presentationId], references: [id])
+  createdBy User? @relation(fields: [createdByUserId], references: [id])
   createdAt DateTime @default(now())
   @@index([warehouseId, createdAt])
 }
@@ -311,21 +339,40 @@ model InventoryMovement {
 model StockTransfer {
   id String @id @default(cuid())
   productId String
+  presentationId String?
+  companyId String?
+  createdByUserId String?
   fromWarehouseId String
   toWarehouseId String
   quantity Decimal @db.Decimal(14, 3)
   note String?
   createdAt DateTime @default(now())
+  product Product @relation(fields: [productId], references: [id])
+  presentation ProductPresentation? @relation(fields: [presentationId], references: [id])
+  company Company? @relation(fields: [companyId], references: [id])
+  createdBy User? @relation(fields: [createdByUserId], references: [id])
+  fromWarehouse Warehouse @relation("TransferOrigin", fields: [fromWarehouseId], references: [id])
+  toWarehouse Warehouse @relation("TransferDestination", fields: [toWarehouseId], references: [id])
+  @@index([companyId, createdAt])
 }
 
 model InventoryAdjustment {
   id String @id @default(cuid())
   productId String
   warehouseId String
+  presentationId String?
+  companyId String?
+  createdByUserId String?
   previousQuantity Decimal @db.Decimal(14, 3)
   newQuantity Decimal @db.Decimal(14, 3)
   reason String
   createdAt DateTime @default(now())
+  product Product @relation(fields: [productId], references: [id])
+  presentation ProductPresentation? @relation(fields: [presentationId], references: [id])
+  warehouse Warehouse @relation(fields: [warehouseId], references: [id])
+  company Company? @relation(fields: [companyId], references: [id])
+  createdBy User? @relation(fields: [createdByUserId], references: [id])
+  @@index([companyId, createdAt])
 }
 
 model Supplier {
@@ -462,21 +509,42 @@ model ImportDocument {
 model ProductionOrder {
   id String @id @default(cuid())
   number String @unique
+  companyId String
   productId String
+  presentationId String
+  warehouseId String
   quantity Decimal @db.Decimal(14, 3)
   scheduledAt DateTime
   status ProductionStatus @default(PLANNED)
+  note String?
+  outputDispatched Boolean @default(false)
+  outputJustification String?
+  completedAt DateTime?
+  company Company @relation(fields: [companyId], references: [id])
   product Product @relation(fields: [productId], references: [id])
+  presentation ProductPresentation @relation("ProductionOutputPresentation", fields: [presentationId], references: [id])
+  warehouse Warehouse @relation("ProductionOutputWarehouse", fields: [warehouseId], references: [id])
   materials ProductionMaterial[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  @@index([companyId, status, scheduledAt])
+  @@index([warehouseId])
 }
 
 model ProductionMaterial {
   id String @id @default(cuid())
   orderId String
   productId String
+  presentationId String
+  warehouseId String
   quantity Decimal @db.Decimal(14, 3)
+  status ProductionMaterialStatus @default(RESERVED)
+  immediateConsumption Boolean @default(false)
+  consumedAt DateTime?
   order ProductionOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
   product Product @relation(fields: [productId], references: [id])
+  presentation ProductPresentation @relation("ProductionMaterialPresentation", fields: [presentationId], references: [id])
+  warehouse Warehouse @relation("ProductionMaterialWarehouse", fields: [warehouseId], references: [id])
+  @@index([orderId, status])
+  @@index([warehouseId])
 }
