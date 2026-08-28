@@ -16,3 +16,25 @@
 /* Todos los módulos comparten un ancho legible y centrado. Las tablas mantienen
    su desplazamiento solamente dentro de su propia tarjeta en pantallas angostas. */
 .page-frame { width: 100%; max-width: 1500px; margin-inline: auto; }
+
+/* Ajustes transversales para módulos en teléfono y tablet. Las tablas conservan
+   datos completos mediante desplazamiento horizontal dentro de su tarjeta. */
+@media (max-width: 639px) {
+  .card { padding: 14px; border-radius: 8px; }
+  .inventory-module { padding: 0 .25rem 1rem; min-height: calc(100dvh - 58px); }
+  .inventory-surface { padding: 1rem .75rem; border-radius: 8px; }
+  .page-frame { min-width: 0; }
+  table { font-size: 12px; }
+}
+
+@media (min-width: 640px) and (max-width: 1023px) {
+  .page-frame { max-width: 1100px; }
+  .inventory-module { min-height: calc(100dvh - 58px); }
+}
+
+/* Escala de trabajo para laptops: los módulos usan el 90% del área disponible
+   y conservan el mismo marco compartido, por lo que no se desalinean entre sí. */
+@media (min-width: 1024px) {
+  .page-frame { max-width: 90%; }
+  .inventory-module { min-height: calc(100vh - 54px); }
+}
