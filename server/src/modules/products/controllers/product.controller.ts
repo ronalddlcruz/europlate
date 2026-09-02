@@ -11,6 +11,7 @@ export const productController = {
   async update(request: Request, response: Response) { response.json({ data: await productService.update(paramId(request), updateProductSchema.parse(request.body)) }) },
   async remove(request: Request, response: Response) { await productService.remove(paramId(request)); response.status(204).send() },
   async listUnits(_request: Request, response: Response) { response.json({ data: await productService.getUnits() }) },
+  async listCategories(_request: Request, response: Response) { response.json({ data: await productService.getCategories() }) },
   async createUnit(request: Request, response: Response) { response.status(201).json({ data: await productService.createUnit(createUnitSchema.parse(request.body)) }) },
   async updateUnit(request: Request, response: Response) { response.json({ data: await productService.updateUnit(paramId(request), updateUnitSchema.parse(request.body)) }) },
   async removeUnit(request: Request, response: Response) { await productService.removeUnit(paramId(request)); response.status(204).send() },

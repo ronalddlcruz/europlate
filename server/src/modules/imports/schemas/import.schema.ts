@@ -2,9 +2,9 @@ import { z } from 'zod'
 
 const status = z.enum(['IN_TRANSIT', 'RECEIVED', 'CANCELLED'])
 const item = z.object({
-  productId: z.string().cuid(),
-  presentationId: z.string().cuid(),
-  warehouseId: z.string().cuid(),
+  productId: z.string().trim().min(1),
+  presentationId: z.string().trim().min(1),
+  warehouseId: z.string().trim().min(1),
   quantity: z.coerce.number().positive(),
   unitCostUsd: z.coerce.number().nonnegative(),
 })
@@ -12,12 +12,13 @@ const document = z.object({
   fileName: z.string().trim().min(1).max(255),
   mimeType: z.string().trim().max(120).optional(),
   size: z.coerce.number().int().nonnegative().optional(),
+  storageKey: z.string().trim().max(500).optional(),
   linkUrl: z.string().url().max(500).optional(),
 })
 
 export const importInputSchema = z.object({
-  supplierId: z.string().cuid(),
-  customsAgentId: z.string().cuid().optional().nullable(),
+  supplierId: z.string().trim().min(1),
+  customsAgentId: z.string().trim().min(1).optional().nullable(),
   containerNumber: z.string().trim().min(1).max(80),
   duaNumber: z.string().trim().min(1).max(100),
   purchaseOrderNumber: z.string().trim().min(1).max(100),
@@ -37,7 +38,7 @@ export const updateImportSchema = importInputSchema.partial().extend({
 })
 export const importQuerySchema = z.object({
   status: status.optional(),
-  supplierId: z.string().cuid().optional(),
+  supplierId: z.string().trim().min(1).optional(),
   search: z.string().trim().max(160).optional(),
 })
 

@@ -1,6 +1,7 @@
 import { Prisma, ImportStatus, ProductStatus, SupplierType } from '@prisma/client'
 import { prisma } from '../../../infrastructure/database/prisma.client.js'
 import { AppError } from '../../../shared/errors/app-error.js'
+import { removeImportDocument, uploadImportDocument } from '../../../infrastructure/storage/purchase-document.storage.js'
 import { importRepository } from '../repositories/import.repository.js'
 import type { ImportInput, UpdateImportInput } from '../schemas/import.schema.js'
 
@@ -37,11 +38,14 @@ export const importService = {
   },
   async getById(companyId: string, id: string) { const record = await importRepository.findById(id, companyId); if (!record) throw new AppError('IMPORT_NOT_FOUND', 'Importación no encontrada.', 404); return record },
   catalog: (companyId: string) => importRepository.catalog(companyId),
+  async uploadDocument(companyId: string, fileName: string, content: Buffer) { return uploadImportDocument(companyId, fileName, content) },
+  async removeDocument(companyId: string, storageKey: string) { if (!storageKey.startsWith(`imports/${companyId}/`)) throw new AppError('IMPORT_DOCUMENT_INVALID', 'El archivo no pertenece a esta empresa.', 403); await removeImportDocument(storageKey) },
   async create(companyId: string, input: ImportInput) {
     await validateReferences(companyId, input)
     if (await importRepository.findDuplicateDua(companyId, input.duaNumber)) throw new AppError('IMPORT_DUA_EXISTS', 'Ese número de DUA ya fue registrado.', 409)
+    if (input.documents.some(document => document.storageKey && !document.storageKey.startsWith(`imports/${companyId}/`))) throw new AppError('IMPORT_DOCUMENT_INVALID', 'El documento adjunto no pertenece a esta empresa.', 422)
     return transaction(async db => {
-      const created = await importRepository.create(db, { company: { connect: { id: companyId } }, supplier: { connect: { id: input.supplierId } }, ...(input.customsAgentId && { customsAgent: { connect: { id: input.customsAgentId } } }), number: nextNumber(), containerNumber: input.containerNumber, duaNumber: input.duaNumber, purchaseOrderNumber: input.purchaseOrderNumber, countryOfOrigin: input.countryOfOrigin, status: input.status, currency: input.currency, arrivalDate: input.arrivalDate, customsCostUsd: decimal(input.customsCostUsd), customsCostPen: decimal(input.customsCostPen), totalUsd: totalOf(input.items), items: { create: input.items.map(line => ({ product: { connect: { id: line.productId } }, presentation: { connect: { id: line.presentationId } }, warehouse: { connect: { id: line.warehouseId } }, quantity: decimal(line.quantity), unitCostUsd: decimal(line.unitCostUsd) })) }, documents: { create: input.documents.map(document => ({ ...document, storageKey: `pending://imports/${document.fileName}` })) } })
+      const created = await importRepository.create(db, { company: { connect: { id: companyId } }, supplier: { connect: { id: input.supplierId } }, ...(input.customsAgentId && { customsAgent: { connect: { id: input.customsAgentId } } }), number: nextNumber(), containerNumber: input.containerNumber, duaNumber: input.duaNumber, purchaseOrderNumber: input.purchaseOrderNumber, countryOfOrigin: input.countryOfOrigin, status: input.status, currency: input.currency, arrivalDate: input.arrivalDate, customsCostUsd: decimal(input.customsCostUsd), customsCostPen: decimal(input.customsCostPen), totalUsd: totalOf(input.items), items: { create: input.items.map(line => ({ product: { connect: { id: line.productId } }, presentation: { connect: { id: line.presentationId } }, warehouse: { connect: { id: line.warehouseId } }, quantity: decimal(line.quantity), unitCostUsd: decimal(line.unitCostUsd) })) }, documents: { create: input.documents } })
       if (created.status === ImportStatus.RECEIVED) { const receipt = await db.import.findUniqueOrThrow({ where: { id: created.id }, include: receiptInclude }); await applyReceipt(db, receipt) }
       return created
     })
@@ -55,6 +59,7 @@ export const importService = {
     const customsAgentId = input.customsAgentId === undefined ? current.customsAgentId : input.customsAgentId
     await validateReferences(companyId, { supplierId, customsAgentId, items })
     if (input.duaNumber && input.duaNumber !== current.duaNumber) { const duplicate = await importRepository.findDuplicateDua(companyId, input.duaNumber); if (duplicate) throw new AppError('IMPORT_DUA_EXISTS', 'Ese número de DUA ya fue registrado.', 409) }
+    if (input.documents?.some(document => document.storageKey && !document.storageKey.startsWith(`imports/${companyId}/`))) throw new AppError('IMPORT_DOCUMENT_INVALID', 'El documento adjunto no pertenece a esta empresa.', 422)
     const shouldReceive = input.status === ImportStatus.RECEIVED && current.status === ImportStatus.IN_TRANSIT
     return transaction(async db => {
       const updated = await importRepository.update(db, id, { ...(input.supplierId && { supplier: { connect: { id: input.supplierId } } }), ...(input.customsAgentId !== undefined && { customsAgent: input.customsAgentId ? { connect: { id: input.customsAgentId } } : { disconnect: true } }), ...(input.containerNumber && { containerNumber: input.containerNumber }), ...(input.duaNumber && { duaNumber: input.duaNumber }), ...(input.purchaseOrderNumber && { purchaseOrderNumber: input.purchaseOrderNumber }), ...(input.countryOfOrigin && { countryOfOrigin: input.countryOfOrigin }), ...(input.status && { status: input.status }), ...(input.currency && { currency: input.currency }), ...(input.arrivalDate !== undefined && { arrivalDate: input.arrivalDate }), ...(input.customsCostUsd !== undefined && { customsCostUsd: decimal(input.customsCostUsd) }), ...(input.customsCostPen !== undefined && { customsCostPen: decimal(input.customsCostPen) }), ...(input.items && { totalUsd: totalOf(input.items), items: { deleteMany: {}, create: input.items.map(line => ({ product: { connect: { id: line.productId } }, presentation: { connect: { id: line.presentationId } }, warehouse: { connect: { id: line.warehouseId } }, quantity: decimal(line.quantity), unitCostUsd: decimal(line.unitCostUsd) })) } }), ...(input.documents && { documents: { deleteMany: {}, create: input.documents.map(document => ({ ...document, storageKey: `pending://imports/${document.fileName}` })) } }) })

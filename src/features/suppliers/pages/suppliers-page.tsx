@@ -23,7 +23,7 @@ export function SuppliersPage() {
     onSuccess: (saved) => {
       queryClient.setQueryData<Supplier[]>(['suppliers'], current => sortSuppliers([...(current ?? []).filter(item => item.id !== saved.id), saved]))
       void queryClient.invalidateQueries({ queryKey: ['suppliers'] })
-      setSearch(saved.name); setModalItem(undefined); notify('Proveedor guardado y sincronizado con la base de datos')
+      setSearch(''); setModalItem(undefined); notify('Proveedor guardado y sincronizado con la base de datos')
     },
     onError: (error) => notify(error instanceof Error ? error.message : 'No se pudo guardar el proveedor'),
   })

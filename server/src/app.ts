@@ -30,7 +30,12 @@ export function createApp() {
   app.use('/api/exchange-rates', exchangeRateRoutes)
   app.use((error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) => {
     if (error instanceof AppError) return response.status(error.statusCode).json({ error: { code: error.code, message: error.message } })
-    if (error instanceof Error && error.name === 'ZodError') return response.status(422).json({ error: { code: 'VALIDATION_ERROR', message: 'La información enviada no es válida.' } })
+    if (error instanceof Error && error.name === 'ZodError') {
+      const issues = (error as Error & { issues?: { path: (string | number)[]; message: string }[] }).issues ?? []
+      const first = issues[0]
+      const field = first?.path.length ? ` en ${first.path.join(' › ')}` : ''
+      return response.status(422).json({ error: { code: 'VALIDATION_ERROR', message: first ? `Revisa el campo${field}: ${first.message}` : 'La información enviada no es válida.' } })
+    }
     console.error(error)
     return response.status(500).json({ error: { code: 'INTERNAL_ERROR', message: 'Ocurrió un error inesperado.' } })
   })

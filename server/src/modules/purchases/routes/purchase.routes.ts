@@ -1,4 +1,4 @@
-import { Router } from 'express'
+import express, { Router } from 'express'
 import { requireAuthentication } from '../../../shared/middleware/require-authentication.js'
 import { requirePermission } from '../../../shared/middleware/require-permission.js'
 import { purchaseController } from '../controllers/purchase.controller.js'
@@ -6,6 +6,8 @@ export const purchaseRoutes = Router()
 purchaseRoutes.use(requireAuthentication)
 purchaseRoutes.get('/', requirePermission('purchases.read'), purchaseController.list)
 purchaseRoutes.get('/catalog', requirePermission('purchases.read'), purchaseController.catalog)
+purchaseRoutes.post('/documents', requirePermission('purchases.manage'), express.raw({ type: 'application/pdf', limit: '10mb' }), purchaseController.uploadDocument)
+purchaseRoutes.delete('/documents', requirePermission('purchases.manage'), purchaseController.removeDocument)
 purchaseRoutes.post('/', requirePermission('purchases.manage'), purchaseController.create)
 purchaseRoutes.get('/:id', requirePermission('purchases.read'), purchaseController.get)
 purchaseRoutes.patch('/:id', requirePermission('purchases.manage'), purchaseController.update)
