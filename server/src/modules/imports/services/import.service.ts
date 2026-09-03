@@ -1,7 +1,7 @@
 import { Prisma, ImportStatus, ProductStatus, SupplierType } from '@prisma/client'
 import { prisma } from '../../../infrastructure/database/prisma.client.js'
 import { AppError } from '../../../shared/errors/app-error.js'
-import { removeImportDocument, uploadImportDocument } from '../../../infrastructure/storage/purchase-document.storage.js'
+import { getImportDocumentUrl, removeImportDocument, uploadImportDocument } from '../../../infrastructure/storage/purchase-document.storage.js'
 import { importRepository } from '../repositories/import.repository.js'
 import type { ImportInput, UpdateImportInput } from '../schemas/import.schema.js'
 
@@ -30,13 +30,14 @@ async function applyReceipt(db: Prisma.TransactionClient, record: { number: stri
   }
 }
 const receiptInclude = { items: { include: { presentation: true } } } satisfies Prisma.ImportInclude
+const withDocumentLinks = async <T extends { documents: { storageKey: string | null }[] }>(record: T) => ({ ...record, documents: await Promise.all(record.documents.map(async document => ({ ...document, linkUrl: document.storageKey ? await getImportDocumentUrl(document.storageKey) : null }))) })
 
 export const importService = {
   list(companyId: string, filters: { status?: ImportStatus; supplierId?: string; search?: string }) {
     const where: Prisma.ImportWhereInput = { companyId, ...(filters.status && { status: filters.status }), ...(filters.supplierId && { supplierId: filters.supplierId }), ...(filters.search && { OR: [{ number: { contains: filters.search, mode: 'insensitive' } }, { duaNumber: { contains: filters.search, mode: 'insensitive' } }, { containerNumber: { contains: filters.search, mode: 'insensitive' } }, { supplier: { name: { contains: filters.search, mode: 'insensitive' } } }] }) }
     return importRepository.findMany(where)
   },
-  async getById(companyId: string, id: string) { const record = await importRepository.findById(id, companyId); if (!record) throw new AppError('IMPORT_NOT_FOUND', 'Importación no encontrada.', 404); return record },
+  async getById(companyId: string, id: string) { const record = await importRepository.findById(id, companyId); if (!record) throw new AppError('IMPORT_NOT_FOUND', 'Importación no encontrada.', 404); return withDocumentLinks(record) },
   catalog: (companyId: string) => importRepository.catalog(companyId),
   async uploadDocument(companyId: string, fileName: string, content: Buffer) { return uploadImportDocument(companyId, fileName, content) },
   async removeDocument(companyId: string, storageKey: string) { if (!storageKey.startsWith(`imports/${companyId}/`)) throw new AppError('IMPORT_DOCUMENT_INVALID', 'El archivo no pertenece a esta empresa.', 403); await removeImportDocument(storageKey) },

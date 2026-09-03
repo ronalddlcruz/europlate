@@ -1,0 +1,6 @@
+import { CalendarDays } from 'lucide-react'
+import type { DashboardMonth } from './dashboard-data'
+
+export function DashboardHeader({ months, period, onPeriodChange }: { months: DashboardMonth[]; period: string; onPeriodChange: (period: string) => void }) {
+  return <section className="flex flex-wrap items-end justify-between gap-3 rounded-xl border border-blue-100 bg-white p-4 shadow-card"><div><p className="text-[10px] font-semibold uppercase tracking-[.6px] text-brand">Panel ejecutivo</p><h1 className="mt-1 text-base font-semibold">Resumen comercial</h1><p className="mt-1 text-xs text-muted">Indicadores y movimiento del periodo seleccionado.</p></div><label className="block"><span className="mb-1.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[.4px] text-slate-600"><CalendarDays className="h-3.5 w-3.5" />Mes y año</span><select value={period} onChange={event => onPeriodChange(event.target.value)} className="h-9 min-w-[160px] rounded-md border border-border bg-[#f4f7fb] px-3 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand">{months.map(month => <option key={month.value} value={month.value}>{month.label}</option>)}</select></label></section>
+}

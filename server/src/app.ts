@@ -4,6 +4,7 @@ import { env } from './config/env.js'
 import { productRoutes } from './modules/products/routes/product.routes.js'
 import { authRoutes } from './modules/auth/routes/auth.routes.js'
 import { supplierRoutes } from './modules/suppliers/routes/supplier.routes.js'
+import { customerRoutes } from './modules/customers/routes/customer.routes.js'
 import { customsAgentRoutes } from './modules/customs-agents/routes/customs-agent.routes.js'
 import { purchaseRoutes } from './modules/purchases/routes/purchase.routes.js'
 import { importRoutes } from './modules/imports/routes/import.routes.js'
@@ -21,6 +22,7 @@ export function createApp() {
   app.use('/api/auth', authRoutes)
   app.use('/api/products', productRoutes)
   app.use('/api/suppliers', supplierRoutes)
+  app.use('/api/customers', customerRoutes)
   app.use('/api/customs-agents', customsAgentRoutes)
   app.use('/api/purchases', purchaseRoutes)
   app.use('/api/imports', importRoutes)

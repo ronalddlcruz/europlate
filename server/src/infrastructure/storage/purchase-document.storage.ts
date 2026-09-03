@@ -18,6 +18,18 @@ export async function removePurchaseDocument(storageKey: string) {
   if (error) throw new AppError('PURCHASE_DOCUMENT_DELETE_FAILED', 'No se pudo retirar el comprobante adjunto.', 502)
 }
 
+export async function getPurchaseDocumentUrl(storageKey: string) {
+  const { data, error } = await storage.storage.from(env.SUPABASE_PURCHASES_BUCKET).createSignedUrl(storageKey, 60 * 60)
+  if (error) throw new AppError('PURCHASE_DOCUMENT_ACCESS_FAILED', 'No se pudo obtener el comprobante adjunto.', 502)
+  return data.signedUrl
+}
+
+export async function getImportDocumentUrl(storageKey: string) {
+  const { data, error } = await storage.storage.from(env.SUPABASE_PURCHASES_BUCKET).createSignedUrl(storageKey, 60 * 60)
+  if (error) throw new AppError('IMPORT_DOCUMENT_ACCESS_FAILED', 'No se pudo obtener el documento adjunto.', 502)
+  return data.signedUrl
+}
+
 export async function uploadImportDocument(companyId: string, fileName: string, content: Buffer) {
   const storageKey = `imports/${companyId}/${randomUUID()}-${safeFileName(fileName)}`
   const { error } = await storage.storage.from(env.SUPABASE_PURCHASES_BUCKET).upload(storageKey, content, { contentType: 'application/pdf', upsert: false })

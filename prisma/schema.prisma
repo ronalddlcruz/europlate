@@ -92,6 +92,7 @@ model Company {
   users User[]
   warehouses Warehouse[]
   suppliers Supplier[]
+  customers Customer[]
   customsAgents CustomsAgent[]
   purchases Purchase[]
   imports Import[]
@@ -407,6 +408,22 @@ model Supplier {
   purchases Purchase[]
   imports Import[]
   @@index([companyId, name])
+}
+
+model Customer {
+  id String @id @default(cuid())
+  companyId String
+  name String
+  phone String
+  email String
+  address String
+  note String?
+  status ProductStatus @default(ACTIVE)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([companyId, name])
+  @@index([companyId, status])
 }
 
 model CustomsAgent {
