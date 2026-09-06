@@ -1,81 +1,73 @@
-import { ImportStatus, InventoryMovementType, Prisma, PrismaClient, ProductRoleType, ProductStatus, ProductVariantType, ProductionMaterialStatus, ProductionStatus, PurchaseStatus, SupplierType, UserStatus } from '@prisma/client'
-import bcrypt from 'bcryptjs'
+import { Prisma, PrismaClient, ProductRoleType, ProductStatus, ProductVariantType } from '@prisma/client'
 
 const prisma = new PrismaClient()
-const d = (value: number) => new Prisma.Decimal(value)
+type Attr = { name: string; suffix?: string }
+type Presentation = { name: string; unit: string; values: Record<string, string> }
+type Seed = { code: string; name: string; category: string; attributes: Attr[]; rows: Presentation[] }
+const attrs = (...names: string[]): Attr[] => names.map((name) => ({ name }))
+const paper = [{ name: 'Medida' }, { name: 'Calibre' }, { name: 'Gramaje', suffix: 'g' }, { name: 'Cantidad por resma' }]
+const resma = (name: string, Medida: string, Calibre: string, Gramaje: string, cantidad: string): Presentation => ({ name, unit: 'RESMA', values: { Medida, Calibre, Gramaje, 'Cantidad por resma': cantidad } })
+const paperRows = (name: string, rows: Array<[string, string, string]>): Presentation[] => rows.map(([medida, gramaje, cantidad]) => ({ name: `${name} ${medida} · ${gramaje} g`, unit: 'RESMA', values: { Medida: medida, Gramaje: gramaje, 'Cantidad por resma': cantidad } }))
 
-type PresentationSeed = { code: string; name: string; unit: string; factor: number; minimum: number; stock: number }
-type ProductSeed = { code: string; name: string; category: string; roles: ProductRoleType[]; presentations: PresentationSeed[]; immediateConsumption?: boolean }
-
-// Catálogo de demostración para una planta de empaques y cajas de cartón.
-const products: ProductSeed[] = [
-  { code: 'PROD-002', name: 'Bobina de plástico', category: 'Materiales de embalaje', roles: [ProductRoleType.MERCHANDISE], presentations: [{ code: '001', name: 'Bobina de plástico 100x80 120g 50mic', unit: 'KG', factor: 1, minimum: 100, stock: 350 }] },
-  { code: 'PROD-003', name: 'Papel couché', category: 'Papeles e insumos', roles: [ProductRoleType.MERCHANDISE, ProductRoleType.SUPPLY], presentations: [{ code: '002', name: 'Papel couché 150cm 90g', unit: 'RESMA', factor: 1, minimum: 50, stock: 45 }] },
-  { code: 'PROD-004', name: 'Placa offset', category: 'Preprensa e impresión', roles: [ProductRoleType.SUPPLY, ProductRoleType.FINISHED_PRODUCT], presentations: [{ code: '003', name: 'Placa offset', unit: 'UND', factor: 1, minimum: 200, stock: 172 }] },
-  { code: 'PROD-005', name: 'Tintas para offset', category: 'Preprensa e impresión', roles: [ProductRoleType.MERCHANDISE, ProductRoleType.SUPPLY], presentations: [{ code: '004', name: 'Tinta offset negro 1kg', unit: 'KG', factor: 1, minimum: 20, stock: 12 }, { code: '004-C', name: 'Tinta offset cyan 1kg', unit: 'KG', factor: 1, minimum: 10, stock: 8 }] },
-  { code: 'PROD-006', name: 'Cinta de embalaje', category: 'Materiales de embalaje', roles: [ProductRoleType.MERCHANDISE], presentations: [{ code: '005', name: 'Cinta de embalaje', unit: 'CAJA', factor: 6, minimum: 10, stock: 1 }] },
-  { code: 'PROD-007', name: 'Bobina de papel', category: 'Papeles e insumos', roles: [ProductRoleType.MERCHANDISE, ProductRoleType.SUPPLY], presentations: [{ code: '006', name: 'Bobina de papel 150x120 650kg', unit: 'ROLLO', factor: 1, minimum: 1, stock: 4 }, { code: '007', name: 'Bobina de papel 100x100 500kg', unit: 'ROLLO', factor: 1, minimum: 0, stock: 1 }, { code: '009', name: 'Bobina de papel 120 150kg', unit: 'ROLLO', factor: 1, minimum: 0, stock: 1 }] },
-  { code: 'PROD-008', name: 'Balde de plástico', category: 'Preprensa e impresión', roles: [ProductRoleType.SUPPLY], presentations: [{ code: '008', name: 'Balde de plástico', unit: 'UND', factor: 1, minimum: 0, stock: 5 }] },
-  { code: 'PROD-009', name: 'Bobina de Cartón Estucado', category: 'Cartón y bobinas', roles: [ProductRoleType.MERCHANDISE, ProductRoleType.SUPPLY], presentations: [{ code: '010', name: 'Bobina de Cartón Estucado 249G 122.8CM 1691KG 26020521', unit: 'UND', factor: 1, minimum: 1, stock: 8 }, { code: '011', name: 'Bobina de Cartón Estucado 250G 104CM 858KG 26031022', unit: 'UND', factor: 1, minimum: 1, stock: 6 }] },
-  { code: 'PROD-010', name: 'Placa', category: 'Preprensa e impresión', roles: [ProductRoleType.MERCHANDISE, ProductRoleType.SUPPLY], presentations: [{ code: '012', name: 'Placa 12cm', unit: 'ROLLO', factor: 1, minimum: 2, stock: 2 }] },
-  { code: 'PROD-011', name: 'Papel adhesivo P3 de 100cm x 70cm', category: 'Materiales de embalaje', roles: [ProductRoleType.MERCHANDISE], presentations: [{ code: '013', name: 'Papel adhesivo P3 de 100cm x 70cm', unit: 'PALETA', factor: 60, minimum: 10, stock: 10 }] },
-  { code: 'PROD-012', name: 'Papel adhesivo P3 de 100cm x 70cm, paquete x 100 hojas', category: 'Materiales de embalaje', roles: [ProductRoleType.MERCHANDISE], presentations: [{ code: '014', name: 'Papel adhesivo P3 de 100cm x 70cm, paquete x 100 hojas', unit: 'PAQUETE', factor: 1, minimum: 10, stock: 10 }] },
-  { code: 'PROD-013', name: 'Placas CTCP', category: 'Preprensa e impresión', roles: [ProductRoleType.MERCHANDISE, ProductRoleType.SUPPLY, ProductRoleType.FINISHED_PRODUCT], presentations: [{ code: '015', name: 'Placas CTCP 650x550', unit: 'CAJA50', factor: 1, minimum: 10, stock: 10 }, { code: '016', name: 'Placas CTCP 510x400', unit: 'CAJA100', factor: 1, minimum: 10, stock: 8 }, { code: '017', name: 'Placas CTCP 525x459', unit: 'CAJA100', factor: 1, minimum: 10, stock: 6 }] },
-  { code: 'PROD-014', name: 'Cartón corrugado microcanal', category: 'Cartón y bobinas', roles: [ProductRoleType.SUPPLY], presentations: [{ code: '018', name: 'Plancha de cartón corrugado 1.20 x 2.40 m', unit: 'PLANCHA', factor: 1, minimum: 500, stock: 420 }] },
-  { code: 'PROD-015', name: 'Barniz UV', category: 'Preprensa e impresión', roles: [ProductRoleType.SUPPLY], presentations: [{ code: '019', name: 'Barniz UV alto brillo 20kg', unit: 'KG', factor: 1, minimum: 20, stock: 32 }] },
-  { code: 'PROD-016', name: 'Troquel para caja', category: 'Producción', roles: [ProductRoleType.SUPPLY], presentations: [{ code: '020', name: 'Troquel caja microcorrugada 30x20x10 cm', unit: 'UND', factor: 1, minimum: 1, stock: 2 }] },
-  { code: 'PROD-017', name: 'Caja microcorrugada impresa', category: 'Productos terminados', roles: [ProductRoleType.FINISHED_PRODUCT], immediateConsumption: false, presentations: [{ code: '021', name: 'Caja microcorrugada impresa 30x20x10 cm', unit: 'UND', factor: 1, minimum: 300, stock: 250 }] },
+// Catálogo de demostración: materiales entregados para la presentación de Europlate.
+const products: Seed[] = [
+  { code: 'PAP-001', name: 'Foldcote', category: 'Papel', attributes: paper, rows: [
+    resma('Foldcote 70 × 100 · Cal. 10 · 190 g', '70 × 100 mm', '10', '190', '100 pliegos'),
+    resma('Foldcote 70 × 100 · Cal. 12 · 205 g', '70 × 100 mm', '12', '205', '100 pliegos'),
+    resma('Foldcote 70 × 100 · Cal. 15 · 245 g', '70 × 100 mm', '15', '245', '100 pliegos'),
+  ] },
+  { code: 'PAP-002', name: 'Foldcote Sueco', category: 'Papel', attributes: paper, rows: [
+    resma('Foldcote Sueco 70 × 100 · 22/335', '70 × 100 mm', '22/335', '22/335', '100 pliegos'),
+    resma('Foldcote Sueco 70 × 100 · 20/305', '70 × 100 mm', '20/305', '20/305', '100 pliegos'),
+    resma('Foldcote Sueco 70 × 100 · 24/345', '70 × 100 mm', '24/345', '24/345', '100 pliegos'),
+  ] },
+  { code: 'CAR-001', name: 'Duplex', category: 'Cartón', attributes: paper, rows: [
+    resma('Duplex 70 × 100 · 12/205', '70 × 100 mm', '12/205', '12/205', '100 pliegos'),
+    resma('Duplex 70 × 100 · 16/270', '70 × 100 mm', '16/270', '16/270', '100 pliegos'),
+    resma('Duplex 70 × 100 · 20/310', '70 × 100 mm', '20/310', '20/310', '100 pliegos'),
+  ] },
+  { code: 'PAP-003', name: 'Couche Brillo', category: 'Papel', attributes: attrs('Medida', 'Gramaje', 'Cantidad por resma'), rows: paperRows('Couche Brillo', [['61 × 86', '90', '500 pliegos'], ['61 × 86', '115', '250 pliegos'], ['69 × 89', '115', '250 pliegos'], ['72 × 102', '300', '100 pliegos'], ['61 × 86', '300', '100 pliegos'], ['72 × 102', '350', '100 pliegos']]) },
+  { code: 'PAP-004', name: 'Bond', category: 'Papel', attributes: attrs('Medida', 'Gramaje', 'Cantidad por resma'), rows: paperRows('Bond', [['61 × 86', '58', '500 pliegos'], ['69 × 89', '58', '500 pliegos'], ['72 × 102', '58', '500 pliegos']]) },
+  { code: 'CTL-001', name: 'Cartulina Escolar', category: 'Cartulina', attributes: attrs('Medida', 'Gramaje', 'Cantidad por resma'), rows: paperRows('Cartulina Escolar', [['65 × 50', '140', '250 pliegos']]) },
+  { code: 'PAP-005', name: 'Papel Adhesivo', category: 'Papel', attributes: attrs('Medida', 'Gramaje', 'Cantidad por resma'), rows: paperRows('Papel Adhesivo', [['1 000 × 700', '85', '100 pliegos']]) },
+  { code: 'CIN-001', name: 'Cinta de Embalaje', category: 'Cinta de embalaje', attributes: attrs('Medida', 'Cantidad'), rows: [{ name: 'Cinta de Embalaje · 120 yardas', unit: 'ROLLO', values: { Medida: '120 yardas', Cantidad: '100 metros' } }] },
+  { code: 'PAP-006', name: 'Bond A4', category: 'Papel', attributes: attrs('Medida', 'Gramaje', 'Cantidad por resma'), rows: paperRows('Bond A4', [['100 A más', '75', '500 hojas']]) },
+  { code: 'VAS-001', name: 'Vasos', category: 'Vasos', attributes: attrs('Medida', 'Cantidad'), rows: [{ name: 'Vasos · 8 onzas', unit: 'CAJA', values: { Medida: '8 onzas', Cantidad: '1 000' } }] },
+  { code: 'PLA-001', name: 'Gloss', category: 'Plástico', attributes: [{ name: 'Medida', suffix: 'µ' }], rows: ['20', '25', '30'].map((Medida) => ({ name: `Gloss · ${Medida} µ`, unit: 'ROLLO', values: { Medida } })) },
+  { code: 'PLC-001', name: 'Placas CTP', category: 'Placas', attributes: attrs('Medida', 'Tipo', 'MM', 'Cantidad'), rows: ['1 030 × 820', '1 030 × 800', '1 030 × 790'].map((Medida) => ({ name: `Placas CTP ${Medida} · UV · 0.3 mm`, unit: 'CAJA', values: { Medida, Tipo: 'UV', MM: '0.3', Cantidad: '50' } })) },
+  { code: 'BOB-001', name: 'Coated Kraftback Board', category: 'Bobina', attributes: [{ name: 'GSM' }, { name: 'Ancho', suffix: 'mm' }, { name: 'Diámetro', suffix: 'mm' }, { name: 'Peso', suffix: 'kg' }], rows: [
+    ['464', '1390', '1900', '2353'], ['242', '750', '1538', '1068'], ['473', '1672', '1900', '2834'], ['242', '750', '1532', '1062'], ['471', '1308', '1900', '1270'], ['242', '750', '1538', '1046'],
+  ].map(([GSM, Ancho, Diámetro, Peso]) => ({ name: `Coated Kraftback Board · ${GSM} GSM · ${Ancho} mm · ${Peso} kg`, unit: 'BOBINA', values: { GSM, Ancho, Diámetro, Peso } })) },
 ]
 
 async function main() {
-  const company = await prisma.company.upsert({ where: { taxId: 'DEMO-EUROPLATE' }, update: { name: 'Europlate Empaques S.A.C.', currency: 'PEN' }, create: { name: 'Europlate Empaques S.A.C.', taxId: 'DEMO-EUROPLATE', currency: 'PEN' } })
-  await prisma.role.createMany({ data: [{ key: 'admin', name: 'Administrador' }, { key: 'vendedor', name: 'Vendedor' }, { key: 'operador', name: 'Operador' }], skipDuplicates: true })
-  await prisma.permission.createMany({ data: ['products', 'suppliers', 'customers', 'purchases', 'imports', 'inventory', 'production', 'users', 'dashboard'].flatMap((module) => [{ key: `${module}.read`, module, action: 'read' }, { key: `${module}.manage`, module, action: 'manage' }]), skipDuplicates: true })
-  const adminRole = await prisma.role.findUniqueOrThrow({ where: { key: 'admin' } })
-  await prisma.rolePermission.createMany({ data: (await prisma.permission.findMany()).map((permission) => ({ roleId: adminRole.id, permissionId: permission.id })), skipDuplicates: true })
+  const firstUser = await prisma.user.findFirst({ include: { company: true }, orderBy: { createdAt: 'asc' } })
+  const company = firstUser?.company ?? await prisma.company.upsert({ where: { taxId: 'DEMO-EUROPLATE' }, update: {}, create: { name: 'Europlate Empaques S.A.C.', taxId: 'DEMO-EUROPLATE', currency: 'PEN' } })
+  const defs = [['RESMA', 'Resma'], ['ROLLO', 'Rollo'], ['CAJA', 'Caja'], ['BOBINA', 'Bobina']] as const
+  await prisma.unit.createMany({ data: defs.map(([code, description]) => ({ code, description, status: ProductStatus.ACTIVE })), skipDuplicates: true })
+  const units = new Map((await prisma.unit.findMany({ where: { code: { in: defs.map(([code]) => code) } } })).map((unit) => [unit.code, unit]))
+  const warehouse = await prisma.warehouse.upsert({ where: { companyId_name: { companyId: company.id, name: 'Almacén Principal' } }, update: { status: ProductStatus.ACTIVE }, create: { companyId: company.id, name: 'Almacén Principal', status: ProductStatus.ACTIVE } })
 
-  const unitDefinitions = [['UND', 'Unidad'], ['KG', 'Kilogramo'], ['RESMA', 'Resma'], ['CAJA', 'Caja'], ['ROLLO', 'Rollo'], ['PLANCHA', 'Plancha'], ['PALETA', 'Paleta'], ['PAQUETE', 'Paquete'], ['CAJA50', 'Caja x 50'], ['CAJA100', 'Caja x 100']] as const
-  await prisma.unit.createMany({ data: unitDefinitions.map(([code, description]) => ({ code, description, status: ProductStatus.ACTIVE })), skipDuplicates: true })
-  const unitMap = new Map((await prisma.unit.findMany({ where: { code: { in: unitDefinitions.map(([code]) => code) } } })).map((unit) => [unit.code, unit]))
-  const passwordHash = await bcrypt.hash('Europlate123!', 12)
-  const admin = await prisma.user.upsert({ where: { email: 'admin@europlate.pe' }, update: { companyId: company.id, name: 'Administrador Demo', passwordHash, status: UserStatus.ACTIVE }, create: { companyId: company.id, name: 'Administrador Demo', email: 'admin@europlate.pe', passwordHash, status: UserStatus.ACTIVE } })
-  await prisma.userRole.upsert({ where: { userId_roleId: { userId: admin.id, roleId: adminRole.id } }, update: {}, create: { userId: admin.id, roleId: adminRole.id } })
-
-  const warehouses = new Map<string, { id: string }>()
-  for (const name of ['Almacén Principal', 'Almacén Producción', 'Almacén Trujillo']) warehouses.set(name, await prisma.warehouse.upsert({ where: { companyId_name: { companyId: company.id, name } }, update: { status: ProductStatus.ACTIVE }, create: { companyId: company.id, name, status: ProductStatus.ACTIVE } }))
-  const principal = warehouses.get('Almacén Principal')!
-  const productionWarehouse = warehouses.get('Almacén Producción')!
-  const categoryMap = new Map<string, { id: string }>(); const productMap = new Map<string, { id: string }>(); const presentationMap = new Map<string, { id: string }>()
-  for (const seed of products) {
-    let category = categoryMap.get(seed.category)
-    if (!category) { category = await prisma.category.upsert({ where: { name: seed.category }, update: {}, create: { name: seed.category } }); categoryMap.set(seed.category, category) }
-    const product = await prisma.product.upsert({ where: { code: seed.code }, update: { name: seed.name, categoryId: category.id, roles: seed.roles, status: ProductStatus.ACTIVE, variantType: seed.presentations.length > 1 ? ProductVariantType.WITH_VARIANTS : ProductVariantType.BASIC, immediateConsumption: seed.immediateConsumption ?? true }, create: { code: seed.code, name: seed.name, categoryId: category.id, roles: seed.roles, status: ProductStatus.ACTIVE, variantType: seed.presentations.length > 1 ? ProductVariantType.WITH_VARIANTS : ProductVariantType.BASIC, immediateConsumption: seed.immediateConsumption ?? true } })
-    productMap.set(seed.code, product)
-    for (const p of seed.presentations) {
-      const unit = unitMap.get(p.unit); if (!unit) throw new Error(`Unidad no encontrada: ${p.unit}`)
-      const presentation = await prisma.productPresentation.upsert({ where: { code: p.code }, update: { productId: product.id, unitId: unit.id, name: p.name, factor: d(p.factor), minimumStock: d(p.minimum), currentStock: d(p.stock), status: ProductStatus.ACTIVE }, create: { code: p.code, productId: product.id, unitId: unit.id, name: p.name, factor: d(p.factor), minimumStock: d(p.minimum), currentStock: d(p.stock), status: ProductStatus.ACTIVE } })
-      presentationMap.set(p.code, presentation)
-      const warehouse = seed.code === 'PROD-017' ? productionWarehouse : principal
-      await prisma.stock.upsert({ where: { productId_warehouseId: { productId: product.id, warehouseId: warehouse.id } }, update: { quantity: d(p.stock) }, create: { productId: product.id, warehouseId: warehouse.id, quantity: d(p.stock) } })
+  await prisma.$transaction(async (db) => {
+    // Se eliminan registros que dependen del catálogo, conservando usuarios, proveedores y clientes.
+    await db.productionOrder.deleteMany(); await db.purchase.deleteMany(); await db.import.deleteMany()
+    await db.inventoryMovement.deleteMany(); await db.stockTransfer.deleteMany(); await db.inventoryAdjustment.deleteMany(); await db.stock.deleteMany()
+    await db.product.deleteMany(); await db.category.deleteMany()
+    const categories = new Map<string, { id: string }>()
+    for (const seed of products) {
+      let category = categories.get(seed.category)
+      if (!category) { category = await db.category.create({ data: { name: seed.category } }); categories.set(seed.category, category) }
+      const product = await db.product.create({ data: {
+        code: seed.code, name: seed.name, categoryId: category.id, roles: [ProductRoleType.MERCHANDISE, ProductRoleType.SUPPLY], status: ProductStatus.ACTIVE,
+        variantType: seed.rows.length > 1 ? ProductVariantType.WITH_VARIANTS : ProductVariantType.BASIC,
+        attributes: { create: seed.attributes.map((attribute, position) => ({ ...attribute, position, status: ProductStatus.ACTIVE })) },
+        presentations: { create: seed.rows.map((row, index) => ({ code: `DEMO-${seed.code}-${String(index + 1).padStart(2, '0')}`, name: row.name, unitId: units.get(row.unit)!.id, attributeValues: row.values as Prisma.InputJsonValue, factor: new Prisma.Decimal(1), minimumStock: new Prisma.Decimal(0), currentStock: new Prisma.Decimal(0), status: ProductStatus.ACTIVE })) },
+      } })
+      await db.stock.create({ data: { productId: product.id, warehouseId: warehouse.id, quantity: new Prisma.Decimal(0) } })
     }
-  }
-
-  const supplierSeeds = [{ name: 'Cartones del Perú S.A.C.', taxId: '20609876543', email: 'ventas@cartonesperu.pe', phone: '01-7001200', type: SupplierType.NATIONAL }, { name: 'Química Gráfica Andina S.A.C.', taxId: '20512345678', email: 'comercial@quimicagrafica.pe', phone: '01-4457889', type: SupplierType.NATIONAL }, { name: 'Shenzhen Paper Co. Ltd.', taxId: '91234567890', email: 'export@shenzhenpaper.cn', phone: '+86-755-2233445', type: SupplierType.FOREIGN }, { name: 'SILVANIA RESOURCES, INC.', taxId: '22-3096554', email: 'orders@silvaniaresources.com', phone: '+1-305-555-0188', type: SupplierType.FOREIGN }]
-  const suppliers = new Map<string, { id: string }>()
-  for (const seed of supplierSeeds) suppliers.set(seed.name, await prisma.supplier.upsert({ where: { id: `seed-${seed.taxId}` }, update: seed, create: { id: `seed-${seed.taxId}`, companyId: company.id, ...seed, status: ProductStatus.ACTIVE } }))
-  const customerSeeds = [{ id: 'seed-customer-001', name: 'Imprenta Gráfica Norte S.A.C.', phone: '987 654 321', email: 'compras@graficanorte.pe', address: 'Av. Argentina 1540, Callao', note: 'Cliente frecuente. Entregas por la mañana.' }, { id: 'seed-customer-002', name: 'Empaques del Pacífico S.R.L.', phone: '956 204 118', email: 'logistica@empaquespacifico.pe', address: 'Jr. Los Industriales 420, Ate', note: 'Solicita cotización antes de cada pedido.' }]
-  for (const seed of customerSeeds) await prisma.customer.upsert({ where: { id: seed.id }, update: { ...seed, companyId: company.id, status: ProductStatus.ACTIVE }, create: { ...seed, companyId: company.id, status: ProductStatus.ACTIVE } })
-  const agent = await prisma.customsAgent.upsert({ where: { companyId_ruc: { companyId: company.id, ruc: '20501234567' } }, update: { name: 'Aduanas Callao S.A.C.', contactName: 'María Ríos', phone: '01-4567890', email: 'operaciones@aduanascallao.pe', status: ProductStatus.ACTIVE }, create: { companyId: company.id, name: 'Aduanas Callao S.A.C.', ruc: '20501234567', contactName: 'María Ríos', phone: '01-4567890', email: 'operaciones@aduanascallao.pe', status: ProductStatus.ACTIVE } })
-  const purchaseItem = (code: string, presentation: string, quantity: number, unitPrice: number) => ({ productId: productMap.get(code)!.id, presentationId: presentationMap.get(presentation)!.id, warehouseId: principal.id, quantity: d(quantity), unitPrice: d(unitPrice) })
-  await prisma.purchase.upsert({ where: { number: 'OC-2026-000128' }, update: {}, create: { companyId: company.id, supplierId: suppliers.get('Cartones del Perú S.A.C.')!.id, number: 'OC-2026-000128', supplierInvoiceNumber: 'F001-000123', status: PurchaseStatus.RECEIVED, currency: 'PEN', purchaseDate: new Date('2026-08-20'), receiptDate: new Date('2026-08-20'), total: d(4280), items: { create: [purchaseItem('PROD-014', '018', 400, 8.5), purchaseItem('PROD-006', '005', 10, 88)] }, documents: { create: { fileName: 'F001-000123.pdf', mimeType: 'application/pdf', storageKey: 'seed/purchases/F001-000123.pdf' } } } })
-  await prisma.purchase.upsert({ where: { number: 'OC-2026-000129' }, update: {}, create: { companyId: company.id, supplierId: suppliers.get('Química Gráfica Andina S.A.C.')!.id, number: 'OC-2026-000129', supplierInvoiceNumber: 'F002-000847', status: PurchaseStatus.APPROVED, currency: 'USD', purchaseDate: new Date('2026-08-23'), receiptDate: new Date('2026-08-24'), total: d(840), items: { create: [purchaseItem('PROD-005', '004', 20, 22), purchaseItem('PROD-015', '019', 20, 20)] } } })
-  const importItem = (code: string, presentation: string, quantity: number, unitCostUsd: number) => ({ productId: productMap.get(code)!.id, presentationId: presentationMap.get(presentation)!.id, warehouseId: principal.id, quantity: d(quantity), unitCostUsd: d(unitCostUsd) })
-  await prisma.import.upsert({ where: { number: 'IMP-2026-001' }, update: {}, create: { companyId: company.id, supplierId: suppliers.get('Shenzhen Paper Co. Ltd.')!.id, customsAgentId: agent.id, number: 'IMP-2026-001', containerNumber: 'SZPA123456', duaNumber: '118-2026-10-000001', purchaseOrderNumber: 'OCI-2026-001', countryOfOrigin: 'China', status: ImportStatus.RECEIVED, currency: 'USD', arrivalDate: new Date('2026-08-21'), customsCostUsd: d(120), customsCostPen: d(450), totalUsd: d(892.5), items: { create: [importItem('PROD-009', '010', 4, 150), importItem('PROD-013', '015', 5, 58.5)] }, documents: { create: { fileName: 'DUA-118-2026-10-000001.pdf', mimeType: 'application/pdf', linkUrl: 'https://example.com/documents/dua-seed.pdf' } } } })
-  await prisma.productionOrder.upsert({ where: { number: 'OP-000045' }, update: {}, create: { number: 'OP-000045', companyId: company.id, productId: productMap.get('PROD-017')!.id, presentationId: presentationMap.get('021')!.id, warehouseId: productionWarehouse.id, quantity: d(300), scheduledAt: new Date('2026-08-24'), status: ProductionStatus.IN_PROGRESS, note: 'Producción de cajas microcorrugadas para cliente mayorista.', materials: { create: [{ productId: productMap.get('PROD-014')!.id, presentationId: presentationMap.get('018')!.id, warehouseId: principal.id, quantity: d(300), status: ProductionMaterialStatus.RESERVED, immediateConsumption: true }, { productId: productMap.get('PROD-005')!.id, presentationId: presentationMap.get('004')!.id, warehouseId: principal.id, quantity: d(12), status: ProductionMaterialStatus.RESERVED, immediateConsumption: true }, { productId: productMap.get('PROD-013')!.id, presentationId: presentationMap.get('015')!.id, warehouseId: principal.id, quantity: d(2), status: ProductionMaterialStatus.RESERVED, immediateConsumption: false }] } } })
-  await prisma.inventoryMovement.deleteMany({ where: { reference: { startsWith: 'SEED-' } } })
-  await prisma.inventoryMovement.createMany({ data: [{ productId: productMap.get('PROD-014')!.id, presentationId: presentationMap.get('018')!.id, warehouseId: principal.id, createdByUserId: admin.id, type: InventoryMovementType.PURCHASE_RECEIPT, quantity: d(400), reference: 'SEED-OC-2026-000128', note: 'Recepción inicial de cartón corrugado.' }, { productId: productMap.get('PROD-009')!.id, presentationId: presentationMap.get('010')!.id, warehouseId: principal.id, createdByUserId: admin.id, type: InventoryMovementType.IMPORT_RECEIPT, quantity: d(4), reference: 'SEED-IMP-2026-001', note: 'Recepción de bobinas importadas.' }, { productId: productMap.get('PROD-014')!.id, presentationId: presentationMap.get('018')!.id, warehouseId: productionWarehouse.id, createdByUserId: admin.id, type: InventoryMovementType.TRANSFER_IN, quantity: d(300), reference: 'SEED-OP-000045', note: 'Material reservado para producción.' }] })
-  await prisma.exchangeRate.upsert({ where: { companyId_effectiveDate: { companyId: company.id, effectiveDate: new Date('2026-08-27') } }, update: { value: d(3.78), source: 'SBS', note: 'Tipo de cambio referencial de demo', createdByUserId: admin.id }, create: { companyId: company.id, createdByUserId: admin.id, effectiveDate: new Date('2026-08-27'), value: d(3.78), source: 'SBS', note: 'Tipo de cambio referencial de demo' } })
-  console.log(`Seed completado: ${products.length} productos, ${supplierSeeds.length} proveedores, 2 compras, 1 importación y 1 orden de producción.`)
+  }, { timeout: 60_000 })
+  const presentations = products.reduce((total, product) => total + product.rows.length, 0)
+  console.log(`Seed completado: ${products.length} productos, ${presentations} presentaciones y 8 categorías.`)
 }
 
 main().catch((error) => { console.error(error); process.exitCode = 1 }).finally(() => prisma.$disconnect())
