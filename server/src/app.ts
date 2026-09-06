@@ -19,6 +19,7 @@ export function createApp() {
   const localOrigin = /^http:\/\/(localhost|127\.0\.0\.1):\d+$/
   app.use(cors({ origin: (origin, callback) => callback(null, !origin || localOrigin.test(origin) || origin === env.WEB_ORIGIN), credentials: true }))
   app.use(express.json())
+  app.get('/health', (_request, response) => response.status(200).json({ status: 'ok' }))
   app.use('/api/auth', authRoutes)
   app.use('/api/products', productRoutes)
   app.use('/api/suppliers', supplierRoutes)

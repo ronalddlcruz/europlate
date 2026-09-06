@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { LockKeyhole, Mail } from 'lucide-react'
 import { Button } from '../../../components/ui/button'
 import { Input } from '../../../components/ui/input'
+import { apiBaseUrl } from '../../../lib/api-client'
 import { useAuth } from '../hooks/use-auth'
 
 export function LoginPage() {
@@ -13,6 +14,11 @@ export function LoginPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  useEffect(() => {
+    // Despierta la API mientras el usuario completa el formulario. No bloquea
+    // el login ni muestra errores si Render está arrancando tras inactividad.
+    void fetch(`${apiBaseUrl}/health`, { cache: 'no-store' }).catch(() => undefined)
+  }, [])
   return <main className="flex min-h-screen items-center justify-center bg-[linear-gradient(135deg,#e8f0fe_0%,#f0f4f9_60%,#fef3e2_100%)] p-5">
     <form className="w-full max-w-[420px] rounded-2xl border border-border bg-white p-8 shadow-panel sm:p-12" onSubmit={async (event) => { event.preventDefault(); setError(''); setLoading(true); try { await signIn(email, password); navigate((location.state as { from?: string } | null)?.from ?? '/dashboard', { replace: true }) } catch (reason) { setError(reason instanceof Error ? reason.message : 'No se pudo iniciar sesión.') } finally { setLoading(false) } }}>
       <div className="mb-8"><h1 className="font-mono text-[22px] font-bold tracking-tight text-brand">EUROPLATE</h1><p className="mt-1 text-[13px] text-muted">Sistema de Gestión Comercial</p></div>

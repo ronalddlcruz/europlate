@@ -6,7 +6,16 @@ import { AppError } from '../../../shared/errors/app-error.js'
 import { authRepository } from '../repositories/auth.repository.js'
 import type { LoginInput } from '../schemas/auth.schema.js'
 
-const sessionUser = (user: NonNullable<Awaited<ReturnType<typeof authRepository.findUserByEmail>>>) => {
+type AuthUser = {
+  id: string
+  companyId: string
+  name: string
+  email: string
+  roles: { role: { key: string; permissions: { permission: { key: string } }[] } }[]
+  permissions: { permission: { key: string } }[]
+}
+
+const sessionUser = (user: AuthUser) => {
   const roleKeys = user.roles.map(entry => entry.role.key)
   const permissions = roleKeys.includes('admin') ? ['*'] : [...new Set([...user.roles.flatMap(entry => entry.role.permissions.map(item => item.permission.key)), ...user.permissions.map(item => item.permission.key)])]
   return { id: user.id, name: user.name, email: user.email, companyId: user.companyId, permissions }
