@@ -3,12 +3,14 @@ import { z } from 'zod'
 const statusSchema = z.enum(['ACTIVE', 'INACTIVE'])
 const typeSchema = z.enum(['NATIONAL', 'FOREIGN'])
 const emptyToUndefined = (value: unknown) => typeof value === 'string' && !value.trim() ? undefined : value
+const numericDocument = z.string().trim().min(8).max(20).regex(/^[0-9-]+$/, 'Solo se permiten números y guiones.')
+const phone = z.string().trim().min(6).max(40).regex(/^[0-9+()\-\s]+$/, 'El teléfono solo puede contener números y símbolos de llamada.')
 
 export const supplierPayloadSchema = z.object({
   name: z.string().trim().min(1).max(160),
   type: typeSchema.default('NATIONAL'),
-  taxId: z.string().trim().min(1).max(40),
-  phone: z.preprocess(emptyToUndefined, z.string().trim().max(40).optional()),
+  taxId: numericDocument,
+  phone: z.preprocess(emptyToUndefined, phone.optional()),
   email: z.preprocess(emptyToUndefined, z.string().trim().email().max(160).optional()),
   status: statusSchema.default('ACTIVE'),
 })

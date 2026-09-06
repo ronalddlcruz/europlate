@@ -2,7 +2,7 @@ import { Prisma, ProductStatus } from '@prisma/client'
 import { prisma } from '../../../infrastructure/database/prisma.client.js'
 import { AppError } from '../../../shared/errors/app-error.js'
 import { productRepository } from '../repositories/product.repository.js'
-import type { CreateProductInput, CreateUnitInput, UpdateProductInput } from '../schemas/product.schema.js'
+import type { CreateCategoryInput, CreateProductInput, CreateUnitInput, UpdateProductInput } from '../schemas/product.schema.js'
 
 const decimal = (value: number) => new Prisma.Decimal(value)
 const presentationCode = (index: number) => `VAR-${Date.now().toString().slice(-8)}-${index + 1}`
@@ -12,11 +12,10 @@ const codePart = (value: string, length: number) => {
   const compact = words.join('')
   return (initials.length >= length ? initials : compact).slice(0, length).padEnd(length, 'X')
 }
-async function nextProductCode(categoryId?: string | null, subcategoryId?: string | null) {
+async function nextProductCode(categoryId?: string | null) {
   const [products, categories] = await Promise.all([productRepository.listCodes(), productRepository.listCategories()])
   const category = categories.find(item => item.id === categoryId)
-  const subcategory = category?.subcategories.find(item => item.id === subcategoryId)
-  const prefix = category ? `${codePart(category.name, 3)}-${codePart(subcategory?.name ?? 'General', 2)}` : 'PRO-GE'
+  const prefix = category ? `${codePart(category.name, 3)}-PR` : 'PRO-PR'
   const expression = new RegExp(`^${prefix}-(\\d+)$`)
   const latest = products.reduce((maximum, product) => Math.max(maximum, Number(product.code.match(expression)?.[1]) || 0), 0)
   return `${prefix}-${String(latest + 1).padStart(2, '0')}`
@@ -33,14 +32,12 @@ const attributeData = (attribute: CreateProductInput['attributes'][number], posi
 }
 function productData(input: CreateProductInput | UpdateProductInput): Prisma.ProductUpdateInput {
   const data: Prisma.ProductUpdateInput = {}
-  if (input.code !== undefined) data.code = input.code
   if (input.name !== undefined) data.name = input.name
   if (input.status !== undefined) data.status = input.status
   if (input.variantType !== undefined) data.variantType = input.variantType
   if (input.immediateConsumption !== undefined) data.immediateConsumption = input.immediateConsumption
   if (input.roles !== undefined) data.roles = { set: input.roles }
   if (input.categoryId !== undefined) data.category = input.categoryId ? { connect: { id: input.categoryId } } : { disconnect: true }
-  if (input.subcategoryId !== undefined) data.subcategory = input.subcategoryId ? { connect: { id: input.subcategoryId } } : { disconnect: true }
   if (input.brandId !== undefined) data.brand = input.brandId ? { connect: { id: input.brandId } } : { disconnect: true }
   return data
 }
@@ -65,10 +62,9 @@ export const productService = {
   },
   async getById(id: string) { const product = await productRepository.findById(id); if (!product) throw new AppError('PRODUCT_NOT_FOUND', 'Producto no encontrado.', 404); return product },
   async create(input: CreateProductInput) {
-    if (input.code && await productRepository.findByCode(input.code)) throw new AppError('PRODUCT_CODE_EXISTS', `El código ${input.code} ya está registrado. Usa otro código o déjalo vacío para generarlo automáticamente.`, 409)
-    const code = input.code || await nextProductCode(input.categoryId, input.subcategoryId)
+    const code = await nextProductCode(input.categoryId)
     return prisma.$transaction(async db => {
-      const product = await productRepository.create(db, { code, name: input.name, status: input.status, roles: { set: input.roles }, variantType: input.variantType, immediateConsumption: input.immediateConsumption, ...(input.categoryId && { category: { connect: { id: input.categoryId } } }), ...(input.subcategoryId && { subcategory: { connect: { id: input.subcategoryId } } }), ...(input.brandId && { brand: { connect: { id: input.brandId } } }), attributes: { create: input.attributes.map(attributeData) }, presentations: { create: input.presentations.map(presentationData) } })
+      const product = await productRepository.create(db, { code, name: input.name, status: input.status, roles: { set: input.roles }, variantType: input.variantType, immediateConsumption: input.immediateConsumption, ...(input.categoryId && { category: { connect: { id: input.categoryId } } }), ...(input.brandId && { brand: { connect: { id: input.brandId } } }), attributes: { create: input.attributes.map(attributeData) }, presentations: { create: input.presentations.map(presentationData) } })
       await synchronizePresentationAttributeValues(db, product, input)
       return product
     })
@@ -100,4 +96,7 @@ export const productService = {
   async createUnit(input: CreateUnitInput) { if (await productRepository.findUnitByCode(input.code)) throw new AppError('UNIT_CODE_EXISTS', 'El código de unidad ya existe.', 409); return productRepository.createUnit(input) },
   async updateUnit(id: string, input: Partial<CreateUnitInput>) { if (!await productRepository.findUnit(id)) throw new AppError('UNIT_NOT_FOUND', 'Unidad de medida no encontrada.', 404); if (input.code) { const duplicate = await productRepository.findUnitByCode(input.code); if (duplicate && duplicate.id !== id) throw new AppError('UNIT_CODE_EXISTS', 'El código de unidad ya existe.', 409) } return productRepository.updateUnit(id, input) },
   async removeUnit(id: string) { if (!await productRepository.findUnit(id)) throw new AppError('UNIT_NOT_FOUND', 'Unidad de medida no encontrada.', 404); await productRepository.deleteUnit(id) },
+  async createCategory(input: CreateCategoryInput) { if (await productRepository.findCategoryByName(input.name)) throw new AppError('CATEGORY_NAME_EXISTS', 'La categoría ya existe.', 409); return productRepository.createCategory(input) },
+  async updateCategory(id: string, input: Partial<CreateCategoryInput>) { if (!await productRepository.findCategory(id)) throw new AppError('CATEGORY_NOT_FOUND', 'Categoría no encontrada.', 404); if (input.name) { const duplicate = await productRepository.findCategoryByName(input.name); if (duplicate && duplicate.id !== id) throw new AppError('CATEGORY_NAME_EXISTS', 'La categoría ya existe.', 409) } return productRepository.updateCategory(id, input) },
+  async removeCategory(id: string) { if (!await productRepository.findCategory(id)) throw new AppError('CATEGORY_NOT_FOUND', 'Categoría no encontrada.', 404); await productRepository.deleteCategory(id) },
 }

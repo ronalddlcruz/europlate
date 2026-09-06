@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express'
-import { createProductSchema, createUnitSchema, productQuerySchema, updateProductSchema, updateUnitSchema } from '../schemas/product.schema.js'
+import { createCategorySchema, createProductSchema, createUnitSchema, productQuerySchema, updateCategorySchema, updateProductSchema, updateUnitSchema } from '../schemas/product.schema.js'
 import { productService } from '../services/product.service.js'
 
 const paramId = (request: Request) => Array.isArray(request.params.id) ? request.params.id[0] : request.params.id
@@ -15,4 +15,7 @@ export const productController = {
   async createUnit(request: Request, response: Response) { response.status(201).json({ data: await productService.createUnit(createUnitSchema.parse(request.body)) }) },
   async updateUnit(request: Request, response: Response) { response.json({ data: await productService.updateUnit(paramId(request), updateUnitSchema.parse(request.body)) }) },
   async removeUnit(request: Request, response: Response) { await productService.removeUnit(paramId(request)); response.status(204).send() },
+  async createCategory(request: Request, response: Response) { response.status(201).json({ data: await productService.createCategory(createCategorySchema.parse(request.body)) }) },
+  async updateCategory(request: Request, response: Response) { response.json({ data: await productService.updateCategory(paramId(request), updateCategorySchema.parse(request.body)) }) },
+  async removeCategory(request: Request, response: Response) { await productService.removeCategory(paramId(request)); response.status(204).send() },
 }

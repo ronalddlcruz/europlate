@@ -215,16 +215,6 @@ model Category {
   id String @id @default(cuid())
   name String @unique
   products Product[]
-  subcategories Subcategory[]
-}
-
-model Subcategory {
-  id String @id @default(cuid())
-  categoryId String
-  name String
-  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  products Product[]
-  @@unique([categoryId, name])
 }
 
 model Brand {
@@ -238,14 +228,12 @@ model Product {
   code String @unique
   name String
   categoryId String?
-  subcategoryId String?
   brandId String?
   status ProductStatus @default(ACTIVE)
   roles ProductRoleType[]
   variantType ProductVariantType @default(WITH_VARIANTS)
   immediateConsumption Boolean @default(true)
-  category Category? @relation(fields: [categoryId], references: [id])
-  subcategory Subcategory? @relation(fields: [subcategoryId], references: [id])
+  category Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   brand Brand? @relation(fields: [brandId], references: [id])
   attributes ProductAttribute[]
   presentations ProductPresentation[]

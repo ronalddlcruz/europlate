@@ -1,7 +1,7 @@
 import type { Prisma, PrismaClient } from '@prisma/client'
 import { prisma } from '../../../infrastructure/database/prisma.client.js'
 
-const productInclude = { category: true, subcategory: true, brand: true, attributes: { orderBy: { position: 'asc' } }, presentations: { include: { unit: true }, orderBy: { name: 'asc' } }, identifiers: true } satisfies Prisma.ProductInclude
+const productInclude = { category: true, brand: true, attributes: { orderBy: { position: 'asc' } }, presentations: { include: { unit: true }, orderBy: { name: 'asc' } }, identifiers: true } satisfies Prisma.ProductInclude
 type Database = PrismaClient | Prisma.TransactionClient
 
 export const productRepository = {
@@ -13,7 +13,12 @@ export const productRepository = {
   update: (db: Database, id: string, data: Prisma.ProductUpdateInput) => db.product.update({ where: { id }, data, include: productInclude }),
   delete: (id: string) => prisma.product.delete({ where: { id } }),
   listUnits: () => prisma.unit.findMany({ orderBy: { code: 'asc' } }),
-  listCategories: () => prisma.category.findMany({ include: { subcategories: { orderBy: { name: 'asc' } } }, orderBy: { name: 'asc' } }),
+  listCategories: () => prisma.category.findMany({ orderBy: { name: 'asc' } }),
+  findCategory: (id: string) => prisma.category.findUnique({ where: { id } }),
+  findCategoryByName: (name: string) => prisma.category.findUnique({ where: { name } }),
+  createCategory: (data: Prisma.CategoryCreateInput) => prisma.category.create({ data }),
+  updateCategory: (id: string, data: Prisma.CategoryUpdateInput) => prisma.category.update({ where: { id }, data }),
+  deleteCategory: (id: string) => prisma.category.delete({ where: { id } }),
   findUnit: (id: string) => prisma.unit.findUnique({ where: { id } }),
   findUnitByCode: (code: string) => prisma.unit.findUnique({ where: { code } }),
   createUnit: (data: Prisma.UnitCreateInput) => prisma.unit.create({ data }),
