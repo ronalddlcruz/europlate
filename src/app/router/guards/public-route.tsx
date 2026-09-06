@@ -1,10 +1,11 @@
 import { Navigate, Outlet } from 'react-router-dom'
-import { AppLoadingSkeleton } from '../../../components/ui/app-loading-skeleton'
 import { useAuth } from '../../../features/auth/hooks/use-auth'
 import { PATHS } from '../constants/paths'
 
 export function PublicRoute() {
   const { isAuthenticated, isInitializing } = useAuth()
-  if (isInitializing) return <AppLoadingSkeleton />
+  // Nunca se bloquea el login por una validación de sesión lenta. Si la sesión
+  // sigue vigente, se redirige automáticamente cuando el servidor responda.
+  if (isInitializing) return <Outlet />
   return isAuthenticated ? <Navigate to={PATHS.APP.DASHBOARD} replace /> : <Outlet />
 }
