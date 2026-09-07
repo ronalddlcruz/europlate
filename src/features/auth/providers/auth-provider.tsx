@@ -1,6 +1,6 @@
 import { createContext, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
 import { ApiError, clearAccessToken, accessToken, unauthorizedEvent } from '../../../lib/api-client'
+import { clearQueryCache, restoreQueryCache } from '../../../lib/query-client'
 import { getSession, login, type Session } from '../services/auth.service'
 
 type AuthContextValue = { session: Session | null; isAuthenticated: boolean; isInitializing: boolean; signIn: (email: string, password: string) => Promise<void>; signOut: () => void }
@@ -26,11 +26,20 @@ function clearCachedSession() {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const queryClient = useQueryClient()
-  const [session, setSession] = useState<Session | null>(() => readCachedSession())
+  const [session, setSession] = useState<Session | null>(() => {
+    const cached = readCachedSession()
+    if (cached) restoreQueryCache(cached.user.id)
+    return cached
+  })
   const [isInitializing, setIsInitializing] = useState(() => Boolean(accessToken()) && !readCachedSession())
-  const signOut = useCallback(() => { clearAccessToken(); clearCachedSession(); queryClient.clear(); setSession(null); setIsInitializing(false) }, [queryClient])
-  const signIn = useCallback(async (email: string, password: string) => { const next = await login(email, password); saveCachedSession(next); setSession(next); queryClient.clear() }, [queryClient])
+  const signOut = useCallback(() => { clearAccessToken(); clearCachedSession(); clearQueryCache(session?.user.id); setSession(null); setIsInitializing(false) }, [session?.user.id])
+  const signIn = useCallback(async (email: string, password: string) => {
+    const next = await login(email, password)
+    if (session?.user.id !== next.user.id) clearQueryCache()
+    restoreQueryCache(next.user.id)
+    saveCachedSession(next)
+    setSession(next)
+  }, [session?.user.id])
   useEffect(() => {
     const invalidateSession = () => signOut()
     window.addEventListener(unauthorizedEvent, invalidateSession)
@@ -38,7 +47,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // La API puede tardar en despertar en Render. La sesión almacenada permite
     // pintar la aplicación inmediatamente mientras esta validación ocurre detrás.
     void getSession()
-      .then(next => { saveCachedSession(next); setSession(next) })
+      .then(next => { restoreQueryCache(next.user.id); saveCachedSession(next); setSession(next) })
       .catch(error => {
         // Solo se cierra una sesión que el servidor haya rechazado. Un fallo de
         // red o un arranque lento no debe sacar al usuario de la aplicación.
