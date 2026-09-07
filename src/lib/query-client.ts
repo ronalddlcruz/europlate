@@ -1,4 +1,13 @@
 import { dehydrate, hydrate, QueryClient } from '@tanstack/react-query'
+import { listCustomsAgents } from '../features/customs-agents/services/customs-agent-api.service'
+import { listCustomers } from '../features/customers/services/customer-api.service'
+import { listImports, loadImportCatalog } from '../features/imports/services/import-api.service'
+import { listAdjustments, loadInventoryCatalog, listMovements, listStock, listTransfers, listWarehouses } from '../features/inventory/services/inventory-api.service'
+import { loadCatalog } from '../features/products/services/product-api.service'
+import { listProductionOrders, loadProductionCatalog } from '../features/production/services/production-api.service'
+import { listPurchases, loadPurchaseCatalog } from '../features/purchases/services/purchase-api.service'
+import { listExchangeRates } from '../features/settings/services/exchange-rate-api.service'
+import { listSuppliers } from '../features/suppliers/services/supplier-api.service'
 
 const cachePrefix = 'europlate.query-cache'
 const cacheVersion = 1
@@ -6,6 +15,7 @@ const maxCacheAge = 24 * 60 * 60_000
 let activeUserId: string | null = null
 let stopPersistence: (() => void) | undefined
 let persistTimer: number | undefined
+let isRefreshingCoreData = false
 
 export const queryClient = new QueryClient({
   defaultOptions: {
@@ -75,4 +85,34 @@ export function clearQueryCache(userId?: string) {
     window.clearTimeout(persistTimer)
     queryClient.clear()
   }
+}
+
+/**
+ * Actualiza los módulos principales sin bloquear la navegación. Al terminar,
+ * su estado más reciente vuelve a guardarse en la caché persistente.
+ */
+export function refreshCoreDataInBackground() {
+  if (!activeUserId || isRefreshingCoreData) return
+  isRefreshingCoreData = true
+  const prefetches = [
+    () => queryClient.prefetchQuery({ queryKey: ['products', 'catalog'], queryFn: loadCatalog, staleTime: 0 }),
+    () => queryClient.prefetchQuery({ queryKey: ['suppliers'], queryFn: listSuppliers, staleTime: 0 }),
+    () => queryClient.prefetchQuery({ queryKey: ['customers'], queryFn: listCustomers, staleTime: 0 }),
+    () => queryClient.prefetchQuery({ queryKey: ['customs-agents'], queryFn: listCustomsAgents, staleTime: 0 }),
+    () => queryClient.prefetchQuery({ queryKey: ['purchases'], queryFn: listPurchases, staleTime: 0 }),
+    () => queryClient.prefetchQuery({ queryKey: ['purchases', 'catalog'], queryFn: loadPurchaseCatalog, staleTime: 0 }),
+    () => queryClient.prefetchQuery({ queryKey: ['imports'], queryFn: listImports, staleTime: 0 }),
+    () => queryClient.prefetchQuery({ queryKey: ['imports', 'catalog'], queryFn: loadImportCatalog, staleTime: 0 }),
+    () => queryClient.prefetchQuery({ queryKey: ['production'], queryFn: listProductionOrders, staleTime: 0 }),
+    () => queryClient.prefetchQuery({ queryKey: ['production', 'catalog'], queryFn: loadProductionCatalog, staleTime: 0 }),
+    () => queryClient.prefetchQuery({ queryKey: ['inventory', 'stock'], queryFn: listStock, staleTime: 0 }),
+    () => queryClient.prefetchQuery({ queryKey: ['inventory', 'catalog'], queryFn: loadInventoryCatalog, staleTime: 0 }),
+    () => queryClient.prefetchQuery({ queryKey: ['inventory', 'warehouses'], queryFn: listWarehouses, staleTime: 0 }),
+    () => queryClient.prefetchQuery({ queryKey: ['inventory', 'movements'], queryFn: listMovements, staleTime: 0 }),
+    () => queryClient.prefetchQuery({ queryKey: ['inventory', 'transfers'], queryFn: listTransfers, staleTime: 0 }),
+    () => queryClient.prefetchQuery({ queryKey: ['inventory', 'adjustments'], queryFn: listAdjustments, staleTime: 0 }),
+    () => queryClient.prefetchQuery({ queryKey: ['exchange-rates'], queryFn: listExchangeRates, staleTime: 0 }),
+  ]
+  void Promise.allSettled(prefetches.map(prefetch => prefetch()))
+    .finally(() => { isRefreshingCoreData = false })
 }

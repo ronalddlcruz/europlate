@@ -1,6 +1,6 @@
 import { createContext, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { ApiError, clearAccessToken, accessToken, unauthorizedEvent } from '../../../lib/api-client'
-import { clearQueryCache, restoreQueryCache } from '../../../lib/query-client'
+import { clearQueryCache, refreshCoreDataInBackground, restoreQueryCache } from '../../../lib/query-client'
 import { getSession, login, type Session } from '../services/auth.service'
 
 type AuthContextValue = { session: Session | null; isAuthenticated: boolean; isInitializing: boolean; signIn: (email: string, password: string) => Promise<void>; signOut: () => void }
@@ -56,6 +56,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .finally(() => setIsInitializing(false))
     return () => window.removeEventListener(unauthorizedEvent, invalidateSession)
   }, [signOut])
+  useEffect(() => {
+    if (!session) return
+    const timer = window.setTimeout(refreshCoreDataInBackground, 0)
+    return () => window.clearTimeout(timer)
+  }, [session?.user.id])
   const value = useMemo(() => ({ session, isAuthenticated: Boolean(session), isInitializing, signIn, signOut }), [session, isInitializing, signIn, signOut])
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
