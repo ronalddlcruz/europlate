@@ -214,7 +214,70 @@ model Unit {
 model Category {
   id String @id @default(cuid())
   name String @unique
+  code String? @unique
+  description String?
+  status ProductStatus @default(ACTIVE)
+  attributes CategoryAttribute[]
+  subcategories Subcategory[]
   products Product[]
+}
+
+model CategoryAttribute {
+  id String @id @default(cuid())
+  categoryId String
+  attributeDefinitionId String?
+  name String
+  dataType AttributeDataType @default(TEXT)
+  suffix String?
+  required Boolean @default(false)
+  status ProductStatus @default(ACTIVE)
+  position Int @default(0)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  attributeDefinition AttributeDefinition? @relation(fields: [attributeDefinitionId], references: [id], onDelete: SetNull)
+  @@unique([categoryId, name])
+}
+
+model Subcategory {
+  id String @id @default(cuid())
+  categoryId String
+  code String?
+  name String
+  description String?
+  status ProductStatus @default(ACTIVE)
+  attributes SubcategoryAttribute[]
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  products Product[]
+  @@unique([categoryId, name])
+  @@unique([categoryId, code])
+}
+
+model SubcategoryAttribute {
+  id String @id @default(cuid())
+  subcategoryId String
+  attributeDefinitionId String?
+  name String
+  dataType AttributeDataType @default(TEXT)
+  suffix String?
+  required Boolean @default(false)
+  status ProductStatus @default(ACTIVE)
+  position Int @default(0)
+  subcategory Subcategory @relation(fields: [subcategoryId], references: [id], onDelete: Cascade)
+  attributeDefinition AttributeDefinition? @relation(fields: [attributeDefinitionId], references: [id], onDelete: SetNull)
+  @@unique([subcategoryId, name])
+}
+
+model AttributeDefinition {
+  id String @id @default(cuid())
+  code String @unique
+  name String @unique
+  dataType AttributeDataType @default(TEXT)
+  suffix String?
+  status ProductStatus @default(ACTIVE)
+  categoryLinks CategoryAttribute[]
+  subcategoryLinks SubcategoryAttribute[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([name, status])
 }
 
 model Brand {
@@ -228,12 +291,14 @@ model Product {
   code String @unique
   name String
   categoryId String?
+  subcategoryId String?
   brandId String?
   status ProductStatus @default(ACTIVE)
   roles ProductRoleType[]
   variantType ProductVariantType @default(WITH_VARIANTS)
   immediateConsumption Boolean @default(true)
   category Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  subcategory Subcategory? @relation(fields: [subcategoryId], references: [id], onDelete: SetNull)
   brand Brand? @relation(fields: [brandId], references: [id])
   attributes ProductAttribute[]
   presentations ProductPresentation[]

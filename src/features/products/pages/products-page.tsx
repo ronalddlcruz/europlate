@@ -1,5 +1,6 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { ChevronDown, ChevronRight, Pencil, Plus, Power, Search, Trash2 } from 'lucide-react'
 
 // La eliminación queda preparada para una futura habilitación. Por ahora los
@@ -9,10 +10,14 @@ import { Button } from '../../../components/ui/button'
 import { Dialog } from '../../../components/ui/dialog'
 import { Input } from '../../../components/ui/input'
 import { ProductWizard } from '../components/product-wizard'
-import { createCatalogCategory, createCatalogProduct, createCatalogUnit, deleteCatalogCategory, deleteCatalogUnit, loadCatalog, updateCatalogCategory, updateCatalogProduct, updateCatalogUnit } from '../services/product-api.service'
-import type { Attribute, ProductBase, ProductCategory, ProductRole, ProductStatus, ProductVariant, Unit } from '../types/product.types'
+import { CategoryConfiguration, CategoryConfigurationDialog, SubcategoryEditDialog } from '../components/category-configuration'
+import { AttributeCatalog, AttributeDefinitionDialog } from '../components/attribute-catalog'
+import { createAttributeDefinition, createCatalogCategory, createCatalogProduct, createCatalogUnit, deleteAttributeDefinition, deleteCatalogUnit, loadCatalog, updateAttributeDefinition, updateCatalogCategory, updateCatalogProduct, updateCatalogUnit } from '../services/product-api.service'
+import type { Attribute, AttributeDefinition, ProductBase, ProductCategory, ProductRole, ProductStatus, ProductSubcategory, ProductVariant, Unit } from '../types/product.types'
 
-type Modal = { type: 'base'; item?: ProductBase } | { type: 'variant'; item?: ProductVariant; baseId?: string } | { type: 'unit'; item?: Unit } | { type: 'category'; item?: ProductCategory } | null
+type Modal = { type: 'base'; item?: ProductBase } | { type: 'variant'; item?: ProductVariant; baseId?: string } | { type: 'unit'; item?: Unit } | { type: 'category'; item?: ProductCategory } | { type: 'subcategory'; category: ProductCategory; item: ProductSubcategory } | { type: 'attribute'; item?: AttributeDefinition } | null
+type CatalogData = Awaited<ReturnType<typeof loadCatalog>>
+type ConfigurationTab = 'categories' | 'attributes' | 'units'
 const roles: ProductRole[] = ['Mercadería', 'Insumo', 'Producto terminado']
 const badge: Record<ProductRole, string> = { Mercadería: 'bg-emerald-100 text-emerald-700', Insumo: 'bg-amber-100 text-amber-700', 'Producto terminado': 'bg-violet-100 text-violet-700' }
 const newId = () => crypto.randomUUID()
@@ -24,16 +29,56 @@ function Select({ children, ...props }: React.SelectHTMLAttributes<HTMLSelectEle
 
 export function ProductsPage() {
  const queryClient = useQueryClient()
+ const navigate = useNavigate()
+ const { pathname } = useLocation()
  const catalog = useQuery({ queryKey: ['products', 'catalog'], queryFn: loadCatalog })
  const products = catalog.data?.products ?? []
  const bases = products.map(product => product.base)
  const variants = products.flatMap(product => product.variants)
  const units = catalog.data?.units ?? []
  const categories = catalog.data?.categories ?? []
- const [tab, setTab] = useState<'products' | 'units' | 'categories'>('products')
+ const attributes = catalog.data?.attributes ?? []
  const [modal, setModal] = useState<Modal>(null); const [roleFilter, setRoleFilter] = useState<'Todos' | ProductRole>('Todos'); const [statusFilter, setStatusFilter] = useState<'Todos' | ProductStatus>('Todos'); const [search, setSearch] = useState(''); const [notice, setNotice] = useState(''); const [productsPage, setProductsPage] = useState(1)
+ const isConfiguration = pathname.startsWith('/productos/configuracion')
+ const configurationTab: ConfigurationTab = pathname.endsWith('/atributos') ? 'attributes' : pathname.endsWith('/unidades') ? 'units' : 'categories'
+ const openCatalog = () => navigate('/productos')
+ const openConfiguration = (tab: ConfigurationTab = 'categories') => navigate(`/productos/configuracion/${tab === 'categories' ? 'categorias' : tab === 'attributes' ? 'atributos' : 'unidades'}`)
+ const notify = (message: string) => { setNotice(message); window.setTimeout(() => setNotice(''), 2800) }
  const refreshCatalog = async () => { await queryClient.invalidateQueries({ queryKey: ['products', 'catalog'] }) }
- const productMutation = useMutation({ mutationFn: async ({ base, nextVariants, editing }: { base: ProductBase; nextVariants: ProductVariant[]; editing: boolean }) => editing ? updateCatalogProduct(base, nextVariants, units) : createCatalogProduct(base, nextVariants, units), onSuccess: async () => { await refreshCatalog(); setSearch(''); setModal(null); notify('Producto guardado y actualizado desde la base de datos') }, onError: (reason) => notify(reason instanceof Error ? reason.message : 'No se pudo guardar el producto') })
+ const productMutation = useMutation({
+  mutationFn: ({ base, nextVariants, editing }: { base: ProductBase; nextVariants: ProductVariant[]; editing: boolean }) => editing ? updateCatalogProduct(base, nextVariants, units) : createCatalogProduct(base, nextVariants, units),
+  onMutate: async ({ base, nextVariants, editing }) => {
+   await queryClient.cancelQueries({ queryKey: ['products', 'catalog'] })
+   const previous = queryClient.getQueryData<CatalogData>(['products', 'catalog'])
+   queryClient.setQueryData<CatalogData>(['products', 'catalog'], current => {
+    if (!current) return current
+    const product = { base, variants: nextVariants }
+    const products = editing
+     ? current.products.map(currentProduct => currentProduct.base.id === base.id ? product : currentProduct)
+     : [...current.products, product]
+    return { ...current, products: products.sort((left, right) => left.base.name.localeCompare(right.base.name)) }
+   })
+   setModal(null)
+   notify('Guardando producto en segundo plano…')
+   return { previous, optimisticId: base.id, editing }
+  },
+  onSuccess: (saved, _variables, context) => {
+   queryClient.setQueryData<CatalogData>(['products', 'catalog'], current => {
+    if (!current) return current
+    const products = context?.editing
+     ? current.products.map(product => product.base.id === saved.base.id ? saved : product)
+     : current.products.map(product => product.base.id === context?.optimisticId ? saved : product)
+    return { ...current, products: products.sort((left, right) => left.base.name.localeCompare(right.base.name)) }
+   })
+   setSearch('')
+   notify('Producto guardado y verificado en la base de datos')
+  },
+  onError: (reason, _variables, context) => {
+   if (context?.previous) queryClient.setQueryData(['products', 'catalog'], context.previous)
+   notify(reason instanceof Error ? `No se guardó el producto: ${reason.message}` : 'No se pudo guardar el producto. Se restauró el cambio anterior.')
+  },
+  onSettled: () => void refreshCatalog(),
+ })
  const statusMutation = useMutation({
   mutationFn: ({ base, nextVariants }: { base: ProductBase; nextVariants: ProductVariant[] }) => updateCatalogProduct(base, nextVariants, units),
   onMutate: async ({ base, nextVariants }) => {
@@ -48,33 +93,125 @@ export function ProductsPage() {
   },
   onSettled: () => void refreshCatalog(),
  })
- const unitMutation = useMutation({ mutationFn: async ({ item, editing }: { item: Unit; editing: boolean }) => editing ? updateCatalogUnit(item.id, item) : createCatalogUnit(item), onSuccess: async () => { await refreshCatalog(); setModal(null); notify('Unidad de medida guardada en la base de datos') }, onError: (reason) => notify(reason instanceof Error ? reason.message : 'No se pudo guardar la unidad de medida') })
- const deleteUnitMutation = useMutation({ mutationFn: deleteCatalogUnit, onSuccess: async () => { await refreshCatalog(); notify('Unidad de medida eliminada de la base de datos') }, onError: (reason) => notify(reason instanceof Error ? reason.message : 'No se pudo eliminar la unidad') })
- const categoryMutation = useMutation({ mutationFn: async ({ item, editing }: { item: ProductCategory; editing: boolean }) => editing ? updateCatalogCategory(item.id, item.name) : createCatalogCategory(item.name), onSuccess: async () => { await refreshCatalog(); setModal(null); notify('Categoría guardada en la base de datos') }, onError: reason => notify(reason instanceof Error ? reason.message : 'No se pudo guardar la categoría') })
- const deleteCategoryMutation = useMutation({ mutationFn: deleteCatalogCategory, onSuccess: async () => { await refreshCatalog(); notify('Categoría eliminada de la base de datos') }, onError: reason => notify(reason instanceof Error ? reason.message : 'No se pudo eliminar la categoría') })
- const filteredBases = useMemo(() => bases.filter((base) => (roleFilter === 'Todos' || base.roles.includes(roleFilter)) && (statusFilter === 'Todos' || base.status === statusFilter) && `${base.name} ${base.code} ${variants.filter(v => v.baseId === base.id).map(v => v.name).join(' ')}`.toLowerCase().includes(search.toLowerCase())), [bases, variants, roleFilter, statusFilter, search])
+ const unitMutation = useMutation({
+  mutationFn: ({ item, editing }: { item: Unit; editing: boolean }) => editing ? updateCatalogUnit(item.id, item) : createCatalogUnit(item),
+  onMutate: async ({ item, editing }) => {
+   await queryClient.cancelQueries({ queryKey: ['products', 'catalog'] })
+   const previous = queryClient.getQueryData<CatalogData>(['products', 'catalog'])
+   queryClient.setQueryData<CatalogData>(['products', 'catalog'], current => {
+    if (!current) return current
+    const units = editing ? current.units.map(unit => unit.id === item.id ? item : unit) : [...current.units, item]
+    return { ...current, units: units.sort((left, right) => left.code.localeCompare(right.code)) }
+   })
+   setModal(null)
+   notify('Guardando unidad de medida en segundo plano…')
+   return { previous, optimisticId: item.id, editing }
+  },
+  onSuccess: (saved, _variables, context) => {
+   queryClient.setQueryData<CatalogData>(['products', 'catalog'], current => {
+    if (!current) return current
+    const units = current.units.map(unit => context?.editing ? (unit.id === saved.id ? saved : unit) : (unit.id === context?.optimisticId ? saved : unit))
+    return { ...current, units: units.sort((left, right) => left.code.localeCompare(right.code)) }
+   })
+   notify('Unidad de medida guardada y verificada en la base de datos')
+  },
+  onError: (reason, _variables, context) => {
+   if (context?.previous) queryClient.setQueryData(['products', 'catalog'], context.previous)
+   notify(reason instanceof Error ? `No se guardó la unidad: ${reason.message}` : 'No se pudo guardar la unidad de medida. Se restauró el cambio anterior.')
+  },
+  onSettled: () => void refreshCatalog(),
+ })
+ const deleteUnitMutation = useMutation({
+  mutationFn: deleteCatalogUnit,
+  onMutate: async id => {
+   await queryClient.cancelQueries({ queryKey: ['products', 'catalog'] })
+   const previous = queryClient.getQueryData<CatalogData>(['products', 'catalog'])
+   queryClient.setQueryData<CatalogData>(['products', 'catalog'], current => current ? { ...current, units: current.units.filter(unit => unit.id !== id) } : current)
+   notify('Eliminando unidad de medida en segundo plano…')
+   return { previous }
+  },
+  onSuccess: () => notify('Unidad de medida eliminada de la base de datos'),
+  onError: (reason, _id, context) => {
+   if (context?.previous) queryClient.setQueryData(['products', 'catalog'], context.previous)
+   notify(reason instanceof Error ? reason.message : 'No se pudo eliminar la unidad. Se restauró el cambio anterior.')
+  },
+  onSettled: () => void refreshCatalog(),
+ })
+ const categoryMutation = useMutation({
+  mutationFn: async ({ item, editing }: { item: ProductCategory; editing: boolean }) => {
+   const { id: _id, ...payload } = item
+   return editing ? updateCatalogCategory(item.id, payload) : createCatalogCategory(payload)
+  },
+  onMutate: async ({ item, editing }) => {
+   await queryClient.cancelQueries({ queryKey: ['products', 'catalog'] })
+   const previous = queryClient.getQueryData<CatalogData>(['products', 'catalog'])
+   queryClient.setQueryData<CatalogData>(['products', 'catalog'], current => {
+    if (!current) return current
+    return {
+     ...current,
+     categories: editing
+      ? current.categories.map(category => category.id === item.id ? item : category)
+      : [...current.categories, item].sort((left, right) => left.name.localeCompare(right.name)),
+    }
+   })
+   setModal(null)
+   notify('Guardando categoría en segundo plano…')
+   return { previous, optimisticId: item.id, editing }
+  },
+  onSuccess: (saved, _variables, context) => {
+   queryClient.setQueryData<CatalogData>(['products', 'catalog'], current => {
+    if (!current) return current
+    const categories = context?.editing
+     ? current.categories.map(category => category.id === saved.id ? saved : category)
+     : current.categories.map(category => category.id === context?.optimisticId ? saved : category)
+    return { ...current, categories: categories.sort((left, right) => left.name.localeCompare(right.name)) }
+   })
+   notify('Categoría guardada y verificada en la base de datos')
+  },
+  onError: (reason, _variables, context) => {
+   if (context?.previous) queryClient.setQueryData(['products', 'catalog'], context.previous)
+   notify(reason instanceof Error ? `No se guardó la categoría: ${reason.message}` : 'No se pudo guardar la categoría. Se restauró el cambio anterior.')
+  },
+  onSettled: () => void refreshCatalog(),
+ })
+ const attributeMutation = useMutation({ mutationFn: async ({ item, editing }: { item: AttributeDefinition; editing: boolean }) => { const { id: _id, ...payload } = item; return editing ? updateAttributeDefinition(item.id, payload) : createAttributeDefinition(payload) }, onSuccess: async () => { await refreshCatalog(); setModal(null); notify('Atributo guardado en la base de datos') }, onError: reason => notify(reason instanceof Error ? reason.message : 'No se pudo guardar el atributo') })
+ const deleteAttributeMutation = useMutation({ mutationFn: deleteAttributeDefinition, onSuccess: async () => { await refreshCatalog(); notify('Atributo eliminado de la base de datos') }, onError: reason => notify(reason instanceof Error ? reason.message : 'No se pudo eliminar el atributo') })
+ const filteredBases = useMemo(() => bases.filter((base) => (roleFilter === 'Todos' || base.roles.includes(roleFilter)) && (statusFilter === 'Todos' || base.status === statusFilter) && `${base.name} ${base.code} ${base.categoryName ?? ''} ${base.subcategoryName ?? ''}`.toLowerCase().includes(search.toLowerCase())), [bases, roleFilter, statusFilter, search])
  const orderedBases = useMemo(() => [...filteredBases].sort((left, right) => { const leftVariants = variants.filter(variant => variant.baseId === left.id); const rightVariants = variants.filter(variant => variant.baseId === right.id); const leftInactive = leftVariants.length > 0 && leftVariants.every(variant => variant.status === 'Inactivo'); const rightInactive = rightVariants.length > 0 && rightVariants.every(variant => variant.status === 'Inactivo'); return Number(leftInactive) - Number(rightInactive) || left.name.localeCompare(right.name) }), [filteredBases, variants])
  const pageSize = 10; const totalProductPages = Math.max(1, Math.ceil(orderedBases.length / pageSize)); const currentProductsPage = Math.min(productsPage, totalProductPages); const visibleBases = orderedBases.slice((currentProductsPage - 1) * pageSize, currentProductsPage * pageSize)
- const notify = (message: string) => { setNotice(message); window.setTimeout(() => setNotice(''), 2800) }
  const saveVariant = (item: ProductVariant, editing: boolean) => { const base = bases.find(value => value.id === item.baseId); if (!base) return; const nextVariants = editing ? variants.map(value => value.id === item.id ? item : value).filter(value => value.baseId === base.id) : [...variants.filter(value => value.baseId === base.id), item]; productMutation.mutate({ base, nextVariants, editing: true }) }
  const toggleVariantStatus = (item: ProductVariant) => { const base = bases.find(value => value.id === item.baseId); if (!base) return; const nextVariants = variants.filter(value => value.baseId === base.id).map(value => value.id === item.id ? { ...value, status: (value.status === 'Activo' ? 'Inactivo' : 'Activo') as ProductStatus } : value); statusMutation.mutate({ base, nextVariants }) }
  return <div className="-mx-2 max-w-none sm:-mx-4">
-   <div className="mb-5 flex gap-1 border-b border-border"><button onClick={() => setTab('products')} className={`border-b-2 px-4 py-2.5 text-[13px] font-medium ${tab === 'products' ? 'border-brand text-brand' : 'border-transparent text-muted hover:text-ink'}`}>Configurador de Productos</button><button onClick={() => setTab('categories')} className={`border-b-2 px-4 py-2.5 text-[13px] font-medium ${tab === 'categories' ? 'border-brand text-brand' : 'border-transparent text-muted hover:text-ink'}`}>Categorías</button><button onClick={() => setTab('units')} className={`border-b-2 px-4 py-2.5 text-[13px] font-medium ${tab === 'units' ? 'border-brand text-brand' : 'border-transparent text-muted hover:text-ink'}`}>Unidades de Medida</button></div>
-   {tab === 'products' ? <section className="rounded-[10px] border border-border bg-white p-5 shadow-card"><header className="flex flex-wrap items-center justify-between gap-3"><div><h1 className="text-sm font-semibold">Configurador de Productos</h1><p className="mt-1 text-xs text-muted">Define productos, atributos y variantes en un solo lugar.</p></div><Button size="sm" onClick={() => setModal({ type: 'base' })}><Plus className="h-4 w-4" />Nuevo producto</Button></header>
-     <div className="mt-5 flex flex-wrap gap-2"><Filter values={['Todos', ...roles]} active={roleFilter} onChange={(value) => { setRoleFilter(value as typeof roleFilter); setProductsPage(1) }} /><span className="mx-1 hidden w-px bg-border sm:block" /><Filter values={['Todos', 'Activo', 'Inactivo']} active={statusFilter} onChange={(value) => { setStatusFilter(value as typeof statusFilter); setProductsPage(1) }} /><div className="relative ml-auto min-w-[220px]"><Search className="absolute left-3 top-2.5 h-4 w-4 text-muted" /><Input className="h-9 pl-9" placeholder="Buscar producto o presentación..." value={search} onChange={e => { setSearch(e.target.value); setProductsPage(1) }} /></div></div>
+   <nav className="mb-5 flex gap-1 overflow-x-auto border-b border-border" aria-label="Secciones de productos"><button onClick={openCatalog} className={`shrink-0 border-b-2 px-4 py-2.5 text-[13px] font-medium ${!isConfiguration ? 'border-brand text-brand' : 'border-transparent text-muted hover:text-ink'}`}>Maestro de Productos</button><button onClick={() => openConfiguration()} className={`shrink-0 border-b-2 px-4 py-2.5 text-[13px] font-medium ${isConfiguration ? 'border-brand text-brand' : 'border-transparent text-muted hover:text-ink'}`}>Configuración</button></nav>
+   {!isConfiguration ? <section className="rounded-[10px] border border-border bg-white p-5 shadow-card"><header className="flex flex-wrap items-center justify-between gap-3"><div><h1 className="text-sm font-semibold">Maestro de Productos</h1><p className="mt-1 text-xs text-muted">Gestiona los productos, sus presentaciones y variantes.</p></div><Button size="sm" onClick={() => setModal({ type: 'base' })}><Plus className="h-4 w-4" />Nuevo producto</Button></header>
+     <div className="mt-5 flex flex-wrap gap-2"><Filter values={['Todos', ...roles]} active={roleFilter} onChange={(value) => { setRoleFilter(value as typeof roleFilter); setProductsPage(1) }} /><span className="mx-1 hidden w-px bg-border sm:block" /><Filter values={['Todos', 'Activo', 'Inactivo']} active={statusFilter} onChange={(value) => { setStatusFilter(value as typeof statusFilter); setProductsPage(1) }} /><div className="relative ml-auto min-w-[220px]"><Search className="absolute left-3 top-2.5 h-4 w-4 text-muted" /><Input className="h-9 pl-9" placeholder="Buscar producto, categoría o tipo..." value={search} onChange={e => { setSearch(e.target.value); setProductsPage(1) }} /></div></div>
      {catalog.isLoading ? <p className="py-10 text-center text-sm text-muted">Cargando catálogo desde la base de datos…</p> : catalog.isError ? <p className="py-10 text-center text-sm text-red-600">No se pudo cargar el catálogo desde la base de datos.</p> : <><GroupedProductsTable bases={visibleBases} variants={variants} onEditBase={(item) => setModal({ type: 'base', item })} onEditVariant={(variant) => { const base = bases.find(item => item.id === variant.baseId); if (base) setModal({ type: 'base', item: base }) }} onToggleVariant={toggleVariantStatus} />{orderedBases.length > pageSize && <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3 text-xs text-muted"><span>Mostrando {(currentProductsPage - 1) * pageSize + 1}–{Math.min(currentProductsPage * pageSize, orderedBases.length)} de {orderedBases.length} productos</span><div className="flex items-center gap-2"><Button size="sm" variant="outline" disabled={currentProductsPage === 1} onClick={() => setProductsPage(page => Math.max(1, page - 1))}>Anterior</Button><span className="font-medium text-ink">Página {currentProductsPage} de {totalProductPages}</span><Button size="sm" variant="outline" disabled={currentProductsPage === totalProductPages} onClick={() => setProductsPage(page => Math.min(totalProductPages, page + 1))}>Siguiente</Button></div></div>}</>}
-    </section> : tab === 'categories' ? <CategoriesSection categories={categories} onNew={() => setModal({ type: 'category' })} onEdit={item => setModal({ type: 'category', item })} onDelete={id => deleteCategoryMutation.mutate(id)} /> : <UnitsSection units={units} onNew={() => setModal({ type: 'unit' })} onEdit={(item) => setModal({ type: 'unit', item })} onDelete={(id) => deleteUnitMutation.mutate(id)} />}
-   {modal?.type === 'base' && <ProductWizard key={modal.item?.id ?? 'new-product'} item={modal.item} variants={modal.item ? variants.filter(variant => variant.baseId === modal.item!.id) : []} products={bases} categories={catalog.data?.categories ?? []} units={units} onClose={() => setModal(null)} onSelectExisting={(selectedBase) => setModal({ type: 'base', item: selectedBase })} onSave={async ({ base, variants: savedVariants }) => { await productMutation.mutateAsync({ base, nextVariants: savedVariants, editing: Boolean(modal.item) }).catch(() => undefined) }} />}
+    </section> : <section><header className="mb-4 rounded-[10px] border border-border bg-white px-5 py-4 shadow-card"><h1 className="text-sm font-semibold">Configuración de Productos</h1><p className="mt-1 text-xs text-muted">Administra la estructura utilizada para crear, clasificar y configurar los productos.</p></header><nav className="mb-4 flex gap-1 overflow-x-auto border-b border-border" aria-label="Configuración de productos"><button onClick={() => openConfiguration('categories')} className={`shrink-0 border-b-2 px-4 py-2.5 text-[13px] font-medium ${configurationTab === 'categories' ? 'border-brand text-brand' : 'border-transparent text-muted hover:text-ink'}`}>Categorías y Subcategorías</button><button onClick={() => openConfiguration('attributes')} className={`shrink-0 border-b-2 px-4 py-2.5 text-[13px] font-medium ${configurationTab === 'attributes' ? 'border-brand text-brand' : 'border-transparent text-muted hover:text-ink'}`}>Atributos</button><button onClick={() => openConfiguration('units')} className={`shrink-0 border-b-2 px-4 py-2.5 text-[13px] font-medium ${configurationTab === 'units' ? 'border-brand text-brand' : 'border-transparent text-muted hover:text-ink'}`}>Unidades de Medida</button></nav>{configurationTab === 'categories' ? <CategoryConfiguration categories={categories} onNew={() => setModal({ type: 'category' })} onEdit={item => setModal({ type: 'category', item })} onEditSubcategory={(category, item) => setModal({ type: 'subcategory', category, item })} /> : configurationTab === 'attributes' ? <AttributeCatalog attributes={attributes} onNew={() => setModal({ type: 'attribute' })} onEdit={item => setModal({ type: 'attribute', item })} onDelete={id => deleteAttributeMutation.mutate(id)} /> : <UnitsSection units={units} onNew={() => setModal({ type: 'unit' })} onEdit={(item) => setModal({ type: 'unit', item })} onDelete={(id) => deleteUnitMutation.mutate(id)} />}</section>}
+   {modal?.type === 'base' && <ProductWizard key={modal.item?.id ?? 'new-product'} item={modal.item} variants={modal.item ? variants.filter(variant => variant.baseId === modal.item!.id) : []} products={bases} categories={categories} units={units} onClose={() => setModal(null)} onSave={({ base, variants: savedVariants }) => productMutation.mutate({ base, nextVariants: savedVariants, editing: Boolean(modal.item) })} />}
    {modal?.type === 'variant' && <VariantDialog item={modal.item} base={bases.find(base => base.id === modal.item?.baseId)!} units={units} onClose={() => setModal(null)} onSave={(item) => saveVariant(item, Boolean(modal.item))} />}
    {modal?.type === 'unit' && <UnitDialog item={modal.item} onClose={() => setModal(null)} onSave={(item) => unitMutation.mutate({ item, editing: Boolean(modal.item) })} />}
-   {modal?.type === 'category' && <CategoryDialog item={modal.item} onClose={() => setModal(null)} onSave={item => categoryMutation.mutate({ item, editing: Boolean(modal.item) })} />}
+   {modal?.type === 'category' && <CategoryConfigurationDialog item={modal.item} definitions={attributes} onClose={() => setModal(null)} onSave={item => categoryMutation.mutate({ item, editing: Boolean(modal.item) })} />}
+   {modal?.type === 'subcategory' && <SubcategoryEditDialog category={modal.category} item={modal.item} onClose={() => setModal(null)} onSave={item => categoryMutation.mutate({ item: { ...modal.category, subcategories: modal.category.subcategories.map(subcategory => subcategory.id === item.id ? item : subcategory) }, editing: true })} />}
+   {modal?.type === 'attribute' && <AttributeDefinitionDialog item={modal.item} onClose={() => setModal(null)} onSave={item => attributeMutation.mutate({ item, editing: Boolean(modal.item) })} />}
    {notice && <div className="fixed bottom-6 right-6 z-[60] rounded-md border border-border border-l-4 border-l-emerald-600 bg-white px-4 py-3 text-sm shadow-panel">{notice}</div>}
  </div>
 }
 
 function Filter({ values, active, onChange }: { values: string[]; active: string; onChange: (value: string) => void }) { return <>{values.map(value => <Button key={value} variant={active === value ? 'default' : 'outline'} size="sm" onClick={() => onChange(value)}>{value}</Button>)}</> }
-function GroupedProductsTable({ bases, variants, onEditBase, onEditVariant, onToggleVariant }: { bases: ProductBase[]; variants: ProductVariant[]; onEditBase: (base: ProductBase) => void; onEditVariant: (variant: ProductVariant) => void; onToggleVariant: (variant: ProductVariant) => void }) {
-  return <div className="mt-4 overflow-x-auto"><table className="w-full min-w-[900px] border-collapse text-left"><thead><tr className="bg-[#f7f9fc] text-[11px] uppercase tracking-[.5px] text-muted">{['Producto', 'Código', 'Presentación', 'UM', 'Factor', 'Stock mín.', 'Estado', ''].map((header, index) => <th className={`border-y border-border px-4 py-3 font-semibold ${index === 4 || index === 5 ? 'text-right' : ''}`} key={header}>{header}</th>)}</tr></thead><tbody>{bases.length ? bases.flatMap(base => { const group = variants.filter(variant => variant.baseId === base.id); return group.length ? group.map((variant, index) => <tr key={variant.id} className={`border-b border-border text-[13px] ${variant.status === 'Inactivo' ? 'bg-slate-50 text-slate-400' : 'text-slate-700'}`}>{index === 0 && <td rowSpan={group.length} className="w-[44%] border-r border-[#d3e0fb] bg-[#eef4ff] px-4 align-middle"><button onClick={() => onEditBase(base)} className="text-left"><span className="font-mono text-[11px] font-bold text-brand">{base.code}</span><span className="font-medium"> · {base.name}</span><span className="ml-2 inline-flex gap-1">{base.roles.map(role => <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${badge[role]}`} key={role}>{role === 'Producto terminado' ? 'P. Terminado' : role}</span>)}</span></button></td>}<td className="px-4 py-3 font-mono text-[11px] text-slate-400">{variant.code}</td><td className="px-4 py-3 font-medium text-ink">{variant.name}</td><td className="px-4 py-3"><span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-semibold">{variant.unit}</span></td><td className="px-4 py-3 text-right font-mono">×{variant.factor || 1}</td><td className="px-4 py-3 text-right font-mono">{variant.minimum}</td><td className="px-4 py-3"><StatusBadge status={variant.status} /></td><td className="whitespace-nowrap px-4 py-3 text-right"><ActionGroup><IconButton label="Editar producto" onClick={() => onEditVariant(variant)}><Pencil className="h-3.5 w-3.5" /></IconButton><IconButton label={variant.status === 'Activo' ? 'Inhabilitar presentación' : 'Habilitar presentación'} onClick={() => onToggleVariant(variant)}><Power className="h-3.5 w-3.5" /></IconButton></ActionGroup></td></tr>) : <tr key={base.id}><td className="border-b border-r border-[#d3e0fb] bg-[#eef4ff] px-4 py-6"><button onClick={() => onEditBase(base)} className="text-left"><span className="font-mono text-[11px] font-bold text-brand">{base.code}</span> · <span className="font-medium">{base.name}</span></button></td><td className="border-b px-4 py-6 text-muted">—</td><td className="border-b px-4 py-6 text-muted">—</td><td className="border-b px-4 py-6 text-muted">—</td><td className="border-b px-4 py-6 text-right text-muted">—</td><td className="border-b px-4 py-6 text-right text-muted">—</td><td className="border-b px-4 py-6 text-muted">—</td><td className="border-b px-4 py-6 text-right"><span className="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-500">Sin presentaciones</span></td></tr> }) : <tr><td colSpan={8} className="p-10 text-center text-sm text-muted">No se encontraron productos.</td></tr>}</tbody></table></div>
+function GroupedProductsTable({ bases, variants, onEditBase, onToggleVariant }: { bases: ProductBase[]; variants: ProductVariant[]; onEditBase: (base: ProductBase) => void; onEditVariant: (variant: ProductVariant) => void; onToggleVariant: (variant: ProductVariant) => void }) {
+  return <div className="mt-5 overflow-x-auto rounded-xl border border-slate-200"><table className="w-full min-w-[940px] border-collapse text-left"><thead><tr className="bg-[#f5f8fc] text-[11px] uppercase tracking-[.55px] text-slate-500">{['Código', 'Categoría', 'Subcategoría', 'Producto', 'Inventario', 'Estado', ''].map(header => <th className="border-b border-slate-200 px-4 py-3.5 font-semibold" key={header}>{header}</th>)}</tr></thead><tbody>{bases.length ? bases.map(base => {
+    const inventory = variants.find(variant => variant.baseId === base.id)
+    const status = inventory?.status ?? base.status
+    return <tr key={base.id} className={`group border-b border-slate-100 text-[13px] transition-colors last:border-0 hover:bg-blue-50/40 ${status === 'Inactivo' ? 'bg-slate-50/70 text-slate-400' : 'text-slate-700'}`}>
+      <td className="px-4 py-3.5 font-mono text-[11px] font-bold text-brand">{base.code}</td>
+      <td className="px-4 py-3.5"><span className="inline-flex rounded-md border border-blue-100 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">{base.categoryName ?? 'Sin categoría'}</span></td>
+      <td className="px-4 py-3.5 text-sm font-medium text-slate-600">{base.subcategoryName ?? 'General'}</td>
+      <td className="max-w-[320px] px-4 py-3.5"><button onClick={() => onEditBase(base)} className="text-left"><span className="block truncate font-semibold text-ink group-hover:text-brand">{base.name}</span><span className="mt-1 flex flex-wrap gap-1">{base.roles.map(role => <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${badge[role]}`} key={role}>{role === 'Producto terminado' ? 'P. terminado' : role}</span>)}</span></button></td>
+      <td className="px-4 py-3.5"><span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-700">{inventory?.unit ?? '—'}</span>{inventory && inventory.factor !== 1 && <span className="ml-1.5 font-mono text-[11px] text-slate-500">×{inventory.factor}</span>}</td>
+      <td className="px-4 py-3.5"><StatusBadge status={status} /></td>
+      <td className="whitespace-nowrap px-4 py-3.5 text-right"><ActionGroup><IconButton label="Editar producto" onClick={() => onEditBase(base)}><Pencil className="h-3.5 w-3.5" /></IconButton>{inventory && <IconButton label={status === 'Activo' ? 'Inhabilitar producto' : 'Habilitar producto'} onClick={() => onToggleVariant(inventory)}><Power className="h-3.5 w-3.5" /></IconButton>}</ActionGroup></td>
+    </tr>
+  }) : <tr><td colSpan={7} className="p-10 text-center text-sm text-muted">No se encontraron productos con los filtros seleccionados.</td></tr>}</tbody></table></div>
 }
 function BaseRow({ base, variants, expanded, onToggle, onEdit, onDelete, onNewVariant, onEditVariant, onDeleteVariant }: { base: ProductBase; variants: ProductVariant[]; expanded: boolean; onToggle: () => void; onEdit: () => void; onDelete: () => void; onNewVariant: () => void; onEditVariant: (variant: ProductVariant) => void; onDeleteVariant: (id: string) => void }) { return <div className="border-b border-border last:border-0"><div className="flex items-center gap-2 bg-[#eef4ff] px-3 py-3"><button onClick={onToggle} className="text-brand">{expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}</button><div className="min-w-0 flex-1"><p className="font-mono text-[11px] font-bold text-brand">{base.code}</p><p className="text-[13px] font-bold">{base.name}</p></div><div className="hidden flex-wrap gap-1 md:flex">{base.roles.map(role => <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${badge[role]}`} key={role}>{role}</span>)}</div><StatusBadge status={base.status} /><Button size="sm" variant="outline" onClick={onNewVariant}><Plus className="h-3.5 w-3.5" />Variante</Button><IconButton label="Editar producto" onClick={onEdit}><Pencil className="h-3.5 w-3.5" /></IconButton>{ENABLE_PRODUCT_DELETION && <IconButton label="Eliminar producto" danger onClick={onDelete}><Trash2 className="h-3.5 w-3.5" /></IconButton>}</div>{expanded && <div className="overflow-x-auto"><table className="w-full min-w-[700px] text-left"><thead className="bg-[#f7f9fc] text-[10px] uppercase tracking-[.5px] text-muted"><tr><th className="px-5 py-2 font-semibold">Código</th><th className="px-3 py-2 font-semibold">Presentación</th><th className="px-3 py-2 font-semibold">Stock</th><th className="px-3 py-2 font-semibold">UM</th><th className="px-3 py-2 font-semibold">Estado</th><th className="px-5 py-2" /></tr></thead><tbody>{variants.length ? variants.map(variant => <tr key={variant.id} className="border-t border-border text-[13px] text-slate-600"><td className="px-5 py-2.5 font-mono text-[11px] text-brand">{variant.code}</td><td className="px-3 py-2.5 font-medium text-ink">{variant.name}</td><td className={`px-3 py-2.5 font-mono ${variant.stock < variant.minimum ? 'text-red-600' : 'text-emerald-600'}`}>{variant.stock} <span className="font-sans text-[11px] text-muted">/ mín {variant.minimum}</span></td><td className="px-3 py-2.5">{variant.unit}{variant.factor > 1 && <span className="ml-1 text-[10px] text-brand">×{variant.factor} und</span>}</td><td className="px-3 py-2.5"><StatusBadge status={variant.status} /></td><td className="px-5 py-2.5 text-right"><IconButton label="Editar variante" onClick={() => onEditVariant(variant)}><Pencil className="h-3.5 w-3.5" /></IconButton>{ENABLE_PRODUCT_DELETION && <IconButton label="Eliminar variante" danger onClick={() => onDeleteVariant(variant.id)}><Trash2 className="h-3.5 w-3.5" /></IconButton>}</td></tr>) : <tr><td colSpan={6} className="p-5 text-center text-sm text-muted">Sin variantes registradas.</td></tr>}</tbody></table></div>}</div> }
 function ActionGroup({ children }: { children: React.ReactNode }) { return <div className="inline-flex overflow-hidden rounded-md border border-border bg-white shadow-sm">{children}</div> }
@@ -94,4 +231,4 @@ function VariantDialog({ item, base, units, onClose, onSave }: { item?: ProductV
  return <Dialog open title={item ? 'Editar variante' : `Nueva variante · ${base.name}`} onClose={onClose} footer={<><Button variant="outline" onClick={onClose}>Cancelar</Button><Button form="variant-form" type="submit">Guardar variante</Button></>}><form id="variant-form" onSubmit={submit} className="grid gap-4 md:grid-cols-2"><Field label="Código"><Input value={item?.code ?? 'Se generará automáticamente'} disabled /></Field><Field label="Producto"><Input value={base.name} disabled /></Field>{base.attributes.length > 0 && <div className="grid gap-4 md:col-span-2 md:grid-cols-2">{base.attributes.map(attribute => <Field key={attribute.id} label={`${attribute.name}${attribute.required ? ' *' : ''}`}><Input required={attribute.required} type={attribute.type === 'Numérico' ? 'number' : 'text'} value={values[attribute.id] ?? ''} onChange={e => setValues(current => ({ ...current, [attribute.id]: e.target.value }))} placeholder={attribute.name} /></Field>)}</div>}<Field label="Nombre generado" full><Input value={name} disabled /></Field><Field label="UM de inventario *"><Select value={unit} onChange={e => setUnit(e.target.value)}>{units.filter(value => value.status === 'Activo').map(value => <option key={value.id} value={value.code}>{value.code} — {value.description}</option>)}</Select></Field><Field label="Factor de conversión"><Input type="number" min="0.001" step="0.001" value={factor} onChange={e => setFactor(Number(e.target.value))} /></Field><Field label="Stock mínimo"><Input type="number" min="0" value={minimum} onChange={e => setMinimum(Number(e.target.value))} /></Field><Field label="Stock actual"><Input type="number" min="0" value={stock} onChange={e => setStock(Number(e.target.value))} /></Field><Field label="Estado"><Select value={status} onChange={e => setStatus(e.target.value as ProductStatus)}><option>Activo</option><option>Inactivo</option></Select></Field></form></Dialog>
 }
 function UnitDialog({ item, onClose, onSave }: { item?: Unit; onClose: () => void; onSave: (item: Unit) => void }) { const [description, setDescription] = useState(item?.description ?? ''); const [status, setStatus] = useState<ProductStatus>(item?.status ?? 'Activo'); const code = item?.code ?? unitCode(description); return <Dialog open title={item ? 'Editar unidad de medida' : 'Nueva unidad de medida'} onClose={onClose} footer={<><Button variant="outline" onClick={onClose}>Cancelar</Button><Button form="unit-form" type="submit">Guardar</Button></>}><form id="unit-form" onSubmit={(event) => { event.preventDefault(); if (description.trim()) onSave({ id: item?.id ?? newId(), code, description: description.trim(), status }) }} className="space-y-4"><Field label="Descripción *"><Input value={description} onChange={e => setDescription(e.target.value)} placeholder="ej. Kilogramo, Metro, Balde" required /></Field><Field label="Código autogenerado"><Input value={code} disabled placeholder="—" /></Field><Field label="Estado"><Select value={status} onChange={e => setStatus(e.target.value as ProductStatus)}><option>Activo</option><option>Inactivo</option></Select></Field></form></Dialog> }
-function CategoryDialog({ item, onClose, onSave }: { item?: ProductCategory; onClose: () => void; onSave: (item: ProductCategory) => void }) { const [name, setName] = useState(item?.name ?? ''); return <Dialog open title={item ? 'Editar categoría' : 'Nueva categoría'} onClose={onClose} footer={<><Button variant="outline" onClick={onClose}>Cancelar</Button><Button form="category-form" type="submit">Guardar categoría</Button></>}><form id="category-form" onSubmit={event => { event.preventDefault(); if (name.trim()) onSave({ id: item?.id ?? newId(), name: name.trim() }) }} className="space-y-4"><Field label="Nombre de la categoría *"><Input value={name} onChange={event => setName(event.target.value)} placeholder="Ej. Cartón y bobinas" required /></Field></form></Dialog> }
+function CategoryDialog({ item, onClose, onSave }: { item?: ProductCategory; onClose: () => void; onSave: (item: ProductCategory) => void }) { const [name, setName] = useState(item?.name ?? ''); return <Dialog open title={item ? 'Editar categoría' : 'Nueva categoría'} onClose={onClose} footer={<><Button variant="outline" onClick={onClose}>Cancelar</Button><Button form="category-form" type="submit">Guardar categoría</Button></>}><form id="category-form" onSubmit={event => { event.preventDefault(); if (name.trim()) onSave({ id: item?.id ?? newId(), name: name.trim(), code: item?.code ?? null, description: item?.description ?? null, status: item?.status ?? 'Activo', attributes: item?.attributes ?? [], subcategories: item?.subcategories ?? [] }) }} className="space-y-4"><Field label="Nombre de la categoría *"><Input value={name} onChange={event => setName(event.target.value)} placeholder="Ej. Cartón y bobinas" required /></Field></form></Dialog> }
