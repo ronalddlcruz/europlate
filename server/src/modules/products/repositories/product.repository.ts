@@ -1,7 +1,8 @@
 import type { Prisma, PrismaClient } from '@prisma/client'
 import { prisma } from '../../../infrastructure/database/prisma.client.js'
 
-const productInclude = { category: true, brand: true, attributes: { orderBy: { position: 'asc' } }, presentations: { include: { unit: true }, orderBy: { name: 'asc' } }, identifiers: true } satisfies Prisma.ProductInclude
+const categoryInclude = { attributes: { include: { attributeDefinition: true }, orderBy: { position: 'asc' } }, subcategories: { include: { attributes: { include: { attributeDefinition: true }, orderBy: { position: 'asc' } } }, orderBy: { name: 'asc' } } } satisfies Prisma.CategoryInclude
+const productInclude = { category: { include: categoryInclude }, subcategory: { include: { attributes: { orderBy: { position: 'asc' } } } }, brand: true, attributes: { orderBy: { position: 'asc' } }, presentations: { include: { unit: true }, orderBy: { name: 'asc' } }, identifiers: true } satisfies Prisma.ProductInclude
 type Database = PrismaClient | Prisma.TransactionClient
 
 export const productRepository = {
@@ -13,12 +14,19 @@ export const productRepository = {
   update: (db: Database, id: string, data: Prisma.ProductUpdateInput) => db.product.update({ where: { id }, data, include: productInclude }),
   delete: (id: string) => prisma.product.delete({ where: { id } }),
   listUnits: () => prisma.unit.findMany({ orderBy: { code: 'asc' } }),
-  listCategories: () => prisma.category.findMany({ orderBy: { name: 'asc' } }),
-  findCategory: (id: string) => prisma.category.findUnique({ where: { id } }),
-  findCategoryByName: (name: string) => prisma.category.findUnique({ where: { name } }),
-  createCategory: (data: Prisma.CategoryCreateInput) => prisma.category.create({ data }),
-  updateCategory: (id: string, data: Prisma.CategoryUpdateInput) => prisma.category.update({ where: { id }, data }),
+  listCategories: () => prisma.category.findMany({ include: categoryInclude, orderBy: { name: 'asc' } }),
+  findCategory: (id: string) => prisma.category.findUnique({ where: { id }, include: categoryInclude }),
+  findCategoryByName: (name: string) => prisma.category.findUnique({ where: { name }, include: categoryInclude }),
+  createCategory: (data: Prisma.CategoryCreateInput) => prisma.category.create({ data, include: categoryInclude }),
+  updateCategory: (id: string, data: Prisma.CategoryUpdateInput) => prisma.category.update({ where: { id }, data, include: categoryInclude }),
   deleteCategory: (id: string) => prisma.category.delete({ where: { id } }),
+  listAttributeDefinitions: () => prisma.attributeDefinition.findMany({ orderBy: { name: 'asc' } }),
+  findAttributeDefinition: (id: string) => prisma.attributeDefinition.findUnique({ where: { id } }),
+  findAttributeDefinitionByCode: (code: string) => prisma.attributeDefinition.findUnique({ where: { code } }),
+  findAttributeDefinitionByName: (name: string) => prisma.attributeDefinition.findUnique({ where: { name } }),
+  createAttributeDefinition: (data: Prisma.AttributeDefinitionCreateInput) => prisma.attributeDefinition.create({ data }),
+  updateAttributeDefinition: (id: string, data: Prisma.AttributeDefinitionUpdateInput) => prisma.attributeDefinition.update({ where: { id }, data }),
+  deleteAttributeDefinition: (id: string) => prisma.attributeDefinition.delete({ where: { id } }),
   findUnit: (id: string) => prisma.unit.findUnique({ where: { id } }),
   findUnitByCode: (code: string) => prisma.unit.findUnique({ where: { code } }),
   createUnit: (data: Prisma.UnitCreateInput) => prisma.unit.create({ data }),

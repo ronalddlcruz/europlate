@@ -4,22 +4,26 @@ import { AppError } from '../../../shared/errors/app-error.js'
 import { getImportDocumentUrl, removeImportDocument, uploadImportDocument } from '../../../infrastructure/storage/purchase-document.storage.js'
 import { importRepository } from '../repositories/import.repository.js'
 import type { ImportInput, UpdateImportInput } from '../schemas/import.schema.js'
+import { productService } from '../../products/services/product.service.js'
 
 const decimal = (value: number) => new Prisma.Decimal(value)
 const nextNumber = () => `IMP-${new Date().getFullYear()}-${Date.now().toString().slice(-6)}`
 const totalOf = (items: { quantity: number; unitCostUsd: number }[]) => items.reduce((sum, line) => sum.plus(decimal(line.quantity).mul(decimal(line.unitCostUsd))), new Prisma.Decimal(0))
 const transaction = <T>(callback: (db: Prisma.TransactionClient) => Promise<T>) => prisma.$transaction(callback, { maxWait: 10_000, timeout: 30_000 })
 
-async function validateReferences(companyId: string, input: Pick<ImportInput, 'supplierId' | 'customsAgentId' | 'items'>) {
-  const supplier = await prisma.supplier.findFirst({ where: { id: input.supplierId, companyId, type: SupplierType.FOREIGN, status: ProductStatus.ACTIVE } })
+type ResolvedItem = { productId: string; presentationId: string; warehouseId: string; quantity: number; unitCostUsd: number }
+const isVariableItem = (item: ImportInput['items'][number]): item is Extract<ImportInput['items'][number], { variableSubcategoryId: string }> => 'variableSubcategoryId' in item
+async function validateReferences(db: Prisma.TransactionClient | typeof prisma, companyId: string, input: { supplierId: string; customsAgentId?: string | null; items: ResolvedItem[] }) {
+  const supplier = await db.supplier.findFirst({ where: { id: input.supplierId, companyId, type: SupplierType.FOREIGN, status: ProductStatus.ACTIVE } })
   if (!supplier) throw new AppError('FOREIGN_SUPPLIER_NOT_AVAILABLE', 'Selecciona un proveedor extranjero activo.', 422)
-  if (input.customsAgentId) { const agent = await prisma.customsAgent.findFirst({ where: { id: input.customsAgentId, companyId, status: ProductStatus.ACTIVE } }); if (!agent) throw new AppError('CUSTOMS_AGENT_NOT_AVAILABLE', 'Selecciona un agente de aduanas activo.', 422) }
+  if (input.customsAgentId) { const agent = await db.customsAgent.findFirst({ where: { id: input.customsAgentId, companyId, status: ProductStatus.ACTIVE } }); if (!agent) throw new AppError('CUSTOMS_AGENT_NOT_AVAILABLE', 'Selecciona un agente de aduanas activo.', 422) }
   const presentationIds = [...new Set(input.items.map(line => line.presentationId))]
   const warehouseIds = [...new Set(input.items.map(line => line.warehouseId))]
-  const [presentations, warehouses] = await Promise.all([prisma.productPresentation.findMany({ where: { id: { in: presentationIds }, status: ProductStatus.ACTIVE } }), prisma.warehouse.findMany({ where: { id: { in: warehouseIds }, companyId, status: ProductStatus.ACTIVE } })])
+  const [presentations, warehouses] = await Promise.all([db.productPresentation.findMany({ where: { id: { in: presentationIds }, status: ProductStatus.ACTIVE } }), db.warehouse.findMany({ where: { id: { in: warehouseIds }, companyId, status: ProductStatus.ACTIVE } })])
   if (presentations.length !== presentationIds.length || warehouses.length !== warehouseIds.length) throw new AppError('IMPORT_REFERENCE_INVALID', 'Producto, presentación o almacén no disponible.', 422)
   for (const line of input.items) { const presentation = presentations.find(value => value.id === line.presentationId); if (!presentation || presentation.productId !== line.productId) throw new AppError('IMPORT_PRODUCT_MISMATCH', 'La presentación no corresponde al producto seleccionado.', 422) }
 }
+async function resolveItems(db: Prisma.TransactionClient, input: ImportInput): Promise<ResolvedItem[]> { return Promise.all(input.items.map(async item => { if (!isVariableItem(item)) return item; const unit = await db.unit.findFirst({ where: { code: { equals: item.unitCode, mode: 'insensitive' }, status: ProductStatus.ACTIVE } }); if (!unit) throw new AppError('VARIABLE_UNIT_INVALID', 'La unidad de inventario del producto variable no está disponible.', 422); const product = await productService.createFromVariableSubcategory({ subcategoryId: item.variableSubcategoryId, name: item.name, values: item.values, unitId: unit.id, factor: item.factor, minimumStock: item.minimumStock, currentStock: 0, roles: item.roles, status: ProductStatus.ACTIVE }, db); const presentation = product.presentations[0]; if (!presentation) throw new AppError('VARIABLE_PRODUCT_INVALID', 'No se pudo crear la presentación del producto variable.', 422); return { productId: product.id, presentationId: presentation.id, warehouseId: item.warehouseId, quantity: item.quantity, unitCostUsd: item.unitCostUsd } })) }
 
 async function applyReceipt(db: Prisma.TransactionClient, record: { number: string; items: { productId: string; presentationId: string; warehouseId: string; quantity: Prisma.Decimal; presentation: { factor: Prisma.Decimal } }[] }) {
   for (const line of record.items) {
@@ -42,11 +46,11 @@ export const importService = {
   async uploadDocument(companyId: string, fileName: string, content: Buffer) { return uploadImportDocument(companyId, fileName, content) },
   async removeDocument(companyId: string, storageKey: string) { if (!storageKey.startsWith(`imports/${companyId}/`)) throw new AppError('IMPORT_DOCUMENT_INVALID', 'El archivo no pertenece a esta empresa.', 403); await removeImportDocument(storageKey) },
   async create(companyId: string, input: ImportInput) {
-    await validateReferences(companyId, input)
     if (await importRepository.findDuplicateDua(companyId, input.duaNumber)) throw new AppError('IMPORT_DUA_EXISTS', 'Ese número de DUA ya fue registrado.', 409)
     if (input.documents.some(document => document.storageKey && !document.storageKey.startsWith(`imports/${companyId}/`))) throw new AppError('IMPORT_DOCUMENT_INVALID', 'El documento adjunto no pertenece a esta empresa.', 422)
     return transaction(async db => {
-      const created = await importRepository.create(db, { company: { connect: { id: companyId } }, supplier: { connect: { id: input.supplierId } }, ...(input.customsAgentId && { customsAgent: { connect: { id: input.customsAgentId } } }), number: nextNumber(), containerNumber: input.containerNumber, duaNumber: input.duaNumber, purchaseOrderNumber: input.purchaseOrderNumber, countryOfOrigin: input.countryOfOrigin, status: input.status, currency: input.currency, arrivalDate: input.arrivalDate, customsCostUsd: decimal(input.customsCostUsd), customsCostPen: decimal(input.customsCostPen), totalUsd: totalOf(input.items), items: { create: input.items.map(line => ({ product: { connect: { id: line.productId } }, presentation: { connect: { id: line.presentationId } }, warehouse: { connect: { id: line.warehouseId } }, quantity: decimal(line.quantity), unitCostUsd: decimal(line.unitCostUsd) })) }, documents: { create: input.documents } })
+      const items = await resolveItems(db, input); await validateReferences(db, companyId, { supplierId: input.supplierId, customsAgentId: input.customsAgentId, items })
+      const created = await importRepository.create(db, { company: { connect: { id: companyId } }, supplier: { connect: { id: input.supplierId } }, ...(input.customsAgentId && { customsAgent: { connect: { id: input.customsAgentId } } }), number: nextNumber(), containerNumber: input.containerNumber, duaNumber: input.duaNumber, purchaseOrderNumber: input.purchaseOrderNumber, countryOfOrigin: input.countryOfOrigin, status: input.status, currency: input.currency, arrivalDate: input.arrivalDate, customsCostUsd: decimal(input.customsCostUsd), customsCostPen: decimal(input.customsCostPen), totalUsd: totalOf(items), items: { create: items.map(line => ({ product: { connect: { id: line.productId } }, presentation: { connect: { id: line.presentationId } }, warehouse: { connect: { id: line.warehouseId } }, quantity: decimal(line.quantity), unitCostUsd: decimal(line.unitCostUsd) })) }, documents: { create: input.documents } })
       if (created.status === ImportStatus.RECEIVED) { const receipt = await db.import.findUniqueOrThrow({ where: { id: created.id }, include: receiptInclude }); await applyReceipt(db, receipt) }
       return created
     })
@@ -55,10 +59,11 @@ export const importService = {
     const current = await this.getById(companyId, id)
     if (current.status === ImportStatus.RECEIVED) throw new AppError('IMPORT_LOCKED', 'Una importación recibida no se puede editar.', 409)
     if (input.status === ImportStatus.RECEIVED && current.status === ImportStatus.CANCELLED) throw new AppError('IMPORT_NOT_RECEIVABLE', 'Una importación cancelada no se puede recibir.', 409)
+    if (input.items?.some(isVariableItem)) throw new AppError('VARIABLE_IMPORT_UPDATE_UNSUPPORTED', 'Los productos variables se definen al registrar una nueva importación.', 422)
     const items = input.items ?? current.items.map(line => ({ productId: line.productId, presentationId: line.presentationId, warehouseId: line.warehouseId, quantity: Number(line.quantity), unitCostUsd: Number(line.unitCostUsd) }))
     const supplierId = input.supplierId ?? current.supplierId
     const customsAgentId = input.customsAgentId === undefined ? current.customsAgentId : input.customsAgentId
-    await validateReferences(companyId, { supplierId, customsAgentId, items })
+    await validateReferences(prisma, companyId, { supplierId, customsAgentId, items })
     if (input.duaNumber && input.duaNumber !== current.duaNumber) { const duplicate = await importRepository.findDuplicateDua(companyId, input.duaNumber); if (duplicate) throw new AppError('IMPORT_DUA_EXISTS', 'Ese número de DUA ya fue registrado.', 409) }
     if (input.documents?.some(document => document.storageKey && !document.storageKey.startsWith(`imports/${companyId}/`))) throw new AppError('IMPORT_DOCUMENT_INVALID', 'El documento adjunto no pertenece a esta empresa.', 422)
     const shouldReceive = input.status === ImportStatus.RECEIVED && current.status === ImportStatus.IN_TRANSIT
