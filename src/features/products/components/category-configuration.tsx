@@ -339,7 +339,7 @@ export function SubcategoryEditDialog({
       current
         .map((attribute) =>
           attribute.id === id && hasProducts
-            ? { ...attribute, status: "Inactivo" }
+            ? { ...attribute, status: "Inactivo" as const }
             : attribute,
         )
         .filter((attribute) => attribute.id !== id || hasProducts),
