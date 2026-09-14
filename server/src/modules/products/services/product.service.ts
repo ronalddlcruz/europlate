@@ -2,7 +2,7 @@ import { Prisma, ProductStatus } from '@prisma/client'
 import { prisma } from '../../../infrastructure/database/prisma.client.js'
 import { AppError } from '../../../shared/errors/app-error.js'
 import { productRepository } from '../repositories/product.repository.js'
-import type { CreateAttributeDefinitionInput, CreateCategoryInput, CreateProductInput, CreateUnitInput, UpdateProductInput } from '../schemas/product.schema.js'
+import type { CreateAttributeDefinitionInput, CreateCategoryInput, CreateProductInput, CreateUnitInput, CreateVariableProductInput, UpdateProductInput } from '../schemas/product.schema.js'
 
 const decimal = (value: number) => new Prisma.Decimal(value)
 const presentationCode = (index: number) => `VAR-${Date.now().toString().slice(-8)}-${index + 1}`
@@ -59,7 +59,7 @@ function categoryCreateData(input: CreateCategoryInput): Prisma.CategoryCreateIn
     code: input.code ?? null, name: input.name, description: input.description ?? null, status: input.status,
     attributes: { create: input.attributes.map(configuredAttributeData) },
     subcategories: { create: input.subcategories.map((subcategory) => ({
-      code: subcategory.code ?? null, name: subcategory.name, description: subcategory.description ?? null, status: subcategory.status,
+      code: subcategory.code ?? null, name: subcategory.name, description: subcategory.description ?? null, status: subcategory.status, isVariable: subcategory.isVariable,
       attributes: { create: subcategory.attributes.map(configuredAttributeData) },
     })) },
   }
@@ -77,7 +77,7 @@ function categoryUpdateData(input: CreateCategoryInput): Prisma.CategoryUpdateIn
     subcategories: {
       deleteMany: retainedSubcategories.length ? { id: { notIn: retainedSubcategories } } : {},
       update: input.subcategories.flatMap((subcategory) => subcategory.id ? [{ where: { id: subcategory.id }, data: {
-        code: subcategory.code ?? null, name: subcategory.name, description: subcategory.description ?? null, status: subcategory.status,
+        code: subcategory.code ?? null, name: subcategory.name, description: subcategory.description ?? null, status: subcategory.status, isVariable: subcategory.isVariable,
         attributes: {
           deleteMany: subcategory.attributes.flatMap(attribute => attribute.id ? [attribute.id] : []).length ? { id: { notIn: subcategory.attributes.flatMap(attribute => attribute.id ? [attribute.id] : []) } } : {},
           update: subcategory.attributes.flatMap((attribute, position) => attribute.id ? [{ where: { id: attribute.id }, data: configuredAttributeData(attribute, position) }] : []),
@@ -85,7 +85,7 @@ function categoryUpdateData(input: CreateCategoryInput): Prisma.CategoryUpdateIn
         },
       } }] : []),
       create: input.subcategories.filter(subcategory => !subcategory.id).map((subcategory) => ({
-        code: subcategory.code ?? null, name: subcategory.name, description: subcategory.description ?? null, status: subcategory.status,
+        code: subcategory.code ?? null, name: subcategory.name, description: subcategory.description ?? null, status: subcategory.status, isVariable: subcategory.isVariable,
         attributes: { create: subcategory.attributes.map(configuredAttributeData) },
       })),
     },
@@ -112,19 +112,30 @@ async function synchronizePresentationAttributeValues(
 }
 
 export const productService = {
+  async createFromVariableSubcategory(input: CreateVariableProductInput, db?: Prisma.TransactionClient) {
+    const category = (await productRepository.listCategories()).find(value => value.subcategories.some(subcategory => subcategory.id === input.subcategoryId))
+    const subcategory = category?.subcategories.find(value => value.id === input.subcategoryId)
+    if (!category || !subcategory?.isVariable) throw new AppError('VARIABLE_SUBCATEGORY_INVALID', 'La subcategoría no está habilitada como producto variable.', 422)
+    const attributes = [...category.attributes, ...subcategory.attributes]
+    const missing = attributes.find(attribute => attribute.required && !input.values[attribute.id]?.trim())
+    if (missing) throw new AppError('VARIABLE_ATTRIBUTE_REQUIRED', `Completa el atributo obligatorio: ${missing.name}.`, 422)
+    const name = input.name ?? [subcategory.name, ...attributes.map(attribute => input.values[attribute.id] ? `${input.values[attribute.id]}${attribute.suffix ? ` ${attribute.suffix}` : ''}` : '')].filter(Boolean).join(' · ')
+    return this.create({ name, categoryId: category.id, subcategoryId: subcategory.id, status: input.status, roles: input.roles, variantType: 'BASIC', immediateConsumption: true, attributes: attributes.map(attribute => ({ id: attribute.id, name: attribute.name, dataType: attribute.dataType, suffix: attribute.suffix, required: attribute.required, status: attribute.status })), presentations: [{ name, unitId: input.unitId, attributeValues: input.values, factor: input.factor, minimumStock: input.minimumStock, currentStock: input.currentStock, status: input.status }] }, db)
+  },
   async getCatalog(filters: { search?: string; status?: ProductStatus; role?: 'MERCHANDISE' | 'SUPPLY' | 'FINISHED_PRODUCT' }) {
     const where: Prisma.ProductWhereInput = { ...(filters.status && { status: filters.status }), ...(filters.role && { roles: { has: filters.role } }), ...(filters.search && { OR: [{ code: { contains: filters.search, mode: 'insensitive' } }, { name: { contains: filters.search, mode: 'insensitive' } }, { presentations: { some: { name: { contains: filters.search, mode: 'insensitive' } } } }] }) }
     return productRepository.findMany(where)
   },
   async getById(id: string) { const product = await productRepository.findById(id); if (!product) throw new AppError('PRODUCT_NOT_FOUND', 'Producto no encontrado.', 404); return product },
-  async create(input: CreateProductInput) {
+  async create(input: CreateProductInput, existingTransaction?: Prisma.TransactionClient) {
     const code = await nextProductCode(input.categoryId, input.subcategoryId)
     await validateSubcategory(input.categoryId, input.subcategoryId)
-    return prisma.$transaction(async db => {
+    const persist = async (db: Prisma.TransactionClient) => {
       const product = await productRepository.create(db, { code, name: input.name, status: input.status, roles: { set: input.roles }, variantType: input.variantType, immediateConsumption: input.immediateConsumption, ...(input.categoryId && { category: { connect: { id: input.categoryId } } }), ...(input.subcategoryId && { subcategory: { connect: { id: input.subcategoryId } } }), ...(input.brandId && { brand: { connect: { id: input.brandId } } }), attributes: { create: input.attributes.map(attributeData) }, presentations: { create: input.presentations.map(presentationData) } })
       await synchronizePresentationAttributeValues(db, product, input)
       return product
-    }, { maxWait: 10_000, timeout: 30_000 })
+    }
+    return existingTransaction ? persist(existingTransaction) : prisma.$transaction(persist, { maxWait: 10_000, timeout: 30_000 })
   },
   async update(id: string, input: UpdateProductInput) {
     await this.getById(id)

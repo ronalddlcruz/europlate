@@ -12,6 +12,7 @@ productRoutes.get('/categories', requirePermission('products.read'), productCont
 productRoutes.get('/attributes', requirePermission('products.read'), productController.listAttributeDefinitions)
 productRoutes.post('/units', requirePermission('products.manage'), productController.createUnit)
 productRoutes.post('/categories', requirePermission('products.manage'), productController.createCategory)
+productRoutes.post('/variable-subcategories/:id/products', requirePermission('products.manage'), productController.createFromVariableSubcategory)
 productRoutes.post('/attributes', requirePermission('products.manage'), productController.createAttributeDefinition)
 productRoutes.patch('/units/:id', requirePermission('products.manage'), productController.updateUnit)
 productRoutes.delete('/units/:id', requirePermission('products.manage'), productController.removeUnit)

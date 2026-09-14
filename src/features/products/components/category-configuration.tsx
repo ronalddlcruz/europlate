@@ -28,6 +28,7 @@ const freshSubcategory = (): ProductSubcategory => ({
   name: "",
   description: "",
   status: "Activo",
+  isVariable: false,
   attributes: [],
 });
 const statusStyle = (status: ProductStatus) =>
@@ -317,6 +318,7 @@ export function SubcategoryEditDialog({
   const [code, setCode] = useState(item.code ?? "");
   const [description, setDescription] = useState(item.description ?? "");
   const [status, setStatus] = useState<ProductStatus>(item.status);
+  const [isVariable, setIsVariable] = useState(item.isVariable ?? false);
   const [attributes, setAttributes] = useState(item.attributes);
   const add = (definition: AttributeDefinition) =>
     setAttributes((current) =>
@@ -370,6 +372,7 @@ export function SubcategoryEditDialog({
               code: code.trim().toUpperCase() || null,
               description: description.trim() || null,
               status,
+              isVariable,
               attributes,
             });
         }}
@@ -411,6 +414,23 @@ export function SubcategoryEditDialog({
             <option>Inactivo</option>
           </select>
         </Field>
+        <label className="flex items-start gap-3 rounded-lg border border-blue-100 bg-blue-50/60 px-3 py-3 text-sm md:col-span-2">
+          <input
+            type="checkbox"
+            checked={isVariable}
+            onChange={(event) => setIsVariable(event.target.checked)}
+            className="mt-0.5 h-4 w-4 accent-blue-600"
+          />
+          <span>
+            <span className="block font-semibold text-ink">
+              Producto variable
+            </span>
+            <span className="mt-0.5 block text-xs text-muted">
+              No se crea en el catálogo. Sus atributos se completarán al
+              registrar una compra o importación.
+            </span>
+          </span>
+        </label>
         <div className="border-t border-dashed border-border pt-4 md:col-span-2">
           <p className="text-xs font-semibold uppercase tracking-[.4px] text-slate-600">
             Atributos particulares
@@ -669,6 +689,28 @@ export function CategoryConfigurationDialog({
                   placeholder="Ej. DUP"
                 />
               </Field>
+              <label className="flex items-start gap-3 rounded-lg border border-blue-100 bg-blue-50/60 px-3 py-3 text-sm md:col-span-2">
+                <input
+                  type="checkbox"
+            checked={subcategory.isVariable ?? false}
+                  onChange={(event) =>
+                    setSubcategory((value) => ({
+                      ...value,
+                      isVariable: event.target.checked,
+                    }))
+                  }
+                  className="mt-0.5 h-4 w-4 accent-blue-600"
+                />
+                <span>
+                  <span className="block font-semibold text-ink">
+                    Producto variable
+                  </span>
+                  <span className="mt-0.5 block text-xs text-muted">
+                    Los valores de sus atributos se registrarán únicamente
+                    durante una compra o importación.
+                  </span>
+                </span>
+              </label>
               <div className="md:col-span-2">
                 <AttributePicker
                   definitions={definitions}

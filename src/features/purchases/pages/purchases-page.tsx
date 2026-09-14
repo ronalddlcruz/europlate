@@ -4,52 +4,397 @@ import { CalendarDays, ChevronDown, Eye, ExternalLink, FileText, Package, Paperc
 import { Button } from '../../../components/ui/button'
 import { Dialog } from '../../../components/ui/dialog'
 import { Input } from '../../../components/ui/input'
+import { ProductWizard } from '../../products/components/product-wizard'
+import { loadCatalog } from '../../products/services/product-api.service'
+import type { ProductBase, ProductVariant } from '../../products/types/product.types'
 import { createPurchase, deletePurchase, getPurchase, listPurchases, loadPurchaseCatalog, removePurchaseDocument, uploadPurchaseDocument, type Purchase, type PurchaseCatalog, type UploadedPurchaseDocument } from '../services/purchase-api.service'
 
-type DraftLine = { productId: string; presentationId: string; warehouseId: string; quantity: number | ''; price: number | '' }
+type VariableDraft = { name: string; values: Record<string, string>; unit: string; factor: number; minimumStock: number; stock: number; roles: ProductBase['roles'] }
+type DraftLine = { productId: string; presentationId: string; variableSubcategoryId: string; variableDraft?: VariableDraft; isVariable: boolean; warehouseId: string; quantity: number | ''; price: number | '' }
+const variableProductsOption = '__variable_products__'
 const today = new Date().toISOString().slice(0, 10)
 const money = (amount: number) => new Intl.NumberFormat('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount)
 const Select = ({ children, ...props }: React.SelectHTMLAttributes<HTMLSelectElement>) => <select className="h-10 w-full rounded-md border border-border bg-[#f4f7fb] px-3 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand" {...props}>{children}</select>
-const Field = ({ label, children }: { label: string; children: React.ReactNode }) => <label className="block"><span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[.4px] text-slate-600">{label}</span>{children}</label>
+const Field = ({ label, children }: { label: string; children: React.ReactNode }) => <label className="block">
+<span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[.4px] text-slate-600">{label}</span>{children}</label>
 
 export function PurchasesPage() {
-  const queryClient = useQueryClient(); const purchasesQuery = useQuery({ queryKey: ['purchases'], queryFn: listPurchases }); const catalogQuery = useQuery({ queryKey: ['purchases', 'catalog'], queryFn: loadPurchaseCatalog }); const [modal, setModal] = useState<'new' | 'detail' | null>(null); const [selected, setSelected] = useState<Purchase>(); const detailQuery = useQuery({ queryKey: ['purchases', 'detail', selected?.id], queryFn: () => getPurchase(selected!.id), enabled: modal === 'detail' && Boolean(selected) }); const [notice, setNotice] = useState('')
+  const queryClient = useQueryClient(); const purchasesQuery = useQuery({ queryKey: ['purchases'], queryFn: listPurchases, staleTime: 30_000 }); const catalogQuery = useQuery({ queryKey: ['purchases', 'catalog'], queryFn: loadPurchaseCatalog, staleTime: 5 * 60_000, gcTime: 15 * 60_000, refetchOnWindowFocus: false }); const productsCatalogQuery = useQuery({ queryKey: ['products', 'catalog'], queryFn: loadCatalog, staleTime: 5 * 60_000, gcTime: 15 * 60_000, refetchOnWindowFocus: false }); const [modal, setModal] = useState<'new' | 'detail' | null>(null); const [selected, setSelected] = useState<Purchase>(); const detailQuery = useQuery({ queryKey: ['purchases', 'detail', selected?.id], queryFn: () => getPurchase(selected!.id), enabled: modal === 'detail' && Boolean(selected) }); const [notice, setNotice] = useState('')
   const notify = (message: string) => { setNotice(message); window.setTimeout(() => setNotice(''), 2800) }
-  const createMutation = useMutation({ mutationFn: createPurchase, onSuccess: purchase => { queryClient.setQueryData<Purchase[]>(['purchases'], current => [purchase, ...(current ?? [])]); void queryClient.invalidateQueries({ queryKey: ['purchases'] }); setModal(null); notify('Compra registrada, stock actualizado y tabla sincronizada') }, onError: error => notify(error instanceof Error ? error.message : 'No se pudo registrar la compra') })
+  const createMutation = useMutation({
+    mutationFn: createPurchase,
+    onMutate: async payload => {
+      await queryClient.cancelQueries({ queryKey: ['purchases'] })
+      const temporaryId = `pending-${crypto.randomUUID()}`
+      const catalog = queryClient.getQueryData<PurchaseCatalog>(['purchases', 'catalog'])
+      const supplier = catalog?.suppliers.find(item => item.id === payload.supplierId)?.name ?? 'Proveedor seleccionado'
+      const pending: Purchase = { id: temporaryId, number: 'Guardando…', supplier, date: payload.purchaseDate, receiptDate: payload.receiptDate, invoice: payload.supplierInvoiceNumber, currency: payload.currency, total: payload.items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0), status: 'Guardando', lines: [], attachments: [] }
+      queryClient.setQueryData<Purchase[]>(['purchases'], current => [pending, ...(current ?? [])])
+      return { temporaryId }
+    },
+    onSuccess: (purchase, _payload, context) => { queryClient.setQueryData<Purchase[]>(['purchases'], current => [purchase, ...(current ?? []).filter(item => item.id !== context?.temporaryId)]); void queryClient.invalidateQueries({ queryKey: ['purchases'] }); void queryClient.invalidateQueries({ queryKey: ['products', 'catalog'] }); notify('Compra registrada, stock actualizado y catálogo sincronizado') },
+    onError: (error, _payload, context) => { queryClient.setQueryData<Purchase[]>(['purchases'], current => (current ?? []).filter(item => item.id !== context?.temporaryId)); notify(error instanceof Error ? error.message : 'No se pudo registrar la compra') },
+  })
   const deleteMutation = useMutation({ mutationFn: deletePurchase, onSuccess: (_, id) => { queryClient.setQueryData<Purchase[]>(['purchases'], current => current?.filter(item => item.id !== id) ?? []); notify('Compra eliminada') }, onError: error => notify(error instanceof Error ? error.message : 'Solo se pueden eliminar compras en borrador') })
   const purchases = purchasesQuery.data ?? []
-  return <div className="mx-auto max-w-7xl"><section className="card"><header className="flex flex-wrap items-center justify-between gap-3"><div><h1 className="text-sm font-semibold">Compras Nacionales</h1><p className="mt-1 text-xs text-muted">Órdenes de compra y recepción de productos.</p></div><Button size="sm" onClick={() => setModal('new')} disabled={catalogQuery.isLoading || catalogQuery.isError}><Plus className="h-4 w-4" />Nueva compra</Button></header><div className="mt-4 overflow-x-auto"><table className="w-full min-w-[750px] text-left"><thead><tr className="bg-[#f7f9fc] text-[11px] uppercase tracking-[.5px] text-muted">{['N° OC', 'Proveedor', 'Fecha', 'Moneda', 'Total', 'Estado', ''].map(value => <th className="border-y border-border px-4 py-2.5" key={value}>{value}</th>)}</tr></thead><tbody>{purchasesQuery.isLoading ? <tr><td colSpan={7} className="p-10 text-center text-sm text-muted">Cargando compras desde la base de datos…</td></tr> : purchasesQuery.isError ? <tr><td colSpan={7} className="p-10 text-center text-sm text-red-600">No se pudieron cargar las compras.</td></tr> : purchases.length ? purchases.map(purchase => <tr key={purchase.id} className="border-b border-border text-[13px]"><td className="px-4 py-3 font-mono font-bold text-brand">{purchase.number}</td><td className="px-4 py-3 font-medium">{purchase.supplier}</td><td className="px-4 py-3 text-slate-600">{purchase.date}</td><td className="px-4 py-3">{purchase.currency}</td><td className="px-4 py-3 font-mono">{purchase.currency === 'PEN' ? 'S/ ' : 'USD '}{money(purchase.total)}</td><td className="px-4 py-3"><Status status={purchase.status} /></td><td className="px-4 py-3 text-right"><button aria-label="Ver compra" onClick={() => { setSelected(purchase); setModal('detail') }} className="inline-flex h-7 w-7 items-center justify-center rounded border border-border"><Eye className="h-3.5 w-3.5" /></button><button aria-label="Eliminar compra" onClick={() => deleteMutation.mutate(purchase.id)} className="ml-1 inline-flex h-7 w-7 items-center justify-center rounded border border-red-200 bg-red-50 text-red-600"><Trash2 className="h-3.5 w-3.5" /></button></td></tr>) : <tr><td colSpan={7} className="p-10 text-center text-sm text-muted">Aún no hay compras registradas.</td></tr>}</tbody></table></div></section>{modal === 'new' && catalogQuery.data && <PurchaseDialog catalog={catalogQuery.data} saving={createMutation.isPending} onClose={() => setModal(null)} onSave={async payload => { await createMutation.mutateAsync(payload).catch(() => undefined) }} />}{modal === 'detail' && selected && <DetailDialog purchase={detailQuery.data ?? selected} onClose={() => setModal(null)} />}{notice && <div className="fixed bottom-6 right-6 z-[60] rounded-md border border-border border-l-4 border-l-emerald-600 bg-white px-4 py-3 text-sm shadow-panel">{notice}</div>}</div>
+  return <div className="mx-auto max-w-7xl">
+<section className="card">
+<header className="flex flex-wrap items-center justify-between gap-3">
+<div>
+<h1 className="text-sm font-semibold">Compras Nacionales</h1>
+<p className="mt-1 text-xs text-muted">Órdenes de compra y recepción de productos.</p>
+</div>
+<Button size="sm" onClick={() => setModal('new')} disabled={catalogQuery.isLoading || catalogQuery.isError}>
+<Plus className="h-4 w-4" />Nueva compra</Button>
+</header>
+<div className="mt-4 overflow-x-auto">
+<table className="w-full min-w-[750px] text-left">
+<thead>
+<tr className="bg-[#f7f9fc] text-[11px] uppercase tracking-[.5px] text-muted">{['N° OC', 'Proveedor', 'Fecha', 'Moneda', 'Total', 'Estado', ''].map(value => <th className="border-y border-border px-4 py-2.5" key={value}>{value}</th>)}</tr>
+</thead>
+<tbody>{purchasesQuery.isLoading ? <tr>
+<td colSpan={7} className="p-10 text-center text-sm text-muted">Cargando compras desde la base de datos…</td>
+</tr> : purchasesQuery.isError ? <tr>
+<td colSpan={7} className="p-10 text-center text-sm text-red-600">No se pudieron cargar las compras.</td>
+</tr> : purchases.length ? purchases.map(purchase => <tr key={purchase.id} className="border-b border-border text-[13px]">
+<td className="px-4 py-3 font-mono font-bold text-brand">{purchase.number}</td>
+<td className="px-4 py-3 font-medium">{purchase.supplier}</td>
+<td className="px-4 py-3 text-slate-600">{purchase.date}</td>
+<td className="px-4 py-3">{purchase.currency}</td>
+<td className="px-4 py-3 font-mono">{purchase.currency === 'PEN' ? 'S/ ' : 'USD '}{money(purchase.total)}</td>
+<td className="px-4 py-3">
+<Status status={purchase.status} />
+</td>
+<td className="px-4 py-3 text-right">
+<button aria-label="Ver compra" onClick={() => { setSelected(purchase); setModal('detail') }} className="inline-flex h-7 w-7 items-center justify-center rounded border border-border">
+<Eye className="h-3.5 w-3.5" />
+</button>
+<button aria-label="Eliminar compra" onClick={() => deleteMutation.mutate(purchase.id)} className="ml-1 inline-flex h-7 w-7 items-center justify-center rounded border border-red-200 bg-red-50 text-red-600">
+<Trash2 className="h-3.5 w-3.5" />
+</button>
+</td>
+</tr>) : <tr>
+<td colSpan={7} className="p-10 text-center text-sm text-muted">Aún no hay compras registradas.</td>
+</tr>}</tbody>
+</table>
+</div>
+</section>{modal === 'new' && catalogQuery.data && productsCatalogQuery.data && <PurchaseDialog catalog={catalogQuery.data} productsCatalog={productsCatalogQuery.data} saving={createMutation.isPending} onClose={() => setModal(null)} onSave={async payload => { createMutation.mutate(payload); setModal(null); notify('Compra validada. Guardando en segundo plano…') }} />}{modal === 'detail' && selected && <DetailDialog purchase={detailQuery.data ?? selected} onClose={() => setModal(null)} />}{notice && <div className="fixed bottom-6 right-6 z-[60] rounded-md border border-border border-l-4 border-l-emerald-600 bg-white px-4 py-3 text-sm shadow-panel">{notice}</div>}</div>
 }
-function Status({ status }: { status: Purchase['status'] }) { const style = status === 'Recibida' ? 'bg-emerald-100 text-emerald-700' : status === 'Borrador' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'; return <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${style}`}>{status}</span> }
-function PurchaseDialog({ catalog, saving, onClose, onSave }: { catalog: PurchaseCatalog; saving: boolean; onClose: () => void; onSave: (payload: Parameters<typeof createPurchase>[0]) => Promise<void> }) {
-  const [supplierName, setSupplierName] = useState(''); const [supplierId, setSupplierId] = useState(''); const [invoice, setInvoice] = useState(''); const [date, setDate] = useState(today); const [receiptDate, setReceiptDate] = useState(today); const [currency, setCurrency] = useState<'PEN' | 'USD'>('PEN'); const [attachments, setAttachments] = useState<UploadedPurchaseDocument[]>([]); const [uploading, setUploading] = useState(false); const [attachmentError, setAttachmentError] = useState(''); const [lines, setLines] = useState<DraftLine[]>([{ productId: '', presentationId: '', warehouseId: catalog.warehouses[0]?.id ?? '', quantity: '', price: '' }]); const input = useRef<HTMLInputElement>(null)
+function Status({ status }: { status: Purchase['status'] }) { const style = status === 'Guardando' ? 'bg-blue-100 text-brand' : status === 'Recibida' ? 'bg-emerald-100 text-emerald-700' : status === 'Borrador' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'; return <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${style}`}>{status}</span> }
+function PurchaseDialog({ catalog, productsCatalog, saving, onClose, onSave }: { catalog: PurchaseCatalog; productsCatalog: Awaited<ReturnType<typeof loadCatalog>>; saving: boolean; onClose: () => void; onSave: (payload: Parameters<typeof createPurchase>[0]) => Promise<void> }) {
+  const [supplierName, setSupplierName] = useState(''); const [supplierId, setSupplierId] = useState(''); const [invoice, setInvoice] = useState(''); const [date, setDate] = useState(today); const [receiptDate, setReceiptDate] = useState(today); const [currency, setCurrency] = useState<'PEN' | 'USD'>('PEN'); const [attachments, setAttachments] = useState<UploadedPurchaseDocument[]>([]); const [uploading, setUploading] = useState(false); const [attachmentError, setAttachmentError] = useState(''); const [formError, setFormError] = useState(''); const [isSubmitting, setIsSubmitting] = useState(false); const [lines, setLines] = useState<DraftLine[]>([{ productId: '', presentationId: '', variableSubcategoryId: '', isVariable: false, warehouseId: catalog.warehouses[0]?.id ?? '', quantity: '', price: '' }]); const input = useRef<HTMLInputElement>(null)
+  const [variableLineIndex, setVariableLineIndex] = useState<number | null>(null)
   useEffect(() => { if (catalog.warehouses[0]) setLines(current => current.map(line => line.warehouseId ? line : { ...line, warehouseId: catalog.warehouses[0].id })) }, [catalog.warehouses])
   const total = useMemo(() => lines.reduce((sum, line) => sum + Number(line.quantity || 0) * Number(line.price || 0), 0), [lines])
   const patch = (index: number, value: Partial<DraftLine>) => setLines(current => current.map((line, position) => position === index ? { ...line, ...value } : line))
   const productFor = (line: DraftLine) => catalog.products.find(product => product.id === line.productId); const presentationFor = (line: DraftLine) => productFor(line)?.presentations.find(value => value.id === line.presentationId)
-  const uploadAttachment = async (file: File) => { if (file.type !== 'application/pdf' || file.size > 10 * 1024 * 1024) { setAttachmentError('Adjunta un PDF de máximo 10 MB.'); return }; setAttachmentError(''); setUploading(true); try { const document = await uploadPurchaseDocument(file); setAttachments(current => [...current, document]) } catch (error) { setAttachmentError(error instanceof Error ? error.message : 'No se pudo subir el PDF.') } finally { setUploading(false) } }; const removeAttachment = async (document: UploadedPurchaseDocument) => { try { await removePurchaseDocument(document.storageKey); setAttachments(current => current.filter(item => item.storageKey !== document.storageKey)) } catch (error) { setAttachmentError(error instanceof Error ? error.message : 'No se pudo retirar el archivo.') } }; const submit = async (event: FormEvent) => { event.preventDefault(); if (!supplierId || !invoice.trim() || lines.some(line => !line.productId || !line.presentationId || !line.warehouseId || Number(line.quantity) <= 0)) return; await onSave({ supplierId, supplierInvoiceNumber: invoice.trim(), purchaseDate: date, receiptDate, currency, items: lines.map(line => ({ productId: line.productId, presentationId: line.presentationId, warehouseId: line.warehouseId, quantity: Number(line.quantity), unitPrice: Number(line.price) })), documents: attachments }) }
-  return <Dialog open title="Nueva Compra Nacional" onClose={onClose} extraWide footer={<><Button variant="outline" onClick={onClose} disabled={saving}>Cancelar</Button><Button form="purchase-form" type="submit" disabled={saving || uploading}>{saving ? 'Registrando…' : uploading ? 'Subiendo PDF…' : 'Registrar Compra'}</Button></>}><form id="purchase-form" onSubmit={submit} className="space-y-5"><div className="grid gap-4 md:grid-cols-2"><Field label="Proveedor *"><SupplierPicker suppliers={catalog.suppliers} value={supplierId} onChange={(id, name) => { setSupplierId(id); setSupplierName(name) }} /></Field><Field label="N° Comprobante proveedor *"><Input required placeholder="F001-000123" value={invoice} onChange={event => setInvoice(event.target.value)} /></Field><DateField label="Fecha de compra *" value={date} onChange={setDate} /><DateField label="Fecha de ingreso a almacén *" value={receiptDate} onChange={setReceiptDate} /><Field label="Moneda *"><Select value={currency} onChange={event => setCurrency(event.target.value as 'PEN' | 'USD')}><option>PEN</option><option>USD</option></Select></Field></div><section><h3 className="mb-2 text-sm font-semibold">Productos</h3><div className="relative rounded-md border border-border"><table className="w-full min-w-[820px] text-left"><thead><tr className="bg-[#f7f9fc] text-[11px] uppercase tracking-[.4px] text-muted">{['Producto', 'Almacén', 'UM', 'Cant.', 'Costo unit.', 'Subtotal', ''].map(header => <th key={header} className="border-b border-border px-3 py-3 font-semibold">{header}</th>)}</tr></thead><tbody>{lines.map((line, index) => <tr className="border-b border-border last:border-0" key={index}><td className="min-w-[280px] p-2"><CatalogPicker label="producto" items={catalog.products.map(product => ({ id: product.id, title: product.name }))} value={line.productId} onChange={productId => patch(index, { productId, presentationId: catalog.products.find(product => product.id === productId)?.presentations[0]?.id ?? '' })} /></td><td className="p-2"><Select value={line.warehouseId} onChange={event => patch(index, { warehouseId: event.target.value })}>{catalog.warehouses.map(warehouse => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</Select></td><td className="p-2"><Input value={presentationFor(line)?.unit.code ?? ''} readOnly placeholder="UM" /></td><td className="p-2"><Input type="number" min="0" value={line.quantity} onFocus={event => event.currentTarget.select()} onChange={event => patch(index, { quantity: event.target.value === '' ? '' : Number(event.target.value) })} /></td><td className="p-2"><Input type="number" min="0" step="0.01" value={line.price} placeholder="0.00" onFocus={event => event.currentTarget.select()} onChange={event => patch(index, { price: event.target.value === '' ? '' : Number(event.target.value) })} /></td><td className="p-2 text-right font-mono text-sm text-emerald-600">{money(Number(line.quantity || 0) * Number(line.price || 0))}</td><td className="p-2 text-center"><button type="button" aria-label="Quitar producto" onClick={() => setLines(current => current.length === 1 ? current : current.filter((_, position) => position !== index))} className="inline-flex h-9 w-12 items-center justify-center rounded-md border border-red-300 bg-red-50 text-red-500"><X className="h-4 w-4" /></button></td></tr>)}</tbody></table></div><Button type="button" size="sm" variant="outline" className="mt-3" onClick={() => setLines(current => [...current, { productId: '', presentationId: '', warehouseId: catalog.warehouses[0]?.id ?? '', quantity: '', price: '' }])}><Plus className="h-3.5 w-3.5" />Agregar producto</Button><p className="mt-5 border-b border-border pb-5 text-right text-sm"><span className="mr-1 font-semibold text-muted">TOTAL:</span><span className="font-mono text-xl font-bold text-emerald-600">{currency === 'PEN' ? 'S/ ' : 'USD '}{money(total)}</span></p></section><section><PurchaseDocumentDropzone inputRef={input} documents={attachments} uploading={uploading} error={attachmentError} onUpload={uploadAttachment} onRemove={removeAttachment} /></section></form></Dialog>
+  const editingVariableLine = variableLineIndex === null ? undefined : lines[variableLineIndex]
+  const editingVariableSubcategory = (catalog.variableSubcategories ?? []).find(subcategory => subcategory.id === editingVariableLine?.variableSubcategoryId)
+  const editingVariableCategory = productsCatalog.categories.find(category => category.id === editingVariableSubcategory?.category.id || category.name === editingVariableSubcategory?.category.name)
+  const editingVariableDefinition = editingVariableCategory?.subcategories.find(subcategory => subcategory.id === editingVariableSubcategory?.id)
+  const variableWizardBase: ProductBase | undefined = editingVariableCategory && editingVariableDefinition ? {
+    id: '', code: '', name: editingVariableLine?.variableDraft?.name ?? '', categoryId: editingVariableCategory.id, categoryName: editingVariableCategory.name,
+    subcategoryId: editingVariableDefinition.id, subcategoryName: editingVariableDefinition.name, roles: editingVariableLine?.variableDraft?.roles ?? ['Mercadería'], status: 'Activo', variantType: 'Básico',
+    immediateConsumption: !(editingVariableLine?.variableDraft?.roles ?? ['Mercadería']).includes('Insumo'), attributes: [...editingVariableCategory.attributes, ...editingVariableDefinition.attributes],
+  } : undefined
+  const variableWizardVariants: ProductVariant[] = editingVariableLine?.variableDraft ? [{
+    id: '', baseId: '', code: '', name: editingVariableLine.variableDraft.name, values: editingVariableLine.variableDraft.values, unit: editingVariableLine.variableDraft.unit,
+    factor: editingVariableLine.variableDraft.factor, minimum: editingVariableLine.variableDraft.minimumStock, stock: editingVariableLine.variableDraft.stock, status: 'Activo',
+  }] : []
+  const uploadAttachment = async (file: File) => { if (file.type !== 'application/pdf' || file.size > 10 * 1024 * 1024) { setAttachmentError('Adjunta un PDF de máximo 10 MB.'); return }; setAttachmentError(''); setUploading(true); try { const document = await uploadPurchaseDocument(file); setAttachments(current => [...current, document]) } catch (error) { setAttachmentError(error instanceof Error ? error.message : 'No se pudo subir el PDF.') } finally { setUploading(false) } }
+  const removeAttachment = async (document: UploadedPurchaseDocument) => { try { await removePurchaseDocument(document.storageKey); setAttachments(current => current.filter(item => item.storageKey !== document.storageKey)) } catch (error) { setAttachmentError(error instanceof Error ? error.message : 'No se pudo retirar el archivo.') } }
+  const validateBeforeSubmit = () => {
+    if (!catalog.suppliers.some(supplier => supplier.id === supplierId)) return 'Selecciona un proveedor nacional activo.'
+    if (!invoice.trim()) return 'Ingresa el número de comprobante del proveedor.'
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^\d{4}-\d{2}-\d{2}$/.test(receiptDate)) return 'Ingresa las fechas de compra e ingreso a almacén.'
+    for (const line of lines) {
+      if (!catalog.warehouses.some(warehouse => warehouse.id === line.warehouseId)) return 'Selecciona un almacén activo para cada línea.'
+      if (!Number.isFinite(Number(line.quantity)) || Number(line.quantity) <= 0) return 'Ingresa una cantidad mayor a cero en cada línea.'
+      if (!Number.isFinite(Number(line.price)) || Number(line.price) < 0) return 'Ingresa un costo unitario válido en cada línea.'
+      if (!line.isVariable) {
+        const product = productFor(line)
+        if (!product?.presentations.some(presentation => presentation.id === line.presentationId)) return 'Completa o selecciona el producto de cada línea.'
+        continue
+      }
+      const variableSubcategory = (catalog.variableSubcategories ?? []).find(subcategory => subcategory.id === line.variableSubcategoryId)
+      if (!variableSubcategory || !line.variableDraft) return 'Completa el producto variable de cada línea.'
+      const category = productsCatalog.categories.find(candidate => candidate.id === variableSubcategory.category.id || candidate.name === variableSubcategory.category.name)
+      const subcategory = category?.subcategories.find(candidate => candidate.id === variableSubcategory.id)
+      const missing = [...(category?.attributes ?? []), ...(subcategory?.attributes ?? [])].find(attribute => attribute.required && !line.variableDraft?.values[attribute.id]?.trim())
+      if (missing) return `Completa el atributo obligatorio: ${missing.name}.`
+      if (!productsCatalog.units.some(unit => unit.code === line.variableDraft.unit && unit.status === 'Activo')) return 'Selecciona una unidad de inventario activa para el producto variable.'
+    }
+    return null
+  }
+  const submit = async (event: FormEvent) => {
+    event.preventDefault()
+    const validationError = validateBeforeSubmit()
+    if (validationError) return setFormError(validationError)
+    setFormError(''); setIsSubmitting(true)
+    try { await onSave({ supplierId, supplierInvoiceNumber: invoice.trim(), purchaseDate: date, receiptDate, currency, items: lines.map(line => line.isVariable ? ({ variableSubcategoryId: line.variableSubcategoryId, name: line.variableDraft!.name, values: line.variableDraft!.values, unitCode: line.variableDraft!.unit, factor: line.variableDraft!.factor, minimumStock: line.variableDraft!.minimumStock, roles: line.variableDraft!.roles.map(role => role === 'Mercadería' ? 'MERCHANDISE' : role === 'Insumo' ? 'SUPPLY' : 'FINISHED_PRODUCT'), warehouseId: line.warehouseId, quantity: Number(line.quantity), unitPrice: Number(line.price) }) : ({ productId: line.productId, presentationId: line.presentationId, warehouseId: line.warehouseId, quantity: Number(line.quantity), unitPrice: Number(line.price) })), documents: attachments }) }
+    catch (error) { setFormError(error instanceof Error ? error.message : 'No se pudo registrar la compra. Inténtalo nuevamente.') }
+    finally { setIsSubmitting(false) }
+  }
+  return <><Dialog open title="Nueva Compra Nacional" onClose={onClose} extraWide footer={<>
+<Button variant="outline" onClick={onClose} disabled={saving || isSubmitting}>Cancelar</Button>
+<Button form="purchase-form" type="submit" disabled={saving || isSubmitting || uploading}>{saving || isSubmitting ? 'Guardando en la BD…' : uploading ? 'Subiendo PDF…' : 'Registrar Compra'}</Button>
+</>}>
+<form id="purchase-form" onSubmit={submit} className="space-y-5">
+<div className="grid gap-4 md:grid-cols-2">
+<Field label="Proveedor *">
+<SupplierPicker suppliers={catalog.suppliers} value={supplierId} onChange={(id, name) => { setSupplierId(id); setSupplierName(name) }} />
+</Field>
+<Field label="N° Comprobante proveedor *">
+<Input required placeholder="F001-000123" value={invoice} onChange={event => setInvoice(event.target.value)} />
+</Field>
+<DateField label="Fecha de compra *" value={date} onChange={setDate} />
+<DateField label="Fecha de ingreso a almacén *" value={receiptDate} onChange={setReceiptDate} />
+<Field label="Moneda *">
+<Select value={currency} onChange={event => setCurrency(event.target.value as 'PEN' | 'USD')}>
+<option>PEN</option>
+<option>USD</option>
+</Select>
+</Field>
+</div>
+<section>
+<h3 className="mb-2 text-sm font-semibold">Productos</h3>
+<div className="relative rounded-md border border-border">
+<table className="w-full min-w-[820px] text-left">
+<thead>
+<tr className="bg-[#f7f9fc] text-[11px] uppercase tracking-[.4px] text-muted">{['Producto', 'Almacén', 'UM', 'Cant.', 'Costo unit.', 'Subtotal', ''].map(header => <th key={header} className="border-b border-border px-3 py-3 font-semibold">{header}</th>)}</tr>
+</thead>
+<tbody>{lines.map((line, index) => <tr className="border-b border-border last:border-0" key={index}>
+<td className="min-w-[280px] p-2">
+<div className="space-y-2">
+  <CatalogPicker
+    label="producto"
+    items={[
+      ...catalog.products.map(product => ({ id: product.id, title: product.name })),
+      { id: variableProductsOption, title: 'Productos variables', detail: 'Completa sus atributos al registrar la compra' },
+    ]}
+    value={line.isVariable ? variableProductsOption : line.productId}
+    onChange={selection => selection === variableProductsOption
+      ? patch(index, { productId: '', presentationId: '', variableSubcategoryId: '', isVariable: true })
+      : patch(index, { productId: selection, presentationId: catalog.products.find(product => product.id === selection)?.presentations[0]?.id ?? '', variableSubcategoryId: '', isVariable: false })}
+  />
+  {line.isVariable && !line.variableDraft && <div className="rounded-md border border-blue-200 bg-blue-50/60 p-2">
+    <CatalogPicker
+      label="subcategoría variable"
+      items={(catalog.variableSubcategories ?? []).map(subcategory => ({ id: subcategory.id, title: subcategory.name, detail: `${subcategory.category.name}${subcategory.code ? ` · ${subcategory.code}` : ''}` }))}
+      value={line.variableSubcategoryId}
+      onChange={variableSubcategoryId => { patch(index, { variableSubcategoryId }); setVariableLineIndex(index) }}
+    />
+    <p className="mt-1.5 text-[11px] leading-4 text-blue-700">Los atributos del producto se solicitarán antes de registrar esta compra.</p>
+  </div>}
+  {line.isVariable && line.variableDraft && <div className="flex items-center justify-between gap-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2"><span className="min-w-0"><span className="block truncate text-sm font-semibold text-emerald-900">{line.variableDraft.name}</span><span className="text-[11px] text-emerald-700">Producto variable listo para registrar</span></span><button type="button" onClick={() => setVariableLineIndex(index)} className="shrink-0 text-xs font-semibold text-brand hover:underline">Editar</button></div>}
+</div>
+</td>
+<td className="p-2">
+<Select value={line.warehouseId} onChange={event => patch(index, { warehouseId: event.target.value })}>{catalog.warehouses.map(warehouse => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</Select>
+</td>
+<td className="p-2">
+<Input value={line.isVariable ? line.variableDraft?.unit ?? '' : presentationFor(line)?.unit.code ?? ''} readOnly placeholder="UM" />
+</td>
+<td className="p-2">
+<Input type="number" min="0" value={line.quantity} onFocus={event => event.currentTarget.select()} onChange={event => patch(index, { quantity: event.target.value === '' ? '' : Number(event.target.value) })} />
+</td>
+<td className="p-2">
+<Input type="number" min="0" step="0.01" value={line.price} placeholder="0.00" onFocus={event => event.currentTarget.select()} onChange={event => patch(index, { price: event.target.value === '' ? '' : Number(event.target.value) })} />
+</td>
+<td className="p-2 text-right font-mono text-sm text-emerald-600">{money(Number(line.quantity || 0) * Number(line.price || 0))}</td>
+<td className="p-2 text-center">
+<button type="button" aria-label="Quitar producto" onClick={() => setLines(current => current.length === 1 ? current : current.filter((_, position) => position !== index))} className="inline-flex h-9 w-12 items-center justify-center rounded-md border border-red-300 bg-red-50 text-red-500">
+<X className="h-4 w-4" />
+</button>
+</td>
+</tr>)}</tbody>
+</table>
+</div>
+<Button type="button" size="sm" variant="outline" className="mt-3" onClick={() => setLines(current => [...current, { productId: '', presentationId: '', variableSubcategoryId: '', isVariable: false, warehouseId: catalog.warehouses[0]?.id ?? '', quantity: '', price: '' }])}>
+<Plus className="h-3.5 w-3.5" />Agregar producto</Button>
+<p className="mt-5 border-b border-border pb-5 text-right text-sm">
+<span className="mr-1 font-semibold text-muted">TOTAL:</span>
+<span className="font-mono text-xl font-bold text-emerald-600">{currency === 'PEN' ? 'S/ ' : 'USD '}{money(total)}</span>
+</p>
+</section>
+{formError && <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{formError}</p>}
+<section>
+<PurchaseDocumentDropzone inputRef={input} documents={attachments} uploading={uploading} error={attachmentError} onUpload={uploadAttachment} onRemove={removeAttachment} />
+</section>
+</form>
+</Dialog>{variableLineIndex !== null && editingVariableLine && <ProductWizard item={variableWizardBase} variants={variableWizardVariants} products={productsCatalog.products.map(product => product.base)} categories={productsCatalog.categories} units={productsCatalog.units} presetSubcategoryId={editingVariableLine.variableSubcategoryId} onClose={() => { setVariableLineIndex(null); if (!editingVariableLine.variableDraft) patch(variableLineIndex, { isVariable: false, variableSubcategoryId: '' }) }} saveLabel="Usar en compra" onSave={({ base, variants }) => { const variant = variants[0]; patch(variableLineIndex, { variableDraft: { name: base.name, values: variant.values, unit: variant.unit, factor: variant.factor, minimumStock: variant.minimum, stock: variant.stock, roles: base.roles } }); setVariableLineIndex(null) }} />}</>
 }
-function PurchaseDocumentDropzone({ inputRef, documents, uploading, error, onUpload, onRemove }: { inputRef: React.RefObject<HTMLInputElement>; documents: UploadedPurchaseDocument[]; uploading: boolean; error: string; onUpload: (file: File) => Promise<void>; onRemove: (document: UploadedPurchaseDocument) => Promise<void> }) { const [dragging, setDragging] = useState(false); const pick = (files: FileList | null) => { const file = files?.[0]; if (file) void onUpload(file) }; return <div><div className={`rounded-lg border-2 border-dashed p-5 text-center transition ${dragging ? 'border-brand bg-blue-50' : 'border-border bg-slate-50/60'}`} onDragOver={event => { event.preventDefault(); setDragging(true) }} onDragLeave={() => setDragging(false)} onDrop={event => { event.preventDefault(); setDragging(false); pick(event.dataTransfer.files) }}><input ref={inputRef} type="file" className="hidden" accept="application/pdf" onChange={event => { pick(event.target.files); event.currentTarget.value = '' }} /><Paperclip className="mx-auto h-6 w-6 text-brand" /><p className="mt-2 text-sm font-semibold">Arrastra tu comprobante PDF aquí</p><p className="mt-1 text-xs text-muted">o <button type="button" onClick={() => inputRef.current?.click()} className="font-semibold text-brand underline">selecciónalo desde tu equipo</button> · máximo 10 MB</p>{uploading && <p className="mt-3 text-xs font-medium text-brand">Subiendo archivo de forma segura…</p>}</div>{error && <p className="mt-2 text-xs text-red-600">{error}</p>}{documents.length > 0 && <div className="mt-3 grid gap-2 sm:grid-cols-2">{documents.map(document => <div key={document.storageKey} className="flex items-center gap-3 rounded-md border border-border bg-white p-3"><Paperclip className="h-5 w-5 shrink-0 text-red-500" /><span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{document.fileName}</span><span className="text-xs text-muted">{Math.max(1, Math.round(document.size / 1024))} KB · PDF</span></span><button type="button" aria-label="Quitar archivo" onClick={() => void onRemove(document)} className="rounded p-1 text-slate-500 hover:bg-red-50 hover:text-red-600"><X className="h-4 w-4" /></button></div>)}</div>}</div> }
-function CatalogPicker({ items, value, onChange, label, disabled = false }: { items: { id: string; title: string; detail?: string }[]; value: string; onChange: (id: string) => void; label: string; disabled?: boolean }) { const [query, setQuery] = useState(''); const [open, setOpen] = useState(false); const ref = useRef<HTMLDivElement>(null); const selected = items.find(item => item.id === value); const filtered = items.filter(item => (item.title + ' ' + (item.detail ?? '')).toLowerCase().includes(query.toLowerCase())); useEffect(() => { setQuery(selected?.title ?? '') }, [selected?.title]); useEffect(() => { const close = (event: MouseEvent) => { if (ref.current && !ref.current.contains(event.target as Node)) setOpen(false) }; document.addEventListener('mousedown', close); return () => document.removeEventListener('mousedown', close) }, []); return <div ref={ref} className="relative"><div className={disabled ? 'flex h-10 items-center rounded-md border border-border bg-slate-50 px-3 opacity-60' : open ? 'flex h-10 items-center rounded-md border border-brand bg-white px-3 ring-1 ring-brand' : 'flex h-10 items-center rounded-md border border-border bg-white px-3'}><Search className="mr-2 h-4 w-4 text-slate-400" /><input disabled={disabled} value={query} onFocus={() => setOpen(true)} onChange={event => { setQuery(event.target.value); onChange(''); setOpen(true) }} placeholder={'Buscar ' + label + '...'} className="min-w-0 flex-1 bg-transparent text-sm outline-none" /><button disabled={disabled} type="button" onClick={() => setOpen(current => !current)}><ChevronDown className="h-4 w-4 text-slate-400" /></button></div>{open && !disabled && <div className="absolute z-40 mt-1 w-full overflow-hidden rounded-md border border-border bg-white shadow-panel"><p className="border-b border-border px-3 py-2 text-[10px] font-semibold uppercase text-muted">{filtered.length} resultado(s)</p><div className="max-h-56 overflow-y-auto">{filtered.map(item => <button type="button" key={item.id} onClick={() => { onChange(item.id); setOpen(false) }} className="flex w-full gap-3 px-3 py-2.5 text-left hover:bg-blue-50"><span className="rounded bg-blue-50 px-2 py-1.5 text-[10px] font-bold text-brand">{item.title.slice(0, 3).toUpperCase()}</span><span><span className="block text-sm font-medium">{item.title}</span>{item.detail && <span className="text-xs text-muted">{item.detail}</span>}</span></button>)}{!filtered.length && <p className="p-4 text-center text-sm text-muted">No se encontraron resultados.</p>}</div></div>}</div> }
-function SupplierPicker({ suppliers, value, onChange }: { suppliers: PurchaseCatalog['suppliers']; value: string; onChange: (id: string, name: string) => void }) { const [query, setQuery] = useState(''); const [open, setOpen] = useState(false); const ref = useRef<HTMLDivElement>(null); const selected = suppliers.find(item => item.id === value); const filtered = suppliers.filter(item => (item.name + ' ' + (item.taxId ?? '')).toLowerCase().includes(query.toLowerCase())); useEffect(() => { setQuery(selected?.name ?? '') }, [selected?.name]); useEffect(() => { const close = (event: MouseEvent) => { if (ref.current && !ref.current.contains(event.target as Node)) setOpen(false) }; document.addEventListener('mousedown', close); return () => document.removeEventListener('mousedown', close) }, []); return <div ref={ref} className="relative"><div className={open ? 'flex h-10 items-center rounded-md border border-brand bg-white px-3 ring-1 ring-brand' : 'flex h-10 items-center rounded-md border border-border bg-white px-3'}><Search className="mr-2 h-4 w-4 text-slate-400" /><input value={query} onFocus={() => setOpen(true)} onChange={event => { setQuery(event.target.value); onChange('', event.target.value); setOpen(true) }} placeholder="Buscar proveedor nacional..." className="min-w-0 flex-1 bg-transparent text-sm outline-none" /><button type="button" onClick={() => setOpen(current => !current)}><ChevronDown className="h-4 w-4 text-slate-400" /></button></div>{open && <div className="absolute z-40 mt-1 w-full overflow-hidden rounded-md border border-border bg-white shadow-panel"><p className="border-b border-border px-3 py-2 text-[10px] font-semibold uppercase text-muted">Proveedores · {filtered.length} resultado(s)</p><div className="max-h-64 overflow-y-auto">{filtered.map(supplier => <button type="button" key={supplier.id} onClick={() => { onChange(supplier.id, supplier.name); setOpen(false) }} className="flex w-full gap-3 px-3 py-2.5 text-left hover:bg-blue-50"><span className="rounded bg-blue-50 px-2 py-1.5 text-[10px] font-bold text-brand">{supplier.name.slice(0, 3).toUpperCase()}</span><span><span className="block text-sm font-medium">{supplier.name}</span><span className="text-xs text-muted">{supplier.taxId ?? 'Sin RUC'}</span></span></button>)}{!filtered.length && <p className="p-4 text-center text-sm text-muted">No se encontraron proveedores.</p>}</div></div>}</div> }
-function DateField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) { return <Field label={label}><div className="relative"><Input type="date" value={value} onChange={event => onChange(event.target.value)} className="pr-10" /><CalendarDays className="pointer-events-none absolute right-3 top-3 h-4 w-4 text-slate-500" /></div></Field> }
+function PurchaseDocumentDropzone({ inputRef, documents, uploading, error, onUpload, onRemove }: { inputRef: React.RefObject<HTMLInputElement>; documents: UploadedPurchaseDocument[]; uploading: boolean; error: string; onUpload: (file: File) => Promise<void>; onRemove: (document: UploadedPurchaseDocument) => Promise<void> }) { const [dragging, setDragging] = useState(false); const pick = (files: FileList | null) => { const file = files?.[0]; if (file) void onUpload(file) }; return <div>
+<div className={`rounded-lg border-2 border-dashed p-5 text-center transition ${dragging ? 'border-brand bg-blue-50' : 'border-border bg-slate-50/60'}`} onDragOver={event => { event.preventDefault(); setDragging(true) }} onDragLeave={() => setDragging(false)} onDrop={event => { event.preventDefault(); setDragging(false); pick(event.dataTransfer.files) }}>
+<input ref={inputRef} type="file" className="hidden" accept="application/pdf" onChange={event => { pick(event.target.files); event.currentTarget.value = '' }} />
+<Paperclip className="mx-auto h-6 w-6 text-brand" />
+<p className="mt-2 text-sm font-semibold">Arrastra tu comprobante PDF aquí</p>
+<p className="mt-1 text-xs text-muted">o <button type="button" onClick={() => inputRef.current?.click()} className="font-semibold text-brand underline">selecciónalo desde tu equipo</button> · máximo 10 MB</p>{uploading && <p className="mt-3 text-xs font-medium text-brand">Subiendo archivo de forma segura…</p>}</div>{error && <p className="mt-2 text-xs text-red-600">{error}</p>}{documents.length > 0 && <div className="mt-3 grid gap-2 sm:grid-cols-2">{documents.map(document => <div key={document.storageKey} className="flex items-center gap-3 rounded-md border border-border bg-white p-3">
+<Paperclip className="h-5 w-5 shrink-0 text-red-500" />
+<span className="min-w-0 flex-1">
+<span className="block truncate text-sm font-medium">{document.fileName}</span>
+<span className="text-xs text-muted">{Math.max(1, Math.round(document.size / 1024))} KB · PDF</span>
+</span>
+<button type="button" aria-label="Quitar archivo" onClick={() => void onRemove(document)} className="rounded p-1 text-slate-500 hover:bg-red-50 hover:text-red-600">
+<X className="h-4 w-4" />
+</button>
+</div>)}</div>}</div> }
+function CatalogPicker({ items, value, onChange, label, disabled = false }: { items: { id: string; title: string; detail?: string }[]; value: string; onChange: (id: string) => void; label: string; disabled?: boolean }) { const [query, setQuery] = useState(''); const [open, setOpen] = useState(false); const ref = useRef<HTMLDivElement>(null); const selected = items.find(item => item.id === value); const filtered = items.filter(item => item.id === variableProductsOption || (item.title + ' ' + (item.detail ?? '')).toLowerCase().includes(query.toLowerCase())); useEffect(() => { setQuery(selected?.title ?? '') }, [selected?.title]); useEffect(() => { const close = (event: MouseEvent) => { if (ref.current && !ref.current.contains(event.target as Node)) setOpen(false) }; document.addEventListener('mousedown', close); return () => document.removeEventListener('mousedown', close) }, []); return <div ref={ref} className="relative">
+<div className={disabled ? 'flex h-10 items-center rounded-md border border-border bg-slate-50 px-3 opacity-60' : open ? 'flex h-10 items-center rounded-md border border-brand bg-white px-3 ring-1 ring-brand' : 'flex h-10 items-center rounded-md border border-border bg-white px-3'}>
+<Search className="mr-2 h-4 w-4 text-slate-400" />
+<input disabled={disabled} value={query} onFocus={() => setOpen(true)} onChange={event => { setQuery(event.target.value); onChange(''); setOpen(true) }} placeholder={'Buscar ' + label + '...'} className="min-w-0 flex-1 bg-transparent text-sm outline-none" />
+<button disabled={disabled} type="button" onClick={() => setOpen(current => !current)}>
+<ChevronDown className="h-4 w-4 text-slate-400" />
+</button>
+</div>{open && !disabled && <div className="absolute z-40 mt-1 w-full overflow-hidden rounded-md border border-border bg-white shadow-panel">
+<p className="border-b border-border px-3 py-2 text-[10px] font-semibold uppercase text-muted">{filtered.length} resultado(s)</p>
+<div className="max-h-56 overflow-y-auto">{filtered.map(item => <button type="button" key={item.id} onClick={() => { onChange(item.id); setOpen(false) }} className="flex w-full gap-3 px-3 py-2.5 text-left hover:bg-blue-50">
+<span className="rounded bg-blue-50 px-2 py-1.5 text-[10px] font-bold text-brand">{item.title.slice(0, 3).toUpperCase()}</span>
+<span>
+<span className="block text-sm font-medium">{item.title}</span>{item.detail && <span className="text-xs text-muted">{item.detail}</span>}</span>
+</button>)}{!filtered.length && <p className="p-4 text-center text-sm text-muted">No se encontraron resultados.</p>}</div>
+</div>}</div> }
+function SupplierPicker({ suppliers, value, onChange }: { suppliers: PurchaseCatalog['suppliers']; value: string; onChange: (id: string, name: string) => void }) { const [query, setQuery] = useState(''); const [open, setOpen] = useState(false); const ref = useRef<HTMLDivElement>(null); const selected = suppliers.find(item => item.id === value); const filtered = suppliers.filter(item => (item.name + ' ' + (item.taxId ?? '')).toLowerCase().includes(query.toLowerCase())); useEffect(() => { setQuery(selected?.name ?? '') }, [selected?.name]); useEffect(() => { const close = (event: MouseEvent) => { if (ref.current && !ref.current.contains(event.target as Node)) setOpen(false) }; document.addEventListener('mousedown', close); return () => document.removeEventListener('mousedown', close) }, []); return <div ref={ref} className="relative">
+<div className={open ? 'flex h-10 items-center rounded-md border border-brand bg-white px-3 ring-1 ring-brand' : 'flex h-10 items-center rounded-md border border-border bg-white px-3'}>
+<Search className="mr-2 h-4 w-4 text-slate-400" />
+<input value={query} onFocus={() => setOpen(true)} onChange={event => { setQuery(event.target.value); onChange('', event.target.value); setOpen(true) }} placeholder="Buscar proveedor nacional..." className="min-w-0 flex-1 bg-transparent text-sm outline-none" />
+<button type="button" onClick={() => setOpen(current => !current)}>
+<ChevronDown className="h-4 w-4 text-slate-400" />
+</button>
+</div>{open && <div className="absolute z-40 mt-1 w-full overflow-hidden rounded-md border border-border bg-white shadow-panel">
+<p className="border-b border-border px-3 py-2 text-[10px] font-semibold uppercase text-muted">Proveedores · {filtered.length} resultado(s)</p>
+<div className="max-h-64 overflow-y-auto">{filtered.map(supplier => <button type="button" key={supplier.id} onClick={() => { onChange(supplier.id, supplier.name); setOpen(false) }} className="flex w-full gap-3 px-3 py-2.5 text-left hover:bg-blue-50">
+<span className="rounded bg-blue-50 px-2 py-1.5 text-[10px] font-bold text-brand">{supplier.name.slice(0, 3).toUpperCase()}</span>
+<span>
+<span className="block text-sm font-medium">{supplier.name}</span>
+<span className="text-xs text-muted">{supplier.taxId ?? 'Sin RUC'}</span>
+</span>
+</button>)}{!filtered.length && <p className="p-4 text-center text-sm text-muted">No se encontraron proveedores.</p>}</div>
+</div>}</div> }
+function DateField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) { return <Field label={label}>
+<div className="relative">
+<Input type="date" value={value} onChange={event => onChange(event.target.value)} className="pr-10" />
+<CalendarDays className="pointer-events-none absolute right-3 top-3 h-4 w-4 text-slate-500" />
+</div>
+</Field> }
 function DetailDialog({ purchase, onClose }: { purchase: Purchase; onClose: () => void }) {
   const currency = purchase.currency === 'PEN' ? 'S/ ' : 'USD '
   const formatDate = (value: string) => new Date(`${value}T00:00:00`).toLocaleDateString('es-PE', { day: '2-digit', month: 'short', year: 'numeric' })
   return <Dialog open title={`Detalle de compra · ${purchase.number}`} onClose={onClose} a4 footer={<Button onClick={onClose}>Cerrar detalle</Button>}>
     <div className="space-y-4">
       <section className="grid gap-px overflow-hidden rounded-lg border border-blue-200 bg-blue-100 sm:grid-cols-[1.35fr_1fr_1fr]">
-        <div className="bg-white px-4 py-3"><p className="text-[10px] font-semibold uppercase tracking-[.6px] text-muted">Total registrado</p><p className="mt-0.5 font-mono text-xl font-bold text-emerald-600">{currency}{money(purchase.total)}</p><p className="mt-0.5 text-xs text-muted">{purchase.lines.length} línea(s) de producto</p></div>
-        <div className="bg-white px-4 py-3"><p className="text-[10px] font-semibold uppercase tracking-[.6px] text-muted">Estado de recepción</p><div className="mt-1.5"><Status status={purchase.status} /></div><p className="mt-1.5 text-xs text-muted">Ingreso: {formatDate(purchase.receiptDate)}</p></div>
-        <div className="bg-white px-4 py-3"><p className="text-[10px] font-semibold uppercase tracking-[.6px] text-muted">Comprobante</p><p className="mt-1 text-sm font-semibold text-ink">{purchase.invoice}</p><p className="mt-0.5 text-xs text-muted">Compra: {formatDate(purchase.date)}</p></div>
+        <div className="bg-white px-4 py-3">
+<p className="text-[10px] font-semibold uppercase tracking-[.6px] text-muted">Total registrado</p>
+<p className="mt-0.5 font-mono text-xl font-bold text-emerald-600">{currency}{money(purchase.total)}</p>
+<p className="mt-0.5 text-xs text-muted">{purchase.lines.length} línea(s) de producto</p>
+</div>
+        <div className="bg-white px-4 py-3">
+<p className="text-[10px] font-semibold uppercase tracking-[.6px] text-muted">Estado de recepción</p>
+<div className="mt-1.5">
+<Status status={purchase.status} />
+</div>
+<p className="mt-1.5 text-xs text-muted">Ingreso: {formatDate(purchase.receiptDate)}</p>
+</div>
+        <div className="bg-white px-4 py-3">
+<p className="text-[10px] font-semibold uppercase tracking-[.6px] text-muted">Comprobante</p>
+<p className="mt-1 text-sm font-semibold text-ink">{purchase.invoice}</p>
+<p className="mt-0.5 text-xs text-muted">Compra: {formatDate(purchase.date)}</p>
+</div>
       </section>
 
-      <section className="rounded-lg border border-border bg-slate-50/60 p-4"><div className="mb-3 flex items-center gap-2"><span className="flex h-7 w-7 items-center justify-center rounded-md bg-blue-100 text-brand"><Package className="h-4 w-4" /></span><h3 className="text-sm font-semibold">Información de la compra</h3></div><div className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4"><div><p className="text-[10px] font-semibold uppercase tracking-[.5px] text-muted">Proveedor</p><p className="mt-1 font-medium text-ink">{purchase.supplier}</p></div><div><p className="text-[10px] font-semibold uppercase tracking-[.5px] text-muted">N° orden</p><p className="mt-1 font-mono font-medium text-ink">{purchase.number}</p></div><div><p className="text-[10px] font-semibold uppercase tracking-[.5px] text-muted">Fecha de compra</p><p className="mt-1 font-medium text-ink">{formatDate(purchase.date)}</p></div><div><p className="text-[10px] font-semibold uppercase tracking-[.5px] text-muted">Moneda</p><p className="mt-1 font-medium text-ink">{purchase.currency}</p></div></div></section>
+      <section className="rounded-lg border border-border bg-slate-50/60 p-4">
+<div className="mb-3 flex items-center gap-2">
+<span className="flex h-7 w-7 items-center justify-center rounded-md bg-blue-100 text-brand">
+<Package className="h-4 w-4" />
+</span>
+<h3 className="text-sm font-semibold">Información de la compra</h3>
+</div>
+<div className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
+<div>
+<p className="text-[10px] font-semibold uppercase tracking-[.5px] text-muted">Proveedor</p>
+<p className="mt-1 font-medium text-ink">{purchase.supplier}</p>
+</div>
+<div>
+<p className="text-[10px] font-semibold uppercase tracking-[.5px] text-muted">N° orden</p>
+<p className="mt-1 font-mono font-medium text-ink">{purchase.number}</p>
+</div>
+<div>
+<p className="text-[10px] font-semibold uppercase tracking-[.5px] text-muted">Fecha de compra</p>
+<p className="mt-1 font-medium text-ink">{formatDate(purchase.date)}</p>
+</div>
+<div>
+<p className="text-[10px] font-semibold uppercase tracking-[.5px] text-muted">Moneda</p>
+<p className="mt-1 font-medium text-ink">{purchase.currency}</p>
+</div>
+</div>
+</section>
 
-      <section><div className="mb-3 flex items-center justify-between"><div><h3 className="text-sm font-semibold">Productos recibidos</h3><p className="mt-0.5 text-xs text-muted">Detalle de cantidades, almacén y valorización.</p></div><span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600">{purchase.lines.length} producto(s)</span></div><div className="overflow-x-auto rounded-lg border border-border"><table className="w-full min-w-[760px] text-left text-sm"><thead className="bg-[#f7f9fc] text-[10px] uppercase tracking-[.5px] text-muted"><tr><th className="px-4 py-3">Producto</th><th className="px-4 py-3">Presentación</th><th className="px-4 py-3">Almacén</th><th className="px-4 py-3 text-center">UM</th><th className="px-4 py-3 text-right">Cant.</th><th className="px-4 py-3 text-right">P. unit.</th><th className="px-4 py-3 text-right">Subtotal</th></tr></thead><tbody>{purchase.lines.map(line => <tr key={line.id} className="border-t border-border"><td className="px-4 py-3 font-medium text-ink">{line.product}</td><td className="px-4 py-3 text-slate-600">{line.presentation}</td><td className="px-4 py-3 text-slate-600">{line.warehouse}</td><td className="px-4 py-3 text-center"><span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">{line.unit}</span></td><td className="px-4 py-3 text-right font-mono">{line.quantity}</td><td className="px-4 py-3 text-right font-mono">{currency}{money(line.price)}</td><td className="px-4 py-3 text-right font-mono font-semibold text-emerald-700">{currency}{money(line.quantity * line.price)}</td></tr>)}</tbody><tfoot><tr className="border-t border-border bg-slate-50"><td colSpan={6} className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-[.5px] text-muted">Total de compra</td><td className="px-4 py-3 text-right font-mono font-bold text-emerald-700">{currency}{money(purchase.total)}</td></tr></tfoot></table></div></section>
+      <section>
+<div className="mb-3 flex items-center justify-between">
+<div>
+<h3 className="text-sm font-semibold">Productos recibidos</h3>
+<p className="mt-0.5 text-xs text-muted">Detalle de cantidades, almacén y valorización.</p>
+</div>
+<span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600">{purchase.lines.length} producto(s)</span>
+</div>
+<div className="overflow-x-auto rounded-lg border border-border">
+<table className="w-full min-w-[760px] text-left text-sm">
+<thead className="bg-[#f7f9fc] text-[10px] uppercase tracking-[.5px] text-muted">
+<tr>
+<th className="px-4 py-3">Producto</th>
+<th className="px-4 py-3">Presentación</th>
+<th className="px-4 py-3">Almacén</th>
+<th className="px-4 py-3 text-center">UM</th>
+<th className="px-4 py-3 text-right">Cant.</th>
+<th className="px-4 py-3 text-right">P. unit.</th>
+<th className="px-4 py-3 text-right">Subtotal</th>
+</tr>
+</thead>
+<tbody>{purchase.lines.map(line => <tr key={line.id} className="border-t border-border">
+<td className="px-4 py-3 font-medium text-ink">{line.product}</td>
+<td className="px-4 py-3 text-slate-600">{line.presentation}</td>
+<td className="px-4 py-3 text-slate-600">{line.warehouse}</td>
+<td className="px-4 py-3 text-center">
+<span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">{line.unit}</span>
+</td>
+<td className="px-4 py-3 text-right font-mono">{line.quantity}</td>
+<td className="px-4 py-3 text-right font-mono">{currency}{money(line.price)}</td>
+<td className="px-4 py-3 text-right font-mono font-semibold text-emerald-700">{currency}{money(line.quantity * line.price)}</td>
+</tr>)}</tbody>
+<tfoot>
+<tr className="border-t border-border bg-slate-50">
+<td colSpan={6} className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-[.5px] text-muted">Total de compra</td>
+<td className="px-4 py-3 text-right font-mono font-bold text-emerald-700">{currency}{money(purchase.total)}</td>
+</tr>
+</tfoot>
+</table>
+</div>
+</section>
 
-      <section><div className="mb-2 flex items-center justify-between"><div><h3 className="text-sm font-semibold">Documentos adjuntos</h3><p className="mt-0.5 text-xs text-muted">Comprobantes PDF asociados a esta compra.</p></div><span className="rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-brand">{purchase.attachments.length} archivo(s)</span></div>{purchase.attachments.length ? <div className="grid gap-3">{purchase.attachments.map((document, index) => <article key={`${document.name}-${index}`} className="w-[190px] max-w-full overflow-hidden rounded-lg border border-border bg-white shadow-sm"><div className="flex aspect-[3/4] items-center justify-center border-b border-border bg-gradient-to-br from-red-50 via-white to-slate-50">{document.link ? <iframe title={`Vista previa de ${document.name}`} src={`${document.link}#toolbar=0&navpanes=0&scrollbar=0`} className="h-full w-full border-0" /> : <FileText className="h-8 w-8 text-red-500" />}</div><div className="flex items-center gap-2.5 p-2.5"><span className="flex h-7 w-7 shrink-0 items-center justify-center rounded bg-red-50 text-red-500"><FileText className="h-3.5 w-3.5" /></span><span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium text-ink">{document.name}</span><span className="text-xs text-muted">PDF{document.size ? ` · ${Math.max(1, Math.round(document.size / 1024))} KB` : ''}</span></span>{document.link && <a href={document.link} target="_blank" rel="noreferrer" aria-label={`Abrir ${document.name}`} className="rounded-md p-1.5 text-brand transition hover:bg-blue-50"><ExternalLink className="h-4 w-4" /></a>}</div></article>)}</div> : <div className="rounded-lg border border-dashed border-border bg-slate-50 px-4 py-5 text-center"><FileText className="mx-auto h-6 w-6 text-slate-400" /><p className="mt-2 text-sm font-medium text-slate-600">No hay comprobantes adjuntos</p><p className="mt-1 text-xs text-muted">Esta compra se registró sin archivos PDF.</p></div>}</section>
+      <section>
+<div className="mb-2 flex items-center justify-between">
+<div>
+<h3 className="text-sm font-semibold">Documentos adjuntos</h3>
+<p className="mt-0.5 text-xs text-muted">Comprobantes PDF asociados a esta compra.</p>
+</div>
+<span className="rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-brand">{purchase.attachments.length} archivo(s)</span>
+</div>{purchase.attachments.length ? <div className="grid gap-3">{purchase.attachments.map((document, index) => <article key={`${document.name}-${index}`} className="w-[190px] max-w-full overflow-hidden rounded-lg border border-border bg-white shadow-sm">
+<div className="flex aspect-[3/4] items-center justify-center border-b border-border bg-gradient-to-br from-red-50 via-white to-slate-50">{document.link ? <iframe title={`Vista previa de ${document.name}`} src={`${document.link}#toolbar=0&navpanes=0&scrollbar=0`} className="h-full w-full border-0" /> : <FileText className="h-8 w-8 text-red-500" />}</div>
+<div className="flex items-center gap-2.5 p-2.5">
+<span className="flex h-7 w-7 shrink-0 items-center justify-center rounded bg-red-50 text-red-500">
+<FileText className="h-3.5 w-3.5" />
+</span>
+<span className="min-w-0 flex-1">
+<span className="block truncate text-sm font-medium text-ink">{document.name}</span>
+<span className="text-xs text-muted">PDF{document.size ? ` · ${Math.max(1, Math.round(document.size / 1024))} KB` : ''}</span>
+</span>{document.link && <a href={document.link} target="_blank" rel="noreferrer" aria-label={`Abrir ${document.name}`} className="rounded-md p-1.5 text-brand transition hover:bg-blue-50">
+<ExternalLink className="h-4 w-4" />
+</a>}</div>
+</article>)}</div> : <div className="rounded-lg border border-dashed border-border bg-slate-50 px-4 py-5 text-center">
+<FileText className="mx-auto h-6 w-6 text-slate-400" />
+<p className="mt-2 text-sm font-medium text-slate-600">No hay comprobantes adjuntos</p>
+<p className="mt-1 text-xs text-muted">Esta compra se registró sin archivos PDF.</p>
+</div>}</section>
     </div>
   </Dialog>
 }

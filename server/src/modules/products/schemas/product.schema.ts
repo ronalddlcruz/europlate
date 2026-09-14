@@ -14,9 +14,10 @@ export const updateProductSchema = productPayloadSchema.partial().extend({ roles
 export const createUnitSchema = z.object({ code: z.string().trim().min(1).max(12).transform(value => value.toUpperCase()), description: z.string().trim().min(1).max(80), status: productStatus.default('ACTIVE') })
 export const updateUnitSchema = createUnitSchema.partial()
 const categoryAttributeSchema = z.object({ id: z.string().cuid().optional(), attributeDefinitionId: z.string().cuid().optional().nullable(), name: z.string().trim().min(1).max(80), dataType: attributeType.default('TEXT'), suffix: z.string().trim().max(20).optional().nullable(), required: z.boolean().default(false), status: productStatus.default('ACTIVE') })
-const subcategorySchema = z.object({ id: z.string().cuid().optional(), code: z.string().trim().min(1).max(20).optional().nullable(), name: z.string().trim().min(1).max(100), description: z.string().trim().max(240).optional().nullable(), status: productStatus.default('ACTIVE'), attributes: z.array(categoryAttributeSchema).default([]) })
+const subcategorySchema = z.object({ id: z.string().cuid().optional(), code: z.string().trim().min(1).max(20).optional().nullable(), name: z.string().trim().min(1).max(100), description: z.string().trim().max(240).optional().nullable(), status: productStatus.default('ACTIVE'), isVariable: z.boolean().default(false), attributes: z.array(categoryAttributeSchema).default([]) })
 export const createCategorySchema = z.object({ code: z.string().trim().min(1).max(20).optional().nullable(), name: z.string().trim().min(1).max(100), description: z.string().trim().max(240).optional().nullable(), status: productStatus.default('ACTIVE'), attributes: z.array(categoryAttributeSchema).default([]), subcategories: z.array(subcategorySchema).default([]) })
 export const updateCategorySchema = createCategorySchema.partial()
+export const createVariableProductSchema = z.object({ subcategoryId: z.string().cuid(), name: z.string().trim().min(1).max(160).optional(), values: z.record(z.string().trim()).default({}), unitId: z.string().cuid(), factor: z.coerce.number().positive().default(1), minimumStock: z.coerce.number().nonnegative().default(0), currentStock: z.coerce.number().nonnegative().default(0), roles: z.array(productRole).min(1).default(['MERCHANDISE']), status: productStatus.default('ACTIVE') })
 export const createAttributeDefinitionSchema = z.object({ code: z.string().trim().min(1).max(30).transform(value => value.toUpperCase()), name: z.string().trim().min(1).max(80), dataType: attributeType.default('TEXT'), suffix: z.string().trim().max(20).optional().nullable(), status: productStatus.default('ACTIVE') })
 export const updateAttributeDefinitionSchema = createAttributeDefinitionSchema.partial()
 export const productQuerySchema = z.object({ search: z.string().trim().optional(), status: productStatus.optional(), role: productRole.optional() })
@@ -25,3 +26,4 @@ export type UpdateProductInput = z.infer<typeof updateProductSchema>
 export type CreateUnitInput = z.infer<typeof createUnitSchema>
 export type CreateCategoryInput = z.infer<typeof createCategorySchema>
 export type CreateAttributeDefinitionInput = z.infer<typeof createAttributeDefinitionSchema>
+export type CreateVariableProductInput = z.infer<typeof createVariableProductSchema>

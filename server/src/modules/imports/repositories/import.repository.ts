@@ -21,5 +21,6 @@ export const importRepository = {
     prisma.customsAgent.findMany({ where: { companyId, status: 'ACTIVE' }, orderBy: { name: 'asc' } }),
     prisma.product.findMany({ where: { status: 'ACTIVE', presentations: { some: { status: 'ACTIVE' } } }, orderBy: { name: 'asc' }, include: { presentations: { where: { status: 'ACTIVE' }, include: { unit: true }, orderBy: { name: 'asc' } } } }),
     prisma.warehouse.findMany({ where: { companyId, status: 'ACTIVE' }, orderBy: { name: 'asc' } }),
+    prisma.subcategory.findMany({ where: { status: 'ACTIVE', isVariable: true, category: { status: 'ACTIVE' } }, select: { id: true, name: true, code: true, category: { select: { id: true, name: true } } }, orderBy: [{ category: { name: 'asc' } }, { name: 'asc' }] }),
   ]),
 }

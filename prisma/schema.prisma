@@ -244,6 +244,7 @@ model Subcategory {
   name String
   description String?
   status ProductStatus @default(ACTIVE)
+  isVariable Boolean @default(false)
   attributes SubcategoryAttribute[]
   category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
   products Product[]
