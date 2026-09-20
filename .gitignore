@@ -1,6 +1,7 @@
 node_modules/
 .env
 prisma/.env
+.seed-users.env
 .netlify/
 *.log
 .pnpm-store/

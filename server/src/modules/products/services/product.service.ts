@@ -54,17 +54,29 @@ const configuredAttributeData = (attribute: { attributeDefinitionId?: string | n
   const { attributeDefinitionId, attributeDefinition: _definition, id: _id, ...data } = attribute as typeof attribute & { id?: string; attributeDefinition?: unknown }
   return { ...data, suffix: data.suffix ?? null, position, ...(attributeDefinitionId && { attributeDefinition: { connect: { id: attributeDefinitionId } } }) }
 }
+const subcategoryCodes = (subcategories: CreateCategoryInput['subcategories']) => {
+  const used = new Set<string>()
+  return subcategories.map(subcategory => {
+    const base = subcategory.code || codePart(subcategory.name, 3)
+    let code = base; let suffix = 2
+    while (used.has(code)) code = `${base}-${suffix++}`
+    used.add(code)
+    return code
+  })
+}
 function categoryCreateData(input: CreateCategoryInput): Prisma.CategoryCreateInput {
+  const codes = subcategoryCodes(input.subcategories)
   return {
     code: input.code ?? null, name: input.name, description: input.description ?? null, status: input.status,
     attributes: { create: input.attributes.map(configuredAttributeData) },
-    subcategories: { create: input.subcategories.map((subcategory) => ({
-      code: subcategory.code ?? null, name: subcategory.name, description: subcategory.description ?? null, status: subcategory.status, isVariable: subcategory.isVariable,
+    subcategories: { create: input.subcategories.map((subcategory, index) => ({
+      code: codes[index], name: subcategory.name, description: subcategory.description ?? null, status: subcategory.status, isVariable: subcategory.isVariable,
       attributes: { create: subcategory.attributes.map(configuredAttributeData) },
     })) },
   }
 }
 function categoryUpdateData(input: CreateCategoryInput): Prisma.CategoryUpdateInput {
+  const codes = subcategoryCodes(input.subcategories)
   const retainedAttributes = input.attributes.flatMap(attribute => attribute.id ? [attribute.id] : [])
   const retainedSubcategories = input.subcategories.flatMap(subcategory => subcategory.id ? [subcategory.id] : [])
   return {
@@ -76,18 +88,18 @@ function categoryUpdateData(input: CreateCategoryInput): Prisma.CategoryUpdateIn
     },
     subcategories: {
       deleteMany: retainedSubcategories.length ? { id: { notIn: retainedSubcategories } } : {},
-      update: input.subcategories.flatMap((subcategory) => subcategory.id ? [{ where: { id: subcategory.id }, data: {
-        code: subcategory.code ?? null, name: subcategory.name, description: subcategory.description ?? null, status: subcategory.status, isVariable: subcategory.isVariable,
+      update: input.subcategories.flatMap((subcategory, index) => subcategory.id ? [{ where: { id: subcategory.id }, data: {
+        code: codes[index], name: subcategory.name, description: subcategory.description ?? null, status: subcategory.status, isVariable: subcategory.isVariable,
         attributes: {
           deleteMany: subcategory.attributes.flatMap(attribute => attribute.id ? [attribute.id] : []).length ? { id: { notIn: subcategory.attributes.flatMap(attribute => attribute.id ? [attribute.id] : []) } } : {},
           update: subcategory.attributes.flatMap((attribute, position) => attribute.id ? [{ where: { id: attribute.id }, data: configuredAttributeData(attribute, position) }] : []),
           create: subcategory.attributes.filter(attribute => !attribute.id).map(configuredAttributeData),
         },
       } }] : []),
-      create: input.subcategories.filter(subcategory => !subcategory.id).map((subcategory) => ({
-        code: subcategory.code ?? null, name: subcategory.name, description: subcategory.description ?? null, status: subcategory.status, isVariable: subcategory.isVariable,
+      create: input.subcategories.flatMap((subcategory, index) => !subcategory.id ? [{
+        code: codes[index], name: subcategory.name, description: subcategory.description ?? null, status: subcategory.status, isVariable: subcategory.isVariable,
         attributes: { create: subcategory.attributes.map(configuredAttributeData) },
-      })),
+      }] : []),
     },
   }
 }

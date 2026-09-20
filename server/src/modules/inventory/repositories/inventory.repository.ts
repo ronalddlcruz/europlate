@@ -3,6 +3,7 @@ import { prisma } from '../../../infrastructure/database/prisma.client.js'
 type Database = PrismaClient | Prisma.TransactionClient
 export const inventoryRepository = {
   stock: (companyId: string) => prisma.stock.findMany({ where: { warehouse: { companyId } }, include: { product: { include: { presentations: { where: { status: 'ACTIVE' }, include: { unit: true }, orderBy: { name: 'asc' } } } }, warehouse: true } }),
+  stockProducts: () => prisma.product.findMany({ orderBy: { name: 'asc' }, include: { category: { select: { name: true } }, subcategory: { select: { name: true } }, presentations: { include: { unit: true }, orderBy: { name: 'asc' } } } }),
   reserved: (companyId: string) => prisma.productionMaterial.findMany({ where: { status: 'RESERVED', warehouse: { companyId } }, include: { presentation: true } }),
   movements: (companyId: string) => prisma.inventoryMovement.findMany({ where: { warehouse: { companyId } }, include: { product: { include: { presentations: { where: { status: 'ACTIVE' }, include: { unit: true }, take: 1 } } }, warehouse: true, presentation: { include: { unit: true } }, createdBy: true }, orderBy: { createdAt: 'desc' } }),
   transfers: (companyId: string) => prisma.stockTransfer.findMany({ where: { companyId }, include: { product: true, presentation: { include: { unit: true } }, fromWarehouse: true, toWarehouse: true, createdBy: true }, orderBy: { createdAt: 'desc' } }),

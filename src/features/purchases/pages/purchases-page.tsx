@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { CalendarDays, ChevronDown, Eye, ExternalLink, FileText, Package, Paperclip, Plus, Search, Trash2, X } from 'lucide-react'
+import { CalendarDays, ChevronDown, Eye, ExternalLink, FileText, Package, Paperclip, Pencil, Plus, Search, Trash2, X } from 'lucide-react'
 import { Button } from '../../../components/ui/button'
 import { Dialog } from '../../../components/ui/dialog'
 import { Input } from '../../../components/ui/input'
@@ -11,7 +11,7 @@ import { createPurchase, deletePurchase, getPurchase, listPurchases, loadPurchas
 
 type VariableDraft = { name: string; values: Record<string, string>; unit: string; factor: number; minimumStock: number; stock: number; roles: ProductBase['roles'] }
 type DraftLine = { productId: string; presentationId: string; variableSubcategoryId: string; variableDraft?: VariableDraft; isVariable: boolean; warehouseId: string; quantity: number | ''; price: number | '' }
-const variableProductsOption = '__variable_products__'
+const variableSubcategoryPrefix = '__variable_subcategory__:'
 const today = new Date().toISOString().slice(0, 10)
 const money = (amount: number) => new Intl.NumberFormat('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount)
 const Select = ({ children, ...props }: React.SelectHTMLAttributes<HTMLSelectElement>) => <select className="h-10 w-full rounded-md border border-border bg-[#f4f7fb] px-3 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand" {...props}>{children}</select>
@@ -32,7 +32,7 @@ export function PurchasesPage() {
       queryClient.setQueryData<Purchase[]>(['purchases'], current => [pending, ...(current ?? [])])
       return { temporaryId }
     },
-    onSuccess: (purchase, _payload, context) => { queryClient.setQueryData<Purchase[]>(['purchases'], current => [purchase, ...(current ?? []).filter(item => item.id !== context?.temporaryId)]); void queryClient.invalidateQueries({ queryKey: ['purchases'] }); void queryClient.invalidateQueries({ queryKey: ['products', 'catalog'] }); notify('Compra registrada, stock actualizado y catálogo sincronizado') },
+    onSuccess: (purchase, _payload, context) => { queryClient.setQueryData<Purchase[]>(['purchases'], current => [purchase, ...(current ?? []).filter(item => item.id !== context?.temporaryId)]); void queryClient.invalidateQueries({ queryKey: ['purchases'] }); void queryClient.invalidateQueries({ queryKey: ['products', 'catalog'], refetchType: 'all' }); void queryClient.invalidateQueries({ queryKey: ['purchases', 'catalog'], refetchType: 'all' }); void queryClient.invalidateQueries({ queryKey: ['imports', 'catalog'], refetchType: 'all' }); void queryClient.invalidateQueries({ queryKey: ['production', 'catalog'], refetchType: 'all' }); void queryClient.invalidateQueries({ queryKey: ['inventory'], refetchType: 'all' }); notify('Compra registrada, stock actualizado y catálogo sincronizado') },
     onError: (error, _payload, context) => { queryClient.setQueryData<Purchase[]>(['purchases'], current => (current ?? []).filter(item => item.id !== context?.temporaryId)); notify(error instanceof Error ? error.message : 'No se pudo registrar la compra') },
   })
   const deleteMutation = useMutation({ mutationFn: deletePurchase, onSuccess: (_, id) => { queryClient.setQueryData<Purchase[]>(['purchases'], current => current?.filter(item => item.id !== id) ?? []); notify('Compra eliminada') }, onError: error => notify(error instanceof Error ? error.message : 'Solo se pueden eliminar compras en borrador') })
@@ -83,12 +83,12 @@ export function PurchasesPage() {
 function Status({ status }: { status: Purchase['status'] }) { const style = status === 'Guardando' ? 'bg-blue-100 text-brand' : status === 'Recibida' ? 'bg-emerald-100 text-emerald-700' : status === 'Borrador' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'; return <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${style}`}>{status}</span> }
 function PurchaseDialog({ catalog, productsCatalog, saving, onClose, onSave }: { catalog: PurchaseCatalog; productsCatalog: Awaited<ReturnType<typeof loadCatalog>>; saving: boolean; onClose: () => void; onSave: (payload: Parameters<typeof createPurchase>[0]) => Promise<void> }) {
   const [supplierName, setSupplierName] = useState(''); const [supplierId, setSupplierId] = useState(''); const [invoice, setInvoice] = useState(''); const [date, setDate] = useState(today); const [receiptDate, setReceiptDate] = useState(today); const [currency, setCurrency] = useState<'PEN' | 'USD'>('PEN'); const [attachments, setAttachments] = useState<UploadedPurchaseDocument[]>([]); const [uploading, setUploading] = useState(false); const [attachmentError, setAttachmentError] = useState(''); const [formError, setFormError] = useState(''); const [isSubmitting, setIsSubmitting] = useState(false); const [lines, setLines] = useState<DraftLine[]>([{ productId: '', presentationId: '', variableSubcategoryId: '', isVariable: false, warehouseId: catalog.warehouses[0]?.id ?? '', quantity: '', price: '' }]); const input = useRef<HTMLInputElement>(null)
-  const [variableLineIndex, setVariableLineIndex] = useState<number | null>(null)
+  const [inlineVariableIndex, setInlineVariableIndex] = useState<number | null>(null)
   useEffect(() => { if (catalog.warehouses[0]) setLines(current => current.map(line => line.warehouseId ? line : { ...line, warehouseId: catalog.warehouses[0].id })) }, [catalog.warehouses])
   const total = useMemo(() => lines.reduce((sum, line) => sum + Number(line.quantity || 0) * Number(line.price || 0), 0), [lines])
   const patch = (index: number, value: Partial<DraftLine>) => setLines(current => current.map((line, position) => position === index ? { ...line, ...value } : line))
   const productFor = (line: DraftLine) => catalog.products.find(product => product.id === line.productId); const presentationFor = (line: DraftLine) => productFor(line)?.presentations.find(value => value.id === line.presentationId)
-  const editingVariableLine = variableLineIndex === null ? undefined : lines[variableLineIndex]
+  const editingVariableLine = inlineVariableIndex === null ? undefined : lines[inlineVariableIndex]
   const editingVariableSubcategory = (catalog.variableSubcategories ?? []).find(subcategory => subcategory.id === editingVariableLine?.variableSubcategoryId)
   const editingVariableCategory = productsCatalog.categories.find(category => category.id === editingVariableSubcategory?.category.id || category.name === editingVariableSubcategory?.category.name)
   const editingVariableDefinition = editingVariableCategory?.subcategories.find(subcategory => subcategory.id === editingVariableSubcategory?.id)
@@ -166,35 +166,43 @@ function PurchaseDialog({ catalog, productsCatalog, saving, onClose, onSave }: {
 </thead>
 <tbody>{lines.map((line, index) => <tr className="border-b border-border last:border-0" key={index}>
 <td className="min-w-[280px] p-2">
-<div className="space-y-2">
+<div className="relative">
+<div className="flex items-center gap-1.5">
+<div className="min-w-0 flex-1">
   <CatalogPicker
     label="producto"
     items={[
       ...catalog.products.map(product => ({ id: product.id, title: product.name })),
-      { id: variableProductsOption, title: 'Productos variables', detail: 'Completa sus atributos al registrar la compra' },
+      ...(catalog.variableSubcategories ?? []).map(subcategory => ({
+        id: `${variableSubcategoryPrefix}${subcategory.id}`,
+        title: line.isVariable && line.variableSubcategoryId === subcategory.id && line.variableDraft ? line.variableDraft.name : subcategory.name,
+        detail: `Producto variable · ${subcategory.category.name}${subcategory.code ? ` · ${subcategory.code}` : ''}`,
+      })),
     ]}
-    value={line.isVariable ? variableProductsOption : line.productId}
-    onChange={selection => selection === variableProductsOption
-      ? patch(index, { productId: '', presentationId: '', variableSubcategoryId: '', isVariable: true })
-      : patch(index, { productId: selection, presentationId: catalog.products.find(product => product.id === selection)?.presentations[0]?.id ?? '', variableSubcategoryId: '', isVariable: false })}
+    value={line.isVariable && line.variableSubcategoryId ? `${variableSubcategoryPrefix}${line.variableSubcategoryId}` : line.productId}
+    onChange={selection => {
+      if (selection.startsWith(variableSubcategoryPrefix)) {
+        const variableSubcategoryId = selection.slice(variableSubcategoryPrefix.length)
+        patch(index, { productId: '', presentationId: '', variableSubcategoryId, variableDraft: undefined, isVariable: true })
+        setInlineVariableIndex(index)
+        return
+      }
+
+      patch(index, { productId: selection, presentationId: catalog.products.find(product => product.id === selection)?.presentations[0]?.id ?? '', variableSubcategoryId: '', variableDraft: undefined, isVariable: false })
+      setInlineVariableIndex(null)
+    }}
   />
-  {line.isVariable && !line.variableDraft && <div className="rounded-md border border-blue-200 bg-blue-50/60 p-2">
-    <CatalogPicker
-      label="subcategoría variable"
-      items={(catalog.variableSubcategories ?? []).map(subcategory => ({ id: subcategory.id, title: subcategory.name, detail: `${subcategory.category.name}${subcategory.code ? ` · ${subcategory.code}` : ''}` }))}
-      value={line.variableSubcategoryId}
-      onChange={variableSubcategoryId => { patch(index, { variableSubcategoryId }); setVariableLineIndex(index) }}
-    />
-    <p className="mt-1.5 text-[11px] leading-4 text-blue-700">Los atributos del producto se solicitarán antes de registrar esta compra.</p>
-  </div>}
-  {line.isVariable && line.variableDraft && <div className="flex items-center justify-between gap-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2"><span className="min-w-0"><span className="block truncate text-sm font-semibold text-emerald-900">{line.variableDraft.name}</span><span className="text-[11px] text-emerald-700">Producto variable listo para registrar</span></span><button type="button" onClick={() => setVariableLineIndex(index)} className="shrink-0 text-xs font-semibold text-brand hover:underline">Editar</button></div>}
+</div>
+  {line.isVariable && line.variableSubcategoryId && <button type="button" onClick={() => setInlineVariableIndex(current => current === index ? null : index)} aria-label={inlineVariableIndex === index ? 'Ocultar atributos del producto variable' : 'Editar atributos del producto variable'} title={inlineVariableIndex === index ? 'Ocultar atributos' : 'Editar atributos'} className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-blue-200 bg-blue-50 text-brand transition hover:bg-blue-100"><Pencil className="h-4 w-4" /></button>}
+</div>
+  {inlineVariableIndex === index && editingVariableLine && variableWizardBase && <ProductWizard floating item={variableWizardBase} variants={variableWizardVariants} products={productsCatalog.products.map(product => product.base)} categories={productsCatalog.categories} units={productsCatalog.units} presetSubcategoryId={editingVariableLine.variableSubcategoryId} onClose={() => { setInlineVariableIndex(null); if (!editingVariableLine.variableDraft) patch(index, { isVariable: false, variableSubcategoryId: '' }) }} saveLabel="Aplicar atributos" onSave={({ base, variants }) => { const variant = variants[0]; patch(index, { variableDraft: { name: base.name, values: variant.values, unit: variant.unit, factor: variant.factor, minimumStock: variant.minimum, stock: variant.stock, roles: base.roles } }); setInlineVariableIndex(null) }} />}
 </div>
 </td>
 <td className="p-2">
 <Select value={line.warehouseId} onChange={event => patch(index, { warehouseId: event.target.value })}>{catalog.warehouses.map(warehouse => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</Select>
 </td>
 <td className="p-2">
-<Input value={line.isVariable ? line.variableDraft?.unit ?? '' : presentationFor(line)?.unit.code ?? ''} readOnly placeholder="UM" />
+{line.isVariable && line.variableDraft ? <Select value={line.variableDraft.unit} onChange={event => patch(index, { variableDraft: { ...line.variableDraft!, unit: event.target.value } })}>{productsCatalog.units.filter(unit => unit.status === 'Activo').map(unit => <option key={unit.code} value={unit.code}>{unit.code}</option>)}</Select> : <Input value={line.isVariable ? '' : presentationFor(line)?.unit.code ?? ''} readOnly placeholder="UM" />}
 </td>
 <td className="p-2">
 <Input type="number" min="0" value={line.quantity} onFocus={event => event.currentTarget.select()} onChange={event => patch(index, { quantity: event.target.value === '' ? '' : Number(event.target.value) })} />
@@ -223,7 +231,7 @@ function PurchaseDialog({ catalog, productsCatalog, saving, onClose, onSave }: {
 <PurchaseDocumentDropzone inputRef={input} documents={attachments} uploading={uploading} error={attachmentError} onUpload={uploadAttachment} onRemove={removeAttachment} />
 </section>
 </form>
-</Dialog>{variableLineIndex !== null && editingVariableLine && <ProductWizard item={variableWizardBase} variants={variableWizardVariants} products={productsCatalog.products.map(product => product.base)} categories={productsCatalog.categories} units={productsCatalog.units} presetSubcategoryId={editingVariableLine.variableSubcategoryId} onClose={() => { setVariableLineIndex(null); if (!editingVariableLine.variableDraft) patch(variableLineIndex, { isVariable: false, variableSubcategoryId: '' }) }} saveLabel="Usar en compra" onSave={({ base, variants }) => { const variant = variants[0]; patch(variableLineIndex, { variableDraft: { name: base.name, values: variant.values, unit: variant.unit, factor: variant.factor, minimumStock: variant.minimum, stock: variant.stock, roles: base.roles } }); setVariableLineIndex(null) }} />}</>
+</Dialog></>
 }
 function PurchaseDocumentDropzone({ inputRef, documents, uploading, error, onUpload, onRemove }: { inputRef: React.RefObject<HTMLInputElement>; documents: UploadedPurchaseDocument[]; uploading: boolean; error: string; onUpload: (file: File) => Promise<void>; onRemove: (document: UploadedPurchaseDocument) => Promise<void> }) { const [dragging, setDragging] = useState(false); const pick = (files: FileList | null) => { const file = files?.[0]; if (file) void onUpload(file) }; return <div>
 <div className={`rounded-lg border-2 border-dashed p-5 text-center transition ${dragging ? 'border-brand bg-blue-50' : 'border-border bg-slate-50/60'}`} onDragOver={event => { event.preventDefault(); setDragging(true) }} onDragLeave={() => setDragging(false)} onDrop={event => { event.preventDefault(); setDragging(false); pick(event.dataTransfer.files) }}>
@@ -240,7 +248,7 @@ function PurchaseDocumentDropzone({ inputRef, documents, uploading, error, onUpl
 <X className="h-4 w-4" />
 </button>
 </div>)}</div>}</div> }
-function CatalogPicker({ items, value, onChange, label, disabled = false }: { items: { id: string; title: string; detail?: string }[]; value: string; onChange: (id: string) => void; label: string; disabled?: boolean }) { const [query, setQuery] = useState(''); const [open, setOpen] = useState(false); const ref = useRef<HTMLDivElement>(null); const selected = items.find(item => item.id === value); const filtered = items.filter(item => item.id === variableProductsOption || (item.title + ' ' + (item.detail ?? '')).toLowerCase().includes(query.toLowerCase())); useEffect(() => { setQuery(selected?.title ?? '') }, [selected?.title]); useEffect(() => { const close = (event: MouseEvent) => { if (ref.current && !ref.current.contains(event.target as Node)) setOpen(false) }; document.addEventListener('mousedown', close); return () => document.removeEventListener('mousedown', close) }, []); return <div ref={ref} className="relative">
+function CatalogPicker({ items, value, onChange, label, disabled = false }: { items: { id: string; title: string; detail?: string }[]; value: string; onChange: (id: string) => void; label: string; disabled?: boolean }) { const [query, setQuery] = useState(''); const [open, setOpen] = useState(false); const ref = useRef<HTMLDivElement>(null); const selected = items.find(item => item.id === value); const filtered = items.filter(item => (item.title + ' ' + (item.detail ?? '')).toLowerCase().includes(query.toLowerCase())); useEffect(() => { setQuery(selected?.title ?? '') }, [selected?.title]); useEffect(() => { const close = (event: MouseEvent) => { if (ref.current && !ref.current.contains(event.target as Node)) setOpen(false) }; document.addEventListener('mousedown', close); return () => document.removeEventListener('mousedown', close) }, []); return <div ref={ref} className="relative">
 <div className={disabled ? 'flex h-10 items-center rounded-md border border-border bg-slate-50 px-3 opacity-60' : open ? 'flex h-10 items-center rounded-md border border-brand bg-white px-3 ring-1 ring-brand' : 'flex h-10 items-center rounded-md border border-border bg-white px-3'}>
 <Search className="mr-2 h-4 w-4 text-slate-400" />
 <input disabled={disabled} value={query} onFocus={() => setOpen(true)} onChange={event => { setQuery(event.target.value); onChange(''); setOpen(true) }} placeholder={'Buscar ' + label + '...'} className="min-w-0 flex-1 bg-transparent text-sm outline-none" />

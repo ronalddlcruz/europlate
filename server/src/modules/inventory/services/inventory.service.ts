@@ -20,15 +20,22 @@ const account = (userId: string, companyId: string) => ({ createdBy: { connect: 
 
 export const inventoryService = {
   async stock(companyId: string, filters: { search?: string; warehouseId?: string }) {
-    const [stocks, reserved] = await Promise.all([inventoryRepository.stock(companyId), inventoryRepository.reserved(companyId)])
-    const grouped = new Map<string, { product: typeof stocks[number]['product']; entries: typeof stocks; reserved: Prisma.Decimal }>()
-    for (const entry of stocks) { const current = grouped.get(entry.productId) ?? { product: entry.product, entries: [] as typeof stocks, reserved: new Prisma.Decimal(0) }; current.entries.push(entry); grouped.set(entry.productId, current) }
-    for (const material of reserved) { const current = grouped.get(material.productId); if (current) current.reserved = current.reserved.plus(material.quantity.mul(material.presentation.factor)) }
-    return [...grouped.values()].map(({ product, entries, reserved: reservedQuantity }) => {
-      const presentation = product.presentations[0]; const visibleEntries = filters.warehouseId ? entries.filter(entry => entry.warehouseId === filters.warehouseId) : entries
-      const total = visibleEntries.reduce((sum, entry) => sum.plus(entry.quantity), new Prisma.Decimal(0)); const reservedValue = filters.warehouseId ? reserved.filter(item => item.warehouseId === filters.warehouseId && item.productId === product.id).reduce((sum, item) => sum.plus(item.quantity.mul(item.presentation.factor)), new Prisma.Decimal(0)) : reservedQuantity
-      return { productId: product.id, code: product.code, product: product.name, presentation: presentation?.name ?? '—', presentationId: presentation?.id ?? null, unit: presentation?.unit.code ?? '—', minimum: Number(presentation?.minimumStock ?? 0), total: Number(total), available: Number(Prisma.Decimal.max(total.minus(reservedValue), 0)), inProduction: Number(reservedValue), costUsd: 0, costPen: 0, warehouses: entries.map(entry => ({ id: entry.warehouseId, name: entry.warehouse.name, quantity: Number(entry.quantity) })) }
-    }).filter(item => !filters.search || `${item.code} ${item.product} ${item.presentation}`.toLowerCase().includes(filters.search.toLowerCase()))
+    const [stocks, reserved, products] = await Promise.all([inventoryRepository.stock(companyId), inventoryRepository.reserved(companyId), inventoryRepository.stockProducts()])
+    const entriesByProduct = new Map<string, typeof stocks>()
+    for (const entry of stocks) entriesByProduct.set(entry.productId, [...(entriesByProduct.get(entry.productId) ?? []), entry])
+    const reservedByProduct = new Map<string, Prisma.Decimal>()
+    for (const material of reserved) reservedByProduct.set(material.productId, (reservedByProduct.get(material.productId) ?? new Prisma.Decimal(0)).plus(material.quantity.mul(material.presentation.factor)))
+    return products.map(product => {
+      const presentation = product.presentations.find(item => item.status === ProductStatus.ACTIVE) ?? product.presentations[0]
+      const entries = entriesByProduct.get(product.id) ?? []
+      const visibleEntries = filters.warehouseId ? entries.filter(entry => entry.warehouseId === filters.warehouseId) : entries
+      const recordedTotal = visibleEntries.reduce((sum, entry) => sum.plus(entry.quantity), new Prisma.Decimal(0))
+      const total = visibleEntries.length ? recordedTotal : new Prisma.Decimal(presentation?.currentStock ?? 0).mul(presentation?.factor ?? 1)
+      const reservedValue = filters.warehouseId
+        ? reserved.filter(item => item.warehouseId === filters.warehouseId && item.productId === product.id).reduce((sum, item) => sum.plus(item.quantity.mul(item.presentation.factor)), new Prisma.Decimal(0))
+        : reservedByProduct.get(product.id) ?? new Prisma.Decimal(0)
+      return { productId: product.id, code: product.code, product: product.name, category: product.category?.name ?? 'Sin categoría', subcategory: product.subcategory?.name ?? '—', presentationId: presentation?.id ?? null, unit: presentation?.unit.code ?? '—', minimum: Number(presentation?.minimumStock ?? 0), total: Number(total), available: Number(Prisma.Decimal.max(total.minus(reservedValue), 0)), inProduction: Number(reservedValue), costUsd: 0, costPen: 0, status: product.status, warehouses: entries.map(entry => ({ id: entry.warehouseId, name: entry.warehouse.name, quantity: Number(entry.quantity) })) }
+    }).filter(item => !filters.search || `${item.code} ${item.product}`.toLowerCase().includes(filters.search.toLowerCase()))
   },
   movements: (companyId: string) => inventoryRepository.movements(companyId),
   transfers: (companyId: string) => inventoryRepository.transfers(companyId),

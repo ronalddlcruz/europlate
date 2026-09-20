@@ -1,5 +1,6 @@
 import express from 'express'
 import cors from 'cors'
+import { Prisma } from '@prisma/client'
 import { env } from './config/env.js'
 import { productRoutes } from './modules/products/routes/product.routes.js'
 import { authRoutes } from './modules/auth/routes/auth.routes.js'
@@ -33,6 +34,9 @@ export function createApp() {
   app.use('/api/exchange-rates', exchangeRateRoutes)
   app.use((error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) => {
     if (error instanceof AppError) return response.status(error.statusCode).json({ error: { code: error.code, message: error.message } })
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      return response.status(409).json({ error: { code: 'DUPLICATE_RECORD', message: 'Ya existe un registro con esos datos. Revisa el nombre o código antes de guardar.' } })
+    }
     if (error instanceof Error && error.name === 'ZodError') {
       const issues = (error as Error & { issues?: { path: (string | number)[]; message: string }[] }).issues ?? []
       const first = issues[0]

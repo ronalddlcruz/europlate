@@ -58,7 +58,7 @@ type Modal =
   | { type: "unit"; item?: Unit }
   | { type: "category"; item?: ProductCategory }
   | { type: "subcategory"; category: ProductCategory; item: ProductSubcategory }
-  | { type: "attribute"; item?: AttributeDefinition }
+  | { type: "attribute"; item?: AttributeDefinition; editing?: boolean }
   | null;
 type CatalogData = Awaited<ReturnType<typeof loadCatalog>>;
 type ConfigurationTab = "categories" | "attributes" | "units";
@@ -406,7 +406,7 @@ export function ProductsPage() {
         },
       );
       setModal(null);
-      notify("Guardando categoría en segundo plano…");
+      notify("Categoría guardándose en segundo plano…");
       return { previous, optimisticId: item.id, editing };
     },
     onSuccess: (saved, _variables, context) => {
@@ -440,7 +440,6 @@ export function ProductsPage() {
           : "No se pudo guardar la categoría. Se restauró el cambio anterior.",
       );
     },
-    onSettled: () => void refreshCatalog(),
   });
   const attributeMutation = useMutation({
     mutationFn: async ({
@@ -455,17 +454,71 @@ export function ProductsPage() {
         ? updateAttributeDefinition(item.id, payload)
         : createAttributeDefinition(payload);
     },
-    onSuccess: async () => {
-      await refreshCatalog();
+    onMutate: async ({ item, editing }) => {
+      await queryClient.cancelQueries({ queryKey: ["products", "catalog"] });
+      const previous = queryClient.getQueryData<CatalogData>([
+        "products",
+        "catalog",
+      ]);
+      queryClient.setQueryData<CatalogData>(
+        ["products", "catalog"],
+        (current) => {
+          if (!current) return current;
+          const attributes = editing
+            ? current.attributes.map((attribute) =>
+                attribute.id === item.id ? item : attribute,
+              )
+            : [...current.attributes, item];
+          return {
+            ...current,
+            attributes: attributes.sort((left, right) =>
+              left.name.localeCompare(right.name),
+            ),
+          };
+        },
+      );
       setModal(null);
-      notify("Atributo guardado en la base de datos");
+      notify("Atributo guardándose en segundo plano…");
+      return { previous, optimisticId: item.id, editing };
     },
-    onError: (reason) =>
+    onSuccess: (saved, _variables, context) => {
+      queryClient.setQueryData<CatalogData>(
+        ["products", "catalog"],
+        (current) => {
+          if (!current) return current;
+          const attributes = current.attributes.map((attribute) =>
+            context?.editing
+              ? attribute.id === saved.id
+                ? saved
+                : attribute
+              : attribute.id === context?.optimisticId
+                ? saved
+                : attribute,
+          );
+          return {
+            ...current,
+            attributes: attributes.sort((left, right) =>
+              left.name.localeCompare(right.name),
+            ),
+          };
+        },
+      );
+      notify("Atributo guardado y verificado en la base de datos");
+    },
+    onError: (reason, variables, context) => {
+      if (context?.previous)
+        queryClient.setQueryData(["products", "catalog"], context.previous);
+      setModal({
+        type: "attribute",
+        item: variables.item,
+        editing: variables.editing,
+      });
       notify(
         reason instanceof Error
-          ? reason.message
-          : "No se pudo guardar el atributo",
-      ),
+          ? `No se guardó el atributo: ${reason.message}`
+          : "No se pudo guardar el atributo. Se restauró el cambio anterior.",
+      );
+    },
   });
   const deleteAttributeMutation = useMutation({
     mutationFn: deleteAttributeDefinition,
@@ -554,20 +607,20 @@ export function ProductsPage() {
   return (
     <div className="-mx-2 max-w-none sm:-mx-4">
       <nav
-        className="mb-5 flex gap-1 overflow-x-auto border-b border-border"
+        className="mb-6 flex min-h-14 gap-1 overflow-x-auto border-b border-slate-200 bg-white px-3 shadow-[0_1px_2px_rgba(15,23,42,0.02)] sm:px-5"
         aria-label="Secciones de productos"
       >
         <button
           onClick={openCatalog}
-          className={`shrink-0 border-b-2 px-4 py-2.5 text-[13px] font-medium ${!isConfiguration ? "border-brand text-brand" : "border-transparent text-muted hover:text-ink"}`}
+          className={`shrink-0 border-b-2 px-6 py-4 text-sm font-medium transition-colors ${!isConfiguration ? "border-brand text-brand" : "border-transparent text-slate-400 hover:text-ink"}`}
         >
           Maestro de Productos
         </button>
         <button
           onClick={() => openConfiguration()}
-          className={`shrink-0 border-b-2 px-4 py-2.5 text-[13px] font-medium ${isConfiguration ? "border-brand text-brand" : "border-transparent text-muted hover:text-ink"}`}
+          className={`shrink-0 border-b-2 px-6 py-4 text-sm font-medium transition-colors ${isConfiguration ? "border-brand text-brand" : "border-transparent text-slate-400 hover:text-ink"}`}
         >
-          Configuración
+          Configuración de Productos
         </button>
       </nav>
       {!isConfiguration ? (
@@ -860,9 +913,14 @@ export function ProductsPage() {
       {modal?.type === "attribute" && (
         <AttributeDefinitionDialog
           item={modal.item}
+          editing={modal.editing ?? Boolean(modal.item)}
+          attributes={attributes}
           onClose={() => setModal(null)}
           onSave={(item) =>
-            attributeMutation.mutate({ item, editing: Boolean(modal.item) })
+            attributeMutation.mutate({
+              item,
+              editing: modal.editing ?? Boolean(modal.item),
+            })
           }
         />
       )}
@@ -1240,6 +1298,16 @@ function UnitsSection({
   onEdit: (unit: Unit) => void;
   onDelete: (id: string) => void;
 }) {
+  const [search, setSearch] = useState("");
+  const filteredUnits = useMemo(
+    () =>
+      units.filter((unit) =>
+        `${unit.code} ${unit.description}`
+          .toLocaleLowerCase()
+          .includes(search.trim().toLocaleLowerCase()),
+      ),
+    [search, units],
+  );
   return (
     <section className="rounded-[10px] border border-border bg-white p-5 shadow-card">
       <header className="mb-4 flex items-center justify-between">
@@ -1249,6 +1317,15 @@ function UnitsSection({
           Nueva UM
         </Button>
       </header>
+      <div className="relative mb-4 max-w-md">
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+        <Input
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          className="h-9 pl-9"
+          placeholder="Buscar por código o descripción…"
+        />
+      </div>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[560px] text-left">
           <thead className="bg-[#f7f9fc] text-[11px] uppercase tracking-[.5px] text-muted">
@@ -1262,7 +1339,7 @@ function UnitsSection({
             </tr>
           </thead>
           <tbody>
-            {units.map((unit) => (
+            {filteredUnits.map((unit) => (
               <tr key={unit.id} className="border-b border-border text-[13px]">
                 <td className="px-4 py-3 font-mono font-bold text-brand">
                   {unit.code}
@@ -1288,6 +1365,13 @@ function UnitsSection({
                 </td>
               </tr>
             ))}
+            {!filteredUnits.length && (
+              <tr>
+                <td colSpan={4} className="p-10 text-center text-sm text-muted">
+                  No hay unidades que coincidan.
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>

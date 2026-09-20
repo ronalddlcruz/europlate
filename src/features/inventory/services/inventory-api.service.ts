@@ -2,7 +2,7 @@ import { api } from '../../../lib/api-client'
 
 export type Warehouse = { id: string; name: string; location: string | null; description: string | null; status: 'ACTIVE' | 'INACTIVE' }
 export type CatalogProduct = { id: string; code: string; name: string; presentations: { id: string; name: string; unit: { code: string } }[] }
-export type StockRecord = { productId: string; code: string; product: string; presentation: string; presentationId: string | null; unit: string; minimum: number; total: number; available: number; inProduction: number; costUsd: number; costPen: number; warehouses: { id: string; name: string; quantity: number }[] }
+export type StockRecord = { productId: string; code: string; product: string; category: string; subcategory: string; presentation?: string; presentationId: string | null; unit: string; minimum: number; total: number; available: number; inProduction: number; costUsd: number; costPen: number; status: 'ACTIVE' | 'INACTIVE'; warehouses: { id: string; name: string; quantity: number }[] }
 export type Movement = { id: string; date: string; type: string; product: string; presentation: string; warehouse: string; quantity: number; note: string; user: string }
 export type Transfer = { id: string; date: string; product: string; presentation: string; origin: string; destination: string; quantity: number; note: string; user: string }
 export type Adjustment = { id: string; date: string; product: string; presentation: string; warehouse: string; previous: number; next: number; reason: string; user: string }

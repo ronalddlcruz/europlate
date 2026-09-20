@@ -344,8 +344,6 @@ model ProductPresentation {
   unit Unit @relation(fields: [unitId], references: [id])
   purchaseItems PurchaseItem[]
   importItems ImportItem[]
-  productionOrders ProductionOrder[] @relation("ProductionOutputPresentation")
-  productionMaterials ProductionMaterial[] @relation("ProductionMaterialPresentation")
   inventoryMovements InventoryMovement[]
   stockTransfers StockTransfer[]
   inventoryAdjustments InventoryAdjustment[]
@@ -601,7 +599,6 @@ model ProductionOrder {
   number String @unique
   companyId String
   productId String
-  presentationId String
   warehouseId String
   quantity Decimal @db.Decimal(14, 3)
   scheduledAt DateTime
@@ -612,7 +609,6 @@ model ProductionOrder {
   completedAt DateTime?
   company Company @relation(fields: [companyId], references: [id])
   product Product @relation(fields: [productId], references: [id])
-  presentation ProductPresentation @relation("ProductionOutputPresentation", fields: [presentationId], references: [id])
   warehouse Warehouse @relation("ProductionOutputWarehouse", fields: [warehouseId], references: [id])
   materials ProductionMaterial[]
   createdAt DateTime @default(now())
@@ -625,7 +621,6 @@ model ProductionMaterial {
   id String @id @default(cuid())
   orderId String
   productId String
-  presentationId String
   warehouseId String
   quantity Decimal @db.Decimal(14, 3)
   status ProductionMaterialStatus @default(RESERVED)
@@ -633,7 +628,6 @@ model ProductionMaterial {
   consumedAt DateTime?
   order ProductionOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
   product Product @relation(fields: [productId], references: [id])
-  presentation ProductPresentation @relation("ProductionMaterialPresentation", fields: [presentationId], references: [id])
   warehouse Warehouse @relation("ProductionMaterialWarehouse", fields: [warehouseId], references: [id])
   @@index([orderId, status])
   @@index([warehouseId])

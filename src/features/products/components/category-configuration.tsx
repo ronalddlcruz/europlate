@@ -24,7 +24,6 @@ import type {
 const uid = () => crypto.randomUUID();
 const freshSubcategory = (): ProductSubcategory => ({
   id: uid(),
-  code: "",
   name: "",
   description: "",
   status: "Activo",
@@ -51,6 +50,7 @@ export function CategoryConfiguration({
   ) => void;
 }) {
   const [page, setPage] = useState(1);
+  const [search, setSearch] = useState("");
   const ordered = useMemo(
     () =>
       [...categories].sort((left, right) =>
@@ -58,10 +58,23 @@ export function CategoryConfiguration({
       ),
     [categories],
   );
+  const filteredCategories = useMemo(() => {
+    const term = search.trim().toLocaleLowerCase();
+    if (!term) return ordered.map((category) => ({ category, subcategories: category.subcategories }));
+    return ordered.flatMap((category) => {
+      const categoryMatches = `${category.name} ${category.code ?? ""} ${category.description ?? ""}`.toLocaleLowerCase().includes(term);
+      const matchingSubcategories = category.subcategories.filter((subcategory) =>
+        `${subcategory.name} ${subcategory.code ?? ""} ${subcategory.description ?? ""}`.toLocaleLowerCase().includes(term),
+      );
+      return categoryMatches || matchingSubcategories.length
+        ? [{ category, subcategories: categoryMatches ? category.subcategories : matchingSubcategories }]
+        : [];
+    });
+  }, [ordered, search]);
   const pageSize = 10;
-  const totalPages = Math.max(1, Math.ceil(ordered.length / pageSize));
+  const totalPages = Math.max(1, Math.ceil(filteredCategories.length / pageSize));
   const currentPage = Math.min(page, totalPages);
-  const visibleCategories = ordered.slice(
+  const visibleCategories = filteredCategories.slice(
     (currentPage - 1) * pageSize,
     currentPage * pageSize,
   );
@@ -80,6 +93,18 @@ export function CategoryConfiguration({
           Nueva categoría
         </Button>
       </header>
+      <div className="relative max-w-md">
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+        <Input
+          value={search}
+          onChange={(event) => {
+            setSearch(event.target.value);
+            setPage(1);
+          }}
+          className="h-10 bg-white pl-9"
+          placeholder="Buscar categoría o subcategoría…"
+        />
+      </div>
       <div className="overflow-x-auto rounded-xl border border-blue-100 bg-white shadow-[0_8px_24px_rgba(37,99,235,0.07)]">
         <table className="w-full min-w-[920px] border-collapse text-left">
           <thead>
@@ -106,9 +131,9 @@ export function CategoryConfiguration({
           </thead>
           <tbody>
             {visibleCategories.length ? (
-              visibleCategories.flatMap((category) => {
-                const subcategories = category.subcategories.length
-                  ? category.subcategories
+              visibleCategories.flatMap(({ category, subcategories: visibleSubcategories }) => {
+                const subcategories = visibleSubcategories.length
+                  ? visibleSubcategories
                   : [null];
                 const rowSpan = subcategories.length;
                 return subcategories.map((subcategory, index) => (
@@ -220,19 +245,19 @@ export function CategoryConfiguration({
             ) : (
               <tr>
                 <td colSpan={6} className="p-10 text-center text-sm text-muted">
-                  No hay categorías registradas.
+                  No hay categorías o subcategorías que coincidan.
                 </td>
               </tr>
             )}
           </tbody>
         </table>
       </div>
-      {ordered.length > pageSize && (
+      {filteredCategories.length > pageSize && (
         <div className="flex flex-wrap items-center justify-between gap-3 px-1 text-xs text-muted">
           <span>
             Mostrando {(currentPage - 1) * pageSize + 1}–
-            {Math.min(currentPage * pageSize, ordered.length)} de{" "}
-            {ordered.length} categorías
+            {Math.min(currentPage * pageSize, filteredCategories.length)} de{" "}
+            {filteredCategories.length} categorías
           </span>
           <div className="flex items-center gap-2">
             <Button
@@ -315,7 +340,6 @@ export function SubcategoryEditDialog({
   onSave: (subcategory: ProductSubcategory) => void;
 }) {
   const [name, setName] = useState(item.name);
-  const [code, setCode] = useState(item.code ?? "");
   const [description, setDescription] = useState(item.description ?? "");
   const [status, setStatus] = useState<ProductStatus>(item.status);
   const [isVariable, setIsVariable] = useState(item.isVariable ?? false);
@@ -369,7 +393,7 @@ export function SubcategoryEditDialog({
             onSave({
               ...item,
               name: name.trim(),
-              code: code.trim().toUpperCase() || null,
+              code: item.code ?? null,
               description: description.trim() || null,
               status,
               isVariable,
@@ -388,13 +412,6 @@ export function SubcategoryEditDialog({
             onChange={(event) => setName(event.target.value)}
             placeholder="Ej. Dúplex"
             required
-          />
-        </Field>
-        <Field label="Código">
-          <Input
-            value={code}
-            onChange={(event) => setCode(event.target.value.toUpperCase())}
-            placeholder="Ej. DUP"
           />
         </Field>
         <Field label="Descripción">
@@ -545,7 +562,6 @@ export function CategoryConfigurationDialog({
       ? {
           ...subcategory,
           name: subcategory.name.trim(),
-          code: subcategory.code?.trim() || null,
           description: subcategory.description?.trim() || null,
         }
       : null;
@@ -585,7 +601,7 @@ export function CategoryConfigurationDialog({
           }}
           className="space-y-6"
         >
-          <section className="grid gap-4 md:grid-cols-2">
+          <section className="space-y-4">
             <Field label="Nombre de categoría *">
               <Input
                 value={category.name}
@@ -599,19 +615,7 @@ export function CategoryConfigurationDialog({
                 required
               />
             </Field>
-            <Field label="Código (opcional)">
-              <Input
-                value={category.code ?? ""}
-                onChange={(event) =>
-                  setCategory((value) => ({
-                    ...value,
-                    code: event.target.value.toUpperCase(),
-                  }))
-                }
-                placeholder="Ej. CART"
-              />
-            </Field>
-            <Field label="Descripción" full>
+            <Field label="Descripción">
               <Input
                 value={category.description ?? ""}
                 onChange={(event) =>
@@ -677,18 +681,6 @@ export function CategoryConfigurationDialog({
                   placeholder="Ej. Dúplex"
                 />
               </Field>
-              <Field label="Código">
-                <Input
-                  value={subcategory.code ?? ""}
-                  onChange={(event) =>
-                    setSubcategory((value) => ({
-                      ...value,
-                      code: event.target.value.toUpperCase(),
-                    }))
-                  }
-                  placeholder="Ej. DUP"
-                />
-              </Field>
               <label className="flex items-start gap-3 rounded-lg border border-blue-100 bg-blue-50/60 px-3 py-3 text-sm md:col-span-2">
                 <input
                   type="checkbox"
@@ -739,8 +731,7 @@ export function CategoryConfigurationDialog({
               </div>
               <Button
                 type="button"
-                variant="outline"
-                className="md:col-span-2"
+                className="bg-brand text-white hover:bg-blue-700 md:col-span-2"
                 onClick={saveSubcategory}
               >
                 <Plus className="h-4 w-4" />
@@ -863,11 +854,8 @@ function AttributePicker({
                     setQuery("");
                     setOpen(false);
                   }}
-                  className="flex w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-blue-50"
+                  className="flex w-full items-center px-3 py-2.5 text-left hover:bg-blue-50"
                 >
-                  <span className="rounded bg-blue-50 px-2 py-1 font-mono text-[10px] font-bold text-brand">
-                    {definition.code}
-                  </span>
                   <span>
                     <span className="block text-sm font-medium">
                       {definition.name}
