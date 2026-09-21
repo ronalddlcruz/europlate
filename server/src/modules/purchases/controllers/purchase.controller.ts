@@ -28,13 +28,13 @@ export const purchaseController = {
     response.json({ data: await purchaseService.getById(request.auth!.companyId, idFrom(request)) })
   },
   async create(request: Request, response: Response) {
-    response.status(201).json({ data: await purchaseService.create(request.auth!.companyId, purchaseInputSchema.parse(request.body)) })
+    response.status(201).json({ data: await purchaseService.create(request.auth!.companyId, purchaseInputSchema.parse(request.body), request.auth!.id) })
   },
   async update(request: Request, response: Response) {
     response.json({ data: await purchaseService.update(request.auth!.companyId, idFrom(request), updatePurchaseSchema.parse(request.body)) })
   },
   async receive(request: Request, response: Response) {
-    response.json({ data: await purchaseService.receive(request.auth!.companyId, idFrom(request)) })
+    response.json({ data: await purchaseService.receive(request.auth!.companyId, idFrom(request), request.auth!.id) })
   },
   async remove(request: Request, response: Response) {
     await purchaseService.remove(request.auth!.companyId, idFrom(request))

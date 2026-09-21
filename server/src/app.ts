@@ -13,6 +13,8 @@ import { productionRoutes } from './modules/production/routes/production.routes.
 import { inventoryRoutes } from './modules/inventory/routes/inventory.routes.js'
 import { userRoutes } from './modules/users/routes/user.routes.js'
 import { exchangeRateRoutes } from './modules/exchange-rates/routes/exchange-rate.routes.js'
+import { reportRoutes } from './modules/reports/routes/report.routes.js'
+import { dashboardRoutes } from './modules/dashboard/routes/dashboard.routes.js'
 import { AppError } from './shared/errors/app-error.js'
 export function createApp() {
   const app = express()
@@ -32,6 +34,8 @@ export function createApp() {
   app.use('/api/inventory', inventoryRoutes)
   app.use('/api/users', userRoutes)
   app.use('/api/exchange-rates', exchangeRateRoutes)
+  app.use('/api/reports', reportRoutes)
+  app.use('/api/dashboard', dashboardRoutes)
   app.use((error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) => {
     if (error instanceof AppError) return response.status(error.statusCode).json({ error: { code: error.code, message: error.message } })
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {

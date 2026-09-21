@@ -50,5 +50,7 @@ export const productionRepository = {
         where: { warehouse: { companyId } },
         select: { productId: true, warehouseId: true, quantity: true },
       }),
+      prisma.customer.findMany({ where: { companyId, status: 'ACTIVE' }, orderBy: { name: 'asc' }, select: { id: true, name: true } }),
+      prisma.productionMaterial.findMany({ where: { status: 'RESERVED', shareReservation: false, order: { companyId } }, select: { productId: true, warehouseId: true } }),
     ]),
 }

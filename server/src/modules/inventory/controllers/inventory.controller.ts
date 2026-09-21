@@ -8,7 +8,7 @@ export const inventoryController = {
   async transfers(request: Request, response: Response) { response.json({ data: await inventoryService.transfers(request.auth!.companyId) }) },
   async adjustments(request: Request, response: Response) { response.json({ data: await inventoryService.adjustments(request.auth!.companyId) }) },
   async warehouses(request: Request, response: Response) { response.json({ data: await inventoryService.warehouses(request.auth!.companyId) }) },
-  async catalog(request: Request, response: Response) { const [products, warehouses] = await inventoryService.catalog(request.auth!.companyId); response.json({ data: { products, warehouses } }) },
+  async catalog(request: Request, response: Response) { const [products, warehouses, customers] = await inventoryService.catalog(request.auth!.companyId); response.json({ data: { products, warehouses, customers } }) },
   async createTransfer(request: Request, response: Response) { response.status(201).json({ data: await inventoryService.createTransfer(request.auth!.companyId, request.auth!.id, stockTransferSchema.parse(request.body)) }) },
   async createAdjustment(request: Request, response: Response) { response.status(201).json({ data: await inventoryService.createAdjustment(request.auth!.companyId, request.auth!.id, inventoryAdjustmentSchema.parse(request.body)) }) },
   async createWarehouse(request: Request, response: Response) { response.status(201).json({ data: await inventoryService.createWarehouse(request.auth!.companyId, warehouseSchema.parse(request.body)) }) },

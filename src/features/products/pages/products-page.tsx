@@ -221,6 +221,8 @@ export function ProductsPage() {
         },
       );
       setSearch("");
+      void queryClient.invalidateQueries({ queryKey: ["dashboard"], refetchType: "all" });
+      void queryClient.invalidateQueries({ queryKey: ["reports"], refetchType: "all" });
       notify("Producto guardado y verificado en la base de datos");
     },
     onError: (reason, _variables, context) => {

@@ -1,5 +1,7 @@
 import { DashboardMetric } from '../../../components/dashboard/dashboard-components'
 
-export function DashboardMetrics({ periodLabel }: { periodLabel: string }) {
-  return <section className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4"><DashboardMetric label="Compras del mes" value="S/ 0.00" detail={periodLabel} tone="emerald" chart={[34, 48, 37, 74, 44, 62, 88]} /><DashboardMetric label="Productos activos" value="13" detail="En catálogo" tone="blue" chart={[48, 38, 55, 46, 74, 64, 92]} /><DashboardMetric label="Importaciones" value="4" detail="Total registradas" tone="amber" chart={[24, 44, 40, 72, 58, 84, 68]} /></section>
+export function DashboardMetrics({ periodLabel, purchasesPen, activeProducts, imports, totalStock, chart }: { periodLabel: string; purchasesPen: number; activeProducts: number; imports: number; totalStock: number; chart: number[] }) {
+  const money = new Intl.NumberFormat('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(purchasesPen)
+  const number = new Intl.NumberFormat('es-PE', { maximumFractionDigits: 3 })
+  return <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4 sm:gap-4"><DashboardMetric label="Compras del mes" value={`S/ ${money}`} detail={periodLabel} tone="emerald" chart={chart} /><DashboardMetric label="Productos activos" value={number.format(activeProducts)} detail="En catálogo" tone="blue" /><DashboardMetric label="Importaciones" value={number.format(imports)} detail={`${periodLabel} · registradas`} tone="amber" /><DashboardMetric label="Stock total" value={number.format(totalStock)} detail="Unidades físicas registradas" tone="blue" /></section>
 }

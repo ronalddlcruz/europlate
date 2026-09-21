@@ -16,6 +16,15 @@ async function validateProductLine(companyId: string, input: { productId: string
   if (!product || !presentation || !warehouse || presentation.productId !== product.id) throw new AppError('INVENTORY_REFERENCE_INVALID', 'El producto, presentación o almacén no está disponible.', 422)
   return { product, presentation, warehouse }
 }
+async function validateAdjustmentLine(companyId: string, input: { productId: string; warehouseId: string }) {
+  const [product, warehouse] = await Promise.all([
+    prisma.product.findFirst({ where: { id: input.productId, status: ProductStatus.ACTIVE }, include: { presentations: { where: { status: ProductStatus.ACTIVE }, orderBy: { name: 'asc' }, take: 1 } } }),
+    prisma.warehouse.findFirst({ where: { id: input.warehouseId, companyId, status: ProductStatus.ACTIVE } }),
+  ])
+  const presentation = product?.presentations[0]
+  if (!product || !presentation || !warehouse) throw new AppError('INVENTORY_REFERENCE_INVALID', 'El producto o almacén no está disponible.', 422)
+  return { product, presentation, warehouse }
+}
 const account = (userId: string, companyId: string) => ({ createdBy: { connect: { id: userId } }, company: { connect: { id: companyId } } })
 const reservationFactor = (material: { product: { presentations: { factor: Prisma.Decimal }[] } }) => material.product.presentations[0]?.factor ?? new Prisma.Decimal(1)
 
@@ -35,7 +44,7 @@ export const inventoryService = {
       const reservedValue = filters.warehouseId
         ? reserved.filter(item => item.warehouseId === filters.warehouseId && item.productId === product.id).reduce((sum, item) => sum.plus(item.quantity.mul(reservationFactor(item))), new Prisma.Decimal(0))
         : reservedByProduct.get(product.id) ?? new Prisma.Decimal(0)
-      return { productId: product.id, code: product.code, product: product.name, category: product.category?.name ?? 'Sin categoría', subcategory: product.subcategory?.name ?? '—', presentationId: presentation?.id ?? null, unit: presentation?.unit.code ?? '—', minimum: Number(presentation?.minimumStock ?? 0), total: Number(total), available: Number(Prisma.Decimal.max(total.minus(reservedValue), 0)), inProduction: Number(reservedValue), costUsd: 0, costPen: 0, status: product.status, warehouses: entries.map(entry => ({ id: entry.warehouseId, name: entry.warehouse.name, quantity: Number(entry.quantity) })) }
+      return { productId: product.id, code: product.code, product: product.name, category: product.category?.name ?? 'Sin categoría', subcategory: product.subcategory?.name ?? '—', roles: product.roles, presentationId: presentation?.id ?? null, unit: presentation?.unit.code ?? '—', factor: Number(presentation?.factor ?? 1), minimum: Number(presentation?.minimumStock ?? 0), total: Number(total), available: Number(Prisma.Decimal.max(total.minus(reservedValue), 0)), inProduction: Number(reservedValue), costUsd: 0, costPen: 0, status: product.status, warehouses: entries.map(entry => ({ id: entry.warehouseId, name: entry.warehouse.name, quantity: Number(entry.quantity) })) }
     }).filter(item => !filters.search || `${item.code} ${item.product}`.toLowerCase().includes(filters.search.toLowerCase()))
   },
   movements: (companyId: string) => inventoryRepository.movements(companyId),
@@ -57,15 +66,20 @@ export const inventoryService = {
     })
   },
   async createAdjustment(companyId: string, userId: string, input: InventoryAdjustmentInput) {
-    const { presentation } = await validateProductLine(companyId, input)
+    const { presentation } = await validateAdjustmentLine(companyId, input)
     const baseDelta = decimal(input.delta).mul(presentation.factor)
     return transaction(async db => {
       const current = await db.stock.findUnique({ where: { productId_warehouseId: { productId: input.productId, warehouseId: input.warehouseId } } }); const previous = current?.quantity ?? new Prisma.Decimal(0); const next = previous.plus(baseDelta)
+      if (input.delta < 0 && previous.isZero()) throw new AppError('INVENTORY_ZERO_STOCK', 'No se puede registrar una salida porque el producto no tiene stock disponible.', 422)
       if (next.isNegative()) throw new AppError('INVENTORY_NEGATIVE_STOCK', 'El ajuste no puede dejar el stock en negativo.', 422)
+      if (input.delta < 0) {
+        const customer = await db.customer.findFirst({ where: { id: input.customerId!, companyId, status: ProductStatus.ACTIVE }, select: { id: true } })
+        if (!customer) throw new AppError('INVENTORY_CUSTOMER_INVALID', 'Selecciona un cliente activo para la salida.', 422)
+      }
       await db.stock.upsert({ where: { productId_warehouseId: { productId: input.productId, warehouseId: input.warehouseId } }, create: { productId: input.productId, warehouseId: input.warehouseId, quantity: next }, update: { quantity: next } })
-      await db.productPresentation.update({ where: { id: input.presentationId }, data: { currentStock: { increment: decimal(input.delta) } } })
-      const adjustment = await inventoryRepository.createAdjustment(db, { ...account(userId, companyId), product: { connect: { id: input.productId } }, presentation: { connect: { id: input.presentationId } }, warehouse: { connect: { id: input.warehouseId } }, previousQuantity: previous, newQuantity: next, reason: input.reason })
-      await db.inventoryMovement.create({ data: { productId: input.productId, presentationId: input.presentationId, warehouseId: input.warehouseId, createdByUserId: userId, type: input.delta > 0 ? 'ADJUSTMENT_IN' : 'ADJUSTMENT_OUT', quantity: baseDelta, reference: adjustment.id, note: input.reason } })
+      await db.productPresentation.update({ where: { id: presentation.id }, data: { currentStock: { increment: decimal(input.delta) } } })
+      const adjustment = await inventoryRepository.createAdjustment(db, { ...account(userId, companyId), product: { connect: { id: input.productId } }, presentation: { connect: { id: presentation.id } }, warehouse: { connect: { id: input.warehouseId } }, ...(input.customerId && { customer: { connect: { id: input.customerId } } }), previousQuantity: previous, newQuantity: next, reason: input.reason })
+      await db.inventoryMovement.create({ data: { productId: input.productId, presentationId: presentation.id, warehouseId: input.warehouseId, createdByUserId: userId, type: input.delta > 0 ? 'ADJUSTMENT_IN' : 'ADJUSTMENT_OUT', quantity: baseDelta, reference: adjustment.id, note: input.reason } })
       return adjustment
     })
   },
