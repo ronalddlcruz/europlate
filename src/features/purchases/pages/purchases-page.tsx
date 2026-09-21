@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CalendarDays, ChevronDown, Eye, ExternalLink, FileText, Package, Paperclip, Pencil, Plus, Search, Trash2, X } from 'lucide-react'
 import { Button } from '../../../components/ui/button'
@@ -164,7 +164,7 @@ function PurchaseDialog({ catalog, productsCatalog, saving, onClose, onSave }: {
 <thead>
 <tr className="bg-[#f7f9fc] text-[11px] uppercase tracking-[.4px] text-muted">{['Producto', 'Almacén', 'UM', 'Cant.', 'Costo unit.', 'Subtotal', ''].map(header => <th key={header} className="border-b border-border px-3 py-3 font-semibold">{header}</th>)}</tr>
 </thead>
-<tbody>{lines.map((line, index) => <tr className="border-b border-border last:border-0" key={index}>
+<tbody>{lines.map((line, index) => <Fragment key={index}><tr className="border-b border-border last:border-0">
 <td className="min-w-[280px] p-2">
 <div className="relative">
 <div className="flex items-center gap-1.5">
@@ -195,7 +195,6 @@ function PurchaseDialog({ catalog, productsCatalog, saving, onClose, onSave }: {
 </div>
   {line.isVariable && line.variableSubcategoryId && <button type="button" onClick={() => setInlineVariableIndex(current => current === index ? null : index)} aria-label={inlineVariableIndex === index ? 'Ocultar atributos del producto variable' : 'Editar atributos del producto variable'} title={inlineVariableIndex === index ? 'Ocultar atributos' : 'Editar atributos'} className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-blue-200 bg-blue-50 text-brand transition hover:bg-blue-100"><Pencil className="h-4 w-4" /></button>}
 </div>
-  {inlineVariableIndex === index && editingVariableLine && variableWizardBase && <ProductWizard floating item={variableWizardBase} variants={variableWizardVariants} products={productsCatalog.products.map(product => product.base)} categories={productsCatalog.categories} units={productsCatalog.units} presetSubcategoryId={editingVariableLine.variableSubcategoryId} onClose={() => { setInlineVariableIndex(null); if (!editingVariableLine.variableDraft) patch(index, { isVariable: false, variableSubcategoryId: '' }) }} saveLabel="Aplicar atributos" onSave={({ base, variants }) => { const variant = variants[0]; patch(index, { variableDraft: { name: base.name, values: variant.values, unit: variant.unit, factor: variant.factor, minimumStock: variant.minimum, stock: variant.stock, roles: base.roles } }); setInlineVariableIndex(null) }} />}
 </div>
 </td>
 <td className="p-2">
@@ -216,7 +215,7 @@ function PurchaseDialog({ catalog, productsCatalog, saving, onClose, onSave }: {
 <X className="h-4 w-4" />
 </button>
 </td>
-</tr>)}</tbody>
+</tr>{inlineVariableIndex === index && editingVariableLine && variableWizardBase && <tr className="border-b border-blue-200 bg-blue-50/60"><td colSpan={7} className="px-2 pb-2"><ProductWizard floating inline item={variableWizardBase} variants={variableWizardVariants} products={productsCatalog.products.map(product => product.base)} categories={productsCatalog.categories} units={productsCatalog.units} presetSubcategoryId={editingVariableLine.variableSubcategoryId} onClose={() => { setInlineVariableIndex(null); if (!editingVariableLine.variableDraft) patch(index, { isVariable: false, variableSubcategoryId: '' }) }} saveLabel="Aplicar atributos" onSave={({ base, variants }) => { const variant = variants[0]; patch(index, { variableDraft: { name: base.name, values: variant.values, unit: variant.unit, factor: variant.factor, minimumStock: variant.minimum, stock: variant.stock, roles: base.roles } }); setInlineVariableIndex(null) }} /></td></tr>}</Fragment>)}</tbody>
 </table>
 </div>
 <Button type="button" size="sm" variant="outline" className="mt-3" onClick={() => setLines(current => [...current, { productId: '', presentationId: '', variableSubcategoryId: '', isVariable: false, warehouseId: catalog.warehouses[0]?.id ?? '', quantity: '', price: '' }])}>

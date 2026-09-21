@@ -54,6 +54,11 @@ const configuredAttributeData = (attribute: { attributeDefinitionId?: string | n
   const { attributeDefinitionId, attributeDefinition: _definition, id: _id, ...data } = attribute as typeof attribute & { id?: string; attributeDefinition?: unknown }
   return { ...data, suffix: data.suffix ?? null, position, ...(attributeDefinitionId && { attributeDefinition: { connect: { id: attributeDefinitionId } } }) }
 }
+const validateWeightAttributes = (attributes: { dataType: 'TEXT' | 'NUMBER'; isWeight?: boolean }[]) => {
+  const weights = attributes.filter(attribute => attribute.isWeight)
+  if (weights.some(attribute => attribute.dataType !== 'NUMBER')) throw new AppError('WEIGHT_ATTRIBUTE_NOT_NUMERIC', 'El atributo configurado como peso debe ser numérico.', 422)
+  if (weights.length > 1) throw new AppError('PRODUCT_WEIGHT_ATTRIBUTE_DUPLICATE', 'Un producto solo puede tener un atributo configurado como peso.', 422)
+}
 const subcategoryCodes = (subcategories: CreateCategoryInput['subcategories']) => {
   const used = new Set<string>()
   return subcategories.map(subcategory => {
@@ -132,7 +137,7 @@ export const productService = {
     const missing = attributes.find(attribute => attribute.required && !input.values[attribute.id]?.trim())
     if (missing) throw new AppError('VARIABLE_ATTRIBUTE_REQUIRED', `Completa el atributo obligatorio: ${missing.name}.`, 422)
     const name = input.name ?? [subcategory.name, ...attributes.map(attribute => input.values[attribute.id] ? `${input.values[attribute.id]}${attribute.suffix ? ` ${attribute.suffix}` : ''}` : '')].filter(Boolean).join(' · ')
-    return this.create({ name, categoryId: category.id, subcategoryId: subcategory.id, status: input.status, roles: input.roles, variantType: 'BASIC', immediateConsumption: true, attributes: attributes.map(attribute => ({ id: attribute.id, name: attribute.name, dataType: attribute.dataType, suffix: attribute.suffix, required: attribute.required, status: attribute.status, useInSubtotal: false })), presentations: [{ name, unitId: input.unitId, attributeValues: input.values, factor: input.factor, minimumStock: input.minimumStock, currentStock: input.currentStock, status: input.status }] }, db)
+    return this.create({ name, categoryId: category.id, subcategoryId: subcategory.id, status: input.status, roles: input.roles, variantType: 'BASIC', immediateConsumption: true, attributes: attributes.map(attribute => ({ id: attribute.id, name: attribute.name, dataType: attribute.dataType, suffix: attribute.suffix, required: attribute.required, status: attribute.status, useInSubtotal: false, isWeight: attribute.attributeDefinition?.isWeight ?? false })), presentations: [{ name, unitId: input.unitId, attributeValues: input.values, factor: input.factor, minimumStock: input.minimumStock, currentStock: input.currentStock, status: input.status }] }, db)
   },
   async getCatalog(filters: { search?: string; status?: ProductStatus; role?: 'MERCHANDISE' | 'SUPPLY' | 'FINISHED_PRODUCT' }) {
     const where: Prisma.ProductWhereInput = { ...(filters.status && { status: filters.status }), ...(filters.role && { roles: { has: filters.role } }), ...(filters.search && { OR: [{ code: { contains: filters.search, mode: 'insensitive' } }, { name: { contains: filters.search, mode: 'insensitive' } }, { presentations: { some: { name: { contains: filters.search, mode: 'insensitive' } } } }] }) }
@@ -140,6 +145,7 @@ export const productService = {
   },
   async getById(id: string) { const product = await productRepository.findById(id); if (!product) throw new AppError('PRODUCT_NOT_FOUND', 'Producto no encontrado.', 404); return product },
   async create(input: CreateProductInput, existingTransaction?: Prisma.TransactionClient) {
+    validateWeightAttributes(input.attributes)
     const code = await nextProductCode(input.categoryId, input.subcategoryId)
     await validateSubcategory(input.categoryId, input.subcategoryId)
     const persist = async (db: Prisma.TransactionClient) => {
@@ -154,6 +160,7 @@ export const productService = {
     if (input.subcategoryId !== undefined) await validateSubcategory(input.categoryId, input.subcategoryId)
     const data = productData(input)
     if (input.attributes !== undefined) {
+      validateWeightAttributes(input.attributes)
       const retainedIds = input.attributes.flatMap(attribute => attribute.id ? [attribute.id] : [])
       data.attributes = {
         deleteMany: retainedIds.length ? { id: { notIn: retainedIds } } : {},
@@ -187,7 +194,9 @@ export const productService = {
     return productRepository.createAttributeDefinition({ ...input, suffix: input.suffix ?? null })
   },
   async updateAttributeDefinition(id: string, input: Partial<CreateAttributeDefinitionInput>) {
-    if (!await productRepository.findAttributeDefinition(id)) throw new AppError('ATTRIBUTE_NOT_FOUND', 'Atributo no encontrado.', 404)
+    const existing = await productRepository.findAttributeDefinition(id)
+    if (!existing) throw new AppError('ATTRIBUTE_NOT_FOUND', 'Atributo no encontrado.', 404)
+    if ((input.isWeight ?? existing.isWeight) && (input.dataType ?? existing.dataType) !== 'NUMBER') throw new AppError('WEIGHT_ATTRIBUTE_NOT_NUMERIC', 'El atributo configurado como peso debe ser numérico.', 422)
     if (input.code) { const duplicate = await productRepository.findAttributeDefinitionByCode(input.code); if (duplicate && duplicate.id !== id) throw new AppError('ATTRIBUTE_CODE_EXISTS', 'El código del atributo ya existe.', 409) }
     if (input.name) { const duplicate = await productRepository.findAttributeDefinitionByName(input.name); if (duplicate && duplicate.id !== id) throw new AppError('ATTRIBUTE_NAME_EXISTS', 'El nombre del atributo ya existe.', 409) }
     return productRepository.updateAttributeDefinition(id, { ...input, ...(input.suffix !== undefined && { suffix: input.suffix ?? null }) })

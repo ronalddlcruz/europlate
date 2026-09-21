@@ -18,11 +18,13 @@ type ApiAttribute = {
   suffix: string | null;
   status: "ACTIVE" | "INACTIVE";
   useInSubtotal?: boolean;
+  isWeight?: boolean;
   attributeDefinition?: {
     id: string;
     suffix: string | null;
     name: string;
     dataType: "TEXT" | "NUMBER";
+    isWeight?: boolean;
   } | null;
 };
 type ApiSubcategory = {
@@ -31,6 +33,7 @@ type ApiSubcategory = {
   name: string;
   description: string | null;
   status: "ACTIVE" | "INACTIVE";
+  isWeight?: boolean;
   isVariable: boolean;
   attributes: ApiAttribute[];
 };
@@ -81,6 +84,7 @@ type ApiAttributeDefinition = {
   dataType: "TEXT" | "NUMBER";
   suffix: string | null;
   status: "ACTIVE" | "INACTIVE";
+  isWeight: boolean;
 };
 const toRole: Record<ApiProduct["roles"][number], ProductRole> = {
   MERCHANDISE: "Mercadería",
@@ -106,11 +110,13 @@ const mapAttribute = (attribute: ApiAttribute): Attribute => ({
   suffix: attribute.suffix ?? "",
   status: toStatus(attribute.status),
   useInSubtotal: attribute.useInSubtotal,
+  isWeight: attribute.isWeight ?? false,
 });
 const mapConfiguredAttribute = (attribute: ApiAttribute) => ({
   ...mapAttribute(attribute),
   suffix: attribute.attributeDefinition?.suffix ?? attribute.suffix ?? "",
   definitionId: attribute.attributeDefinition?.id ?? null,
+  isWeight: attribute.attributeDefinition?.isWeight ?? attribute.isWeight ?? false,
 });
 const mapCategory = (category: ApiCategory): ProductCategory => ({
   id: category.id,
@@ -175,6 +181,7 @@ const mapAttributeDefinition = (
   type: attribute.dataType === "NUMBER" ? "Numérico" : "Texto",
   suffix: attribute.suffix ?? "",
   status: toStatus(attribute.status),
+  isWeight: attribute.isWeight ?? false,
 });
 
 export async function loadCatalog() {
@@ -213,6 +220,7 @@ function productPayload(
       required: attribute.required,
       status: fromStatus(attribute.status ?? "Activo"),
       useInSubtotal: attribute.useInSubtotal ?? false,
+      isWeight: attribute.isWeight ?? false,
     })),
     presentations: variants.map((variant) => {
       const unit = units.find(
@@ -357,6 +365,7 @@ export async function createAttributeDefinition(
         dataType: attribute.type === "Numérico" ? "NUMBER" : "TEXT",
         suffix: attribute.suffix || null,
         status: fromStatus(attribute.status),
+        isWeight: attribute.isWeight,
       }),
     }),
   );
@@ -374,6 +383,7 @@ export async function updateAttributeDefinition(
         dataType: attribute.type === "Numérico" ? "NUMBER" : "TEXT",
         suffix: attribute.suffix || null,
         status: fromStatus(attribute.status),
+        isWeight: attribute.isWeight,
       }),
     }),
   );

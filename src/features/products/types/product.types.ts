@@ -8,6 +8,7 @@ export interface Attribute {
   suffix: string;
   status?: ProductStatus;
   useInSubtotal?: boolean;
+  isWeight?: boolean;
 }
 export interface AttributeDefinition {
   id: string;
@@ -16,6 +17,7 @@ export interface AttributeDefinition {
   type: "Texto" | "Numérico";
   suffix: string;
   status: ProductStatus;
+  isWeight: boolean;
 }
 export interface ProductBase {
   id: string;

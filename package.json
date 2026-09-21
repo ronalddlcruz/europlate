@@ -13,6 +13,7 @@
     "seed": "node scripts/seed.js",
     "server:dev": "npm run dev:api",
     "server:build": "tsc -p server/tsconfig.json",
+    "test:imports": "tsx --test server/src/modules/imports/services/import-line-calculator.test.ts",
     "db:generate": "prisma generate",
     "db:validate": "prisma validate",
     "db:migrate": "prisma migrate dev",

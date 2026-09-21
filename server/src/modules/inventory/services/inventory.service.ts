@@ -17,6 +17,7 @@ async function validateProductLine(companyId: string, input: { productId: string
   return { product, presentation, warehouse }
 }
 const account = (userId: string, companyId: string) => ({ createdBy: { connect: { id: userId } }, company: { connect: { id: companyId } } })
+const reservationFactor = (material: { product: { presentations: { factor: Prisma.Decimal }[] } }) => material.product.presentations[0]?.factor ?? new Prisma.Decimal(1)
 
 export const inventoryService = {
   async stock(companyId: string, filters: { search?: string; warehouseId?: string }) {
@@ -24,7 +25,7 @@ export const inventoryService = {
     const entriesByProduct = new Map<string, typeof stocks>()
     for (const entry of stocks) entriesByProduct.set(entry.productId, [...(entriesByProduct.get(entry.productId) ?? []), entry])
     const reservedByProduct = new Map<string, Prisma.Decimal>()
-    for (const material of reserved) reservedByProduct.set(material.productId, (reservedByProduct.get(material.productId) ?? new Prisma.Decimal(0)).plus(material.quantity.mul(material.presentation.factor)))
+    for (const material of reserved) reservedByProduct.set(material.productId, (reservedByProduct.get(material.productId) ?? new Prisma.Decimal(0)).plus(material.quantity.mul(reservationFactor(material))))
     return products.map(product => {
       const presentation = product.presentations.find(item => item.status === ProductStatus.ACTIVE) ?? product.presentations[0]
       const entries = entriesByProduct.get(product.id) ?? []
@@ -32,7 +33,7 @@ export const inventoryService = {
       const recordedTotal = visibleEntries.reduce((sum, entry) => sum.plus(entry.quantity), new Prisma.Decimal(0))
       const total = visibleEntries.length ? recordedTotal : new Prisma.Decimal(presentation?.currentStock ?? 0).mul(presentation?.factor ?? 1)
       const reservedValue = filters.warehouseId
-        ? reserved.filter(item => item.warehouseId === filters.warehouseId && item.productId === product.id).reduce((sum, item) => sum.plus(item.quantity.mul(item.presentation.factor)), new Prisma.Decimal(0))
+        ? reserved.filter(item => item.warehouseId === filters.warehouseId && item.productId === product.id).reduce((sum, item) => sum.plus(item.quantity.mul(reservationFactor(item))), new Prisma.Decimal(0))
         : reservedByProduct.get(product.id) ?? new Prisma.Decimal(0)
       return { productId: product.id, code: product.code, product: product.name, category: product.category?.name ?? 'Sin categoría', subcategory: product.subcategory?.name ?? '—', presentationId: presentation?.id ?? null, unit: presentation?.unit.code ?? '—', minimum: Number(presentation?.minimumStock ?? 0), total: Number(total), available: Number(Prisma.Decimal.max(total.minus(reservedValue), 0)), inProduction: Number(reservedValue), costUsd: 0, costPen: 0, status: product.status, warehouses: entries.map(entry => ({ id: entry.warehouseId, name: entry.warehouse.name, quantity: Number(entry.quantity) })) }
     }).filter(item => !filters.search || `${item.code} ${item.product}`.toLowerCase().includes(filters.search.toLowerCase()))

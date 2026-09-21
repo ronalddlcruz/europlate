@@ -1,15 +1,20 @@
 import { z } from 'zod'
 
 const status = z.enum(['IN_TRANSIT', 'RECEIVED', 'CANCELLED'])
+const weightInput = {
+  weightAttributeId: z.string().cuid().optional(),
+  weightValue: z.coerce.number().positive().optional(),
+}
 const catalogItem = z.object({
   productId: z.string().trim().min(1),
   presentationId: z.string().trim().min(1),
   warehouseId: z.string().trim().min(1),
   quantity: z.coerce.number().positive(),
   unitCostUsd: z.coerce.number().nonnegative(),
+  ...weightInput,
 })
 const variableItem = z.object({
-  variableSubcategoryId: z.string().cuid(), name: z.string().trim().min(1).max(160), values: z.record(z.string().trim()).default({}), unitCode: z.string().trim().min(1).max(12), factor: z.coerce.number().positive().default(1), minimumStock: z.coerce.number().nonnegative().default(0), roles: z.array(z.enum(['MERCHANDISE', 'SUPPLY', 'FINISHED_PRODUCT'])).min(1), warehouseId: z.string().cuid(), quantity: z.coerce.number().positive(), unitCostUsd: z.coerce.number().nonnegative(),
+  variableSubcategoryId: z.string().cuid(), name: z.string().trim().min(1).max(160), values: z.record(z.string().trim()).default({}), unitCode: z.string().trim().min(1).max(12), factor: z.coerce.number().positive().default(1), minimumStock: z.coerce.number().nonnegative().default(0), roles: z.array(z.enum(['MERCHANDISE', 'SUPPLY', 'FINISHED_PRODUCT'])).min(1), warehouseId: z.string().cuid(), quantity: z.coerce.number().positive(), unitCostUsd: z.coerce.number().nonnegative(), ...weightInput,
 })
 const item = z.union([catalogItem, variableItem])
 const document = z.object({

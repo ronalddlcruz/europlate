@@ -994,5 +994,6 @@ function toConfigured(definition: AttributeDefinition): ConfiguredAttribute {
     suffix: definition.suffix,
     required: false,
     status: definition.status,
+    isWeight: definition.isWeight,
   };
 }

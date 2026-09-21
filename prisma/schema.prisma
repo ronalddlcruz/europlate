@@ -72,6 +72,11 @@ enum ImportStatus {
   CANCELLED
 }
 
+enum ImportCalculationType {
+  STANDARD
+  WEIGHT_BASED
+}
+
 enum ProductionStatus {
   PLANNED
   IN_PROGRESS
@@ -274,6 +279,7 @@ model AttributeDefinition {
   dataType AttributeDataType @default(TEXT)
   suffix String?
   status ProductStatus @default(ACTIVE)
+  isWeight Boolean @default(false)
   categoryLinks CategoryAttribute[]
   subcategoryLinks SubcategoryAttribute[]
   createdAt DateTime @default(now())
@@ -324,6 +330,7 @@ model ProductAttribute {
   required Boolean @default(false)
   status ProductStatus @default(ACTIVE)
   useInSubtotal Boolean @default(false)
+  isWeight Boolean @default(false)
   position Int @default(0)
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
   @@unique([productId, name])
@@ -575,6 +582,11 @@ model ImportItem {
   warehouseId String
   quantity Decimal @db.Decimal(14, 3)
   unitCostUsd Decimal @db.Decimal(14, 4)
+  calculationType ImportCalculationType @default(STANDARD)
+  weightAttributeId String?
+  weightValue Decimal? @db.Decimal(14, 3)
+  weightUnit String?
+  subtotalUsd Decimal @default(0) @db.Decimal(14, 2)
   import Import @relation(fields: [importId], references: [id], onDelete: Cascade)
   product Product @relation(fields: [productId], references: [id])
   presentation ProductPresentation @relation(fields: [presentationId], references: [id])
