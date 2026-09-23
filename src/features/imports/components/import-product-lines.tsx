@@ -42,11 +42,11 @@ function CatalogPicker({ items, value, onChange, label }: { items: PickerItem[];
   return <div ref={ref} className="relative"><div className={open ? 'flex h-10 items-center rounded-md border border-brand bg-white px-3 ring-1 ring-brand' : 'flex h-10 items-center rounded-md border border-border bg-white px-3'}><Search className="mr-2 h-4 w-4 text-slate-400" /><input value={query} onFocus={() => setOpen(true)} onChange={event => { setQuery(event.target.value); onChange(''); setOpen(true) }} placeholder={`Buscar ${label}...`} className="min-w-0 flex-1 bg-transparent text-sm outline-none" /><button type="button" onClick={() => setOpen(current => !current)}><ChevronDown className="h-4 w-4 text-slate-400" /></button></div>{open && <div className="absolute z-40 mt-1 w-full overflow-hidden rounded-md border border-border bg-white shadow-panel"><p className="border-b border-border px-3 py-2 text-[10px] font-semibold uppercase text-muted">{filtered.length} resultado(s)</p><div className="max-h-56 overflow-y-auto">{filtered.map(item => <button type="button" key={item.id} onClick={() => { onChange(item.id); setOpen(false) }} className="flex w-full gap-3 px-3 py-2.5 text-left hover:bg-blue-50"><span className="rounded bg-blue-50 px-2 py-1.5 text-[10px] font-bold text-brand">{item.title.slice(0, 3).toUpperCase()}</span><span><span className="block text-sm font-medium">{item.title}</span>{item.detail && <span className="text-xs text-muted">{item.detail}</span>}</span></button>)}{!filtered.length && <p className="p-4 text-center text-sm text-muted">No se encontraron resultados.</p>}</div></div>}</div>
 }
 
-type Props = { catalog: ImportCatalog; units: Unit[]; lines: ImportDraftLine[]; onChange: (lines: ImportDraftLine[]) => void; onConfigureVariable: (index: number, subcategoryId: string) => void; onToggleVariableEditor: (index: number) => void; renderVariableEditor: (index: number) => ReactNode }
+type Props = { catalog: ImportCatalog; units: Unit[]; currency: 'USD' | 'PEN'; lines: ImportDraftLine[]; onChange: (lines: ImportDraftLine[]) => void; onConfigureVariable: (index: number, subcategoryId: string) => void; onToggleVariableEditor: (index: number) => void; renderVariableEditor: (index: number) => ReactNode }
 export function lineWeight(line: ImportDraftLine) { return line.isVariable ? line.variableDraft?.weight : line.weight }
 export function lineSubtotal(line: ImportDraftLine) { const weight = lineWeight(line); return calculateImportLineSubtotal({ calculationType: weight ? 'WEIGHT_BASED' : 'STANDARD', weight: weight?.value, quantity: line.quantity, unitCostUsd: line.unitCostUsd }) }
 
-export function ImportProductLines({ catalog, units, lines, onChange, onConfigureVariable, onToggleVariableEditor, renderVariableEditor }: Props) {
+export function ImportProductLines({ catalog, units, currency, lines, onChange, onConfigureVariable, onToggleVariableEditor, renderVariableEditor }: Props) {
   const [weightEditorIndex, setWeightEditorIndex] = useState<number | null>(null)
   const patch = (index: number, value: Partial<ImportDraftLine>) => onChange(lines.map((line, position) => position === index ? { ...line, ...value } : line))
   const productFor = (line: ImportDraftLine) => catalog.products.find(product => product.id === line.productId)
@@ -62,6 +62,7 @@ export function ImportProductLines({ catalog, units, lines, onChange, onConfigur
     ...catalog.variableSubcategories.map(subcategory => ({ id: `${variableSubcategoryPrefix}${subcategory.id}`, title: line.isVariable && line.variableSubcategoryId === subcategory.id && line.variableDraft ? line.variableDraft.name : subcategory.name, detail: `Producto variable · ${subcategory.category.name}${subcategory.code ? ` · ${subcategory.code}` : ''}` })),
   ]
   const total = lines.reduce((sum, line) => sum + lineSubtotal(line), 0)
+  const currencySymbol = currency === 'PEN' ? 'S/' : 'USD'
   const patchWeight = (index: number, value: number) => {
     const line = lines[index]
     const weight = lineWeight(line)
@@ -100,7 +101,7 @@ export function ImportProductLines({ catalog, units, lines, onChange, onConfigur
               <td className="p-2">{line.isVariable && line.variableDraft ? <select className={selectClass} value={line.variableDraft.unit} onChange={event => patch(index, { variableDraft: { ...line.variableDraft!, unit: event.target.value } })}>{units.filter(unit => unit.status === 'Activo').map(unit => <option key={unit.code} value={unit.code}>{unit.code}</option>)}</select> : <Input value={line.isVariable ? '' : presentationFor(line)?.unit.code ?? ''} placeholder="UM" readOnly />}</td>
               <td className="p-2"><Input type="number" min="0" step="any" value={line.quantity || ''} placeholder="0" onFocus={event => event.currentTarget.select()} onChange={event => patch(index, { quantity: Number(event.target.value) || 0 })} /></td>
               <td className="p-2">{weight && <span className="mb-1 block text-[10px] font-semibold uppercase tracking-[.35px] text-brand">Costo por {weight.unit || 'unidad'}</span>}<Input type="number" min="0" step="0.0001" value={line.unitCostUsd || ''} placeholder="0.00" onFocus={event => event.currentTarget.select()} onChange={event => patch(index, { unitCostUsd: Number(event.target.value) || 0 })} /></td>
-              <td className="p-2 font-mono text-sm text-amber-600">{money(subtotal)}</td>
+              <td className="p-2 font-mono text-sm text-amber-600">{currencySymbol} {money(subtotal)}</td>
               <td className="p-2 text-center"><Button type="button" variant="outline" size="icon" className="border-red-300 bg-red-50 text-red-500 hover:bg-red-100 hover:text-red-600" aria-label="Eliminar producto" onClick={() => onChange(lines.length > 1 ? lines.filter((_, position) => position !== index) : lines)}><Trash2 className="h-4 w-4" /></Button></td>
             </tr>
             {variableEditor && <tr className="border-b border-blue-200 bg-blue-50/60"><td colSpan={7} className="px-2 pb-2"><div className="min-w-[780px]"><VariableEditorInline editor={variableEditor} /></div></td></tr>}
@@ -109,7 +110,7 @@ export function ImportProductLines({ catalog, units, lines, onChange, onConfigur
       </table>
     </div>
     <Button type="button" variant="outline" size="sm" className="mt-2" onClick={() => onChange([...lines, createImportLine(catalog.warehouses[0]?.id ?? '')])}><Plus className="h-3.5 w-3.5" />Agregar producto</Button>
-    <div className="mt-4 text-right"><span className="mr-1 text-xs font-semibold text-muted">TOTAL:</span><span className="font-mono text-lg font-medium text-amber-600">USD {money(total)}</span></div>
+    <div className="mt-4 text-right"><span className="mr-1 text-xs font-semibold text-muted">TOTAL:</span><span className="font-mono text-lg font-medium text-amber-600">{currencySymbol} {money(total)}</span></div>
   </section>
 }
 

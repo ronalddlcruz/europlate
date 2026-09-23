@@ -12,7 +12,7 @@ const Status = ({ status }: { status: ProductionStatus }) => <span className={`i
 
 export function ProductionPage() {
   const client = useQueryClient(); const [tab, setTab] = useState<Tab>('orders'); const [newOrder, setNewOrder] = useState(false); const [completing, setCompleting] = useState<ProductionOrder | null>(null); const [notice, setNotice] = useState('')
-  const ordersQuery = useQuery({ queryKey: ['production'], queryFn: listProductionOrders, staleTime: 30_000 }); const catalogQuery = useQuery({ queryKey: ['production', 'catalog'], queryFn: loadProductionCatalog, staleTime: 5 * 60_000, gcTime: 15 * 60_000, refetchOnWindowFocus: false })
+  const ordersQuery = useQuery({ queryKey: ['production'], queryFn: listProductionOrders, staleTime: 30_000 }); const catalogQuery = useQuery({ queryKey: ['production', 'catalog'], queryFn: loadProductionCatalog, staleTime: 0, gcTime: 15 * 60_000, refetchOnMount: 'always', refetchOnWindowFocus: true })
   const notify = (message: string) => { setNotice(message); window.setTimeout(() => setNotice(''), 3200) }
   const refreshInventoryViews = () => Promise.all([
     client.invalidateQueries({ queryKey: ['inventory'], refetchType: 'all' }),

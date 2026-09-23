@@ -6,7 +6,7 @@ import type { CreateCustomerInput, UpdateCustomerInput } from '../schemas/custom
 
 export const customerService = {
   list(companyId: string, filters: { search?: string; status?: 'ACTIVE' | 'INACTIVE' }) {
-    const where: Prisma.CustomerWhereInput = { companyId, ...(filters.status && { status: filters.status }), ...(filters.search && { OR: [{ name: { contains: filters.search, mode: 'insensitive' } }, { phone: { contains: filters.search, mode: 'insensitive' } }, { email: { contains: filters.search, mode: 'insensitive' } }] }) }
+    const where: Prisma.CustomerWhereInput = { companyId, ...(filters.status && { status: filters.status }), ...(filters.search && { OR: [{ name: { contains: filters.search, mode: 'insensitive' } }, { ruc: { contains: filters.search, mode: 'insensitive' } }, { phone: { contains: filters.search, mode: 'insensitive' } }, { email: { contains: filters.search, mode: 'insensitive' } }] }) }
     return customerRepository.findMany(where)
   },
   async getById(companyId: string, id: string) {
@@ -14,7 +14,14 @@ export const customerService = {
     if (!customer) throw new AppError('CUSTOMER_NOT_FOUND', 'Cliente no encontrado.', 404)
     return customer
   },
-  create(companyId: string, input: CreateCustomerInput) { return customerRepository.create(prisma, { ...input, company: { connect: { id: companyId } } }) },
-  async update(companyId: string, id: string, input: UpdateCustomerInput) { await this.getById(companyId, id); return customerRepository.update(prisma, id, input) },
+  async create(companyId: string, input: CreateCustomerInput) {
+    if (input.ruc && await customerRepository.findByRuc(companyId, input.ruc)) throw new AppError('CUSTOMER_RUC_EXISTS', 'Ya existe un cliente con este RUC.', 409)
+    return customerRepository.create(prisma, { ...input, company: { connect: { id: companyId } } })
+  },
+  async update(companyId: string, id: string, input: UpdateCustomerInput) {
+    await this.getById(companyId, id)
+    if (input.ruc) { const duplicate = await customerRepository.findByRuc(companyId, input.ruc); if (duplicate && duplicate.id !== id) throw new AppError('CUSTOMER_RUC_EXISTS', 'Ya existe un cliente con este RUC.', 409) }
+    return customerRepository.update(prisma, id, input)
+  },
   async remove(companyId: string, id: string) { await this.getById(companyId, id); await customerRepository.remove(prisma, id) },
 }

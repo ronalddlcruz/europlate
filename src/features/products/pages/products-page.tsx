@@ -159,6 +159,15 @@ export function ProductsPage() {
   const refreshCatalog = async () => {
     await queryClient.invalidateQueries({ queryKey: ["products", "catalog"] });
   };
+  const refreshProductConsumers = () =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["inventory"], refetchType: "all" }),
+      queryClient.invalidateQueries({ queryKey: ["reports"], refetchType: "all" }),
+      queryClient.invalidateQueries({ queryKey: ["dashboard"], refetchType: "all" }),
+      queryClient.invalidateQueries({ queryKey: ["production", "catalog"], refetchType: "all" }),
+      queryClient.invalidateQueries({ queryKey: ["imports", "catalog"], refetchType: "all" }),
+      queryClient.invalidateQueries({ queryKey: ["purchases", "catalog"], refetchType: "all" }),
+    ]);
   const productMutation = useMutation({
     mutationFn: ({
       base,
@@ -197,7 +206,6 @@ export function ProductsPage() {
         },
       );
       setModal(null);
-      notify("Guardando producto en segundo plano…");
       return { previous, optimisticId: base.id, editing };
     },
     onSuccess: (saved, _variables, context) => {
@@ -221,8 +229,7 @@ export function ProductsPage() {
         },
       );
       setSearch("");
-      void queryClient.invalidateQueries({ queryKey: ["dashboard"], refetchType: "all" });
-      void queryClient.invalidateQueries({ queryKey: ["reports"], refetchType: "all" });
+      void refreshProductConsumers();
       notify("Producto guardado y verificado en la base de datos");
     },
     onError: (reason, _variables, context) => {
@@ -274,6 +281,7 @@ export function ProductsPage() {
           : "No se pudo actualizar el estado del producto",
       );
     },
+    onSuccess: () => void refreshProductConsumers(),
     onSettled: () => void refreshCatalog(),
   });
   const unitMutation = useMutation({

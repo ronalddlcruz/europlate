@@ -360,7 +360,6 @@ export async function createAttributeDefinition(
     await api<ApiAttributeDefinition>("/api/products/attributes", {
       method: "POST",
       body: JSON.stringify({
-        code: attribute.code,
         name: attribute.name,
         dataType: attribute.type === "Numérico" ? "NUMBER" : "TEXT",
         suffix: attribute.suffix || null,
@@ -378,7 +377,6 @@ export async function updateAttributeDefinition(
     await api<ApiAttributeDefinition>(`/api/products/attributes/${id}`, {
       method: "PATCH",
       body: JSON.stringify({
-        code: attribute.code,
         name: attribute.name,
         dataType: attribute.type === "Numérico" ? "NUMBER" : "TEXT",
         suffix: attribute.suffix || null,

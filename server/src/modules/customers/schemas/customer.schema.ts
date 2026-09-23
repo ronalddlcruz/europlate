@@ -2,9 +2,11 @@ import { z } from 'zod'
 
 const statusSchema = z.enum(['ACTIVE', 'INACTIVE'])
 const emptyToUndefined = (value: unknown) => typeof value === 'string' && !value.trim() ? undefined : value
+const ruc = z.string().trim().regex(/^\d{11}$/, 'El RUC debe tener exactamente 11 dígitos.')
 
 export const customerPayloadSchema = z.object({
   name: z.string().trim().min(1).max(160),
+  ruc: z.preprocess(emptyToUndefined, ruc.optional()),
   phone: z.string().trim().min(1).max(40),
   email: z.string().trim().email().max(160),
   address: z.string().trim().min(1).max(240),

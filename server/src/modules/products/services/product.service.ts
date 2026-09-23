@@ -1,4 +1,4 @@
-import { Prisma, ProductStatus } from '@prisma/client'
+import { Prisma, ProductRoleType, ProductStatus } from '@prisma/client'
 import { prisma } from '../../../infrastructure/database/prisma.client.js'
 import { AppError } from '../../../shared/errors/app-error.js'
 import { productRepository } from '../repositories/product.repository.js'
@@ -17,6 +17,22 @@ const configuredCodePart = (configuredCode: string | null | undefined, name: str
   return configured || codePart(name, fallbackLength)
 }
 const escapeExpression = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+const attributeCodeBase = (name: string) => name
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .toUpperCase()
+  .replace(/[^A-Z0-9]+/g, '-')
+  .replace(/^-+|-+$/g, '')
+  .slice(0, 24) || 'ATRIBUTO'
+async function nextAttributeDefinitionCode(name: string) {
+  const base = attributeCodeBase(name)
+  const codes = new Set((await productRepository.listAttributeDefinitionCodes()).map(item => item.code))
+  if (!codes.has(base)) return base
+  let suffix = 2
+  while (codes.has(`${base}-${suffix}`)) suffix += 1
+  return `${base}-${suffix}`
+}
+type ProductMutationContext = { companyId: string; userId: string }
 async function nextProductCode(categoryId?: string | null, subcategoryId?: string | null) {
   const [products, categories] = await Promise.all([productRepository.listCodes(), productRepository.listCategories()])
   const category = categories.find(item => item.id === categoryId)
@@ -127,9 +143,40 @@ async function synchronizePresentationAttributeValues(
     await db.productPresentation.update({ where: { id: target.id }, data: { attributeValues } })
   }))
 }
+async function initializeProductStock(
+  db: Prisma.TransactionClient,
+  product: { id: string; code: string; roles: ProductRoleType[]; presentations: { id: string; name: string; factor: Prisma.Decimal; currentStock: Prisma.Decimal }[] },
+  context?: ProductMutationContext,
+) {
+  if (!context) return
+  const quantity = product.presentations.reduce((total, presentation) => total.plus(presentation.currentStock.mul(presentation.factor)), new Prisma.Decimal(0))
+  if (quantity.lte(0)) return
+  const warehouses = await db.warehouse.findMany({ where: { companyId: context.companyId, status: ProductStatus.ACTIVE }, orderBy: { name: 'asc' } })
+  const preferredName = product.roles.includes(ProductRoleType.FINISHED_PRODUCT) ? /terminad/i : product.roles.includes(ProductRoleType.SUPPLY) ? /insumo/i : /principal/i
+  const warehouse = warehouses.find(item => preferredName.test(item.name)) ?? warehouses[0]
+  if (!warehouse) throw new AppError('INITIAL_STOCK_WAREHOUSE_REQUIRED', 'Crea un almacén activo antes de registrar un producto con stock inicial.', 422)
+  const presentation = product.presentations[0]
+  await db.stock.upsert({
+    where: { productId_warehouseId: { productId: product.id, warehouseId: warehouse.id } },
+    create: { productId: product.id, warehouseId: warehouse.id, quantity },
+    update: { quantity: { increment: quantity } },
+  })
+  await db.inventoryMovement.create({
+    data: {
+      productId: product.id,
+      presentationId: presentation?.id,
+      warehouseId: warehouse.id,
+      createdByUserId: context.userId,
+      type: 'INITIAL_STOCK',
+      quantity,
+      reference: product.code,
+      note: 'Stock inicial registrado al crear el producto.',
+    },
+  })
+}
 
 export const productService = {
-  async createFromVariableSubcategory(input: CreateVariableProductInput, db?: Prisma.TransactionClient) {
+  async createFromVariableSubcategory(input: CreateVariableProductInput, db?: Prisma.TransactionClient, context?: ProductMutationContext) {
     const category = (await productRepository.listCategories()).find(value => value.subcategories.some(subcategory => subcategory.id === input.subcategoryId))
     const subcategory = category?.subcategories.find(value => value.id === input.subcategoryId)
     if (!category || !subcategory?.isVariable) throw new AppError('VARIABLE_SUBCATEGORY_INVALID', 'La subcategoría no está habilitada como producto variable.', 422)
@@ -137,20 +184,21 @@ export const productService = {
     const missing = attributes.find(attribute => attribute.required && !input.values[attribute.id]?.trim())
     if (missing) throw new AppError('VARIABLE_ATTRIBUTE_REQUIRED', `Completa el atributo obligatorio: ${missing.name}.`, 422)
     const name = input.name ?? [subcategory.name, ...attributes.map(attribute => input.values[attribute.id] ? `${input.values[attribute.id]}${attribute.suffix ? ` ${attribute.suffix}` : ''}` : '')].filter(Boolean).join(' · ')
-    return this.create({ name, categoryId: category.id, subcategoryId: subcategory.id, status: input.status, roles: input.roles, variantType: 'BASIC', immediateConsumption: true, attributes: attributes.map(attribute => ({ id: attribute.id, name: attribute.name, dataType: attribute.dataType, suffix: attribute.suffix, required: attribute.required, status: attribute.status, useInSubtotal: false, isWeight: attribute.attributeDefinition?.isWeight ?? false })), presentations: [{ name, unitId: input.unitId, attributeValues: input.values, factor: input.factor, minimumStock: input.minimumStock, currentStock: input.currentStock, status: input.status }] }, db)
+    return this.create({ name, categoryId: category.id, subcategoryId: subcategory.id, status: input.status, roles: input.roles, variantType: 'BASIC', immediateConsumption: true, attributes: attributes.map(attribute => ({ id: attribute.id, name: attribute.name, dataType: attribute.dataType, suffix: attribute.suffix, required: attribute.required, status: attribute.status, useInSubtotal: false, isWeight: attribute.attributeDefinition?.isWeight ?? false })), presentations: [{ name, unitId: input.unitId, attributeValues: input.values, factor: input.factor, minimumStock: input.minimumStock, currentStock: input.currentStock, status: input.status }] }, db, context)
   },
   async getCatalog(filters: { search?: string; status?: ProductStatus; role?: 'MERCHANDISE' | 'SUPPLY' | 'FINISHED_PRODUCT' }) {
     const where: Prisma.ProductWhereInput = { ...(filters.status && { status: filters.status }), ...(filters.role && { roles: { has: filters.role } }), ...(filters.search && { OR: [{ code: { contains: filters.search, mode: 'insensitive' } }, { name: { contains: filters.search, mode: 'insensitive' } }, { presentations: { some: { name: { contains: filters.search, mode: 'insensitive' } } } }] }) }
     return productRepository.findMany(where)
   },
   async getById(id: string) { const product = await productRepository.findById(id); if (!product) throw new AppError('PRODUCT_NOT_FOUND', 'Producto no encontrado.', 404); return product },
-  async create(input: CreateProductInput, existingTransaction?: Prisma.TransactionClient) {
+  async create(input: CreateProductInput, existingTransaction?: Prisma.TransactionClient, context?: ProductMutationContext) {
     validateWeightAttributes(input.attributes)
     const code = await nextProductCode(input.categoryId, input.subcategoryId)
     await validateSubcategory(input.categoryId, input.subcategoryId)
     const persist = async (db: Prisma.TransactionClient) => {
       const product = await productRepository.create(db, { code, name: input.name, status: input.status, roles: { set: input.roles }, variantType: input.variantType, immediateConsumption: input.immediateConsumption, ...(input.categoryId && { category: { connect: { id: input.categoryId } } }), ...(input.subcategoryId && { subcategory: { connect: { id: input.subcategoryId } } }), ...(input.brandId && { brand: { connect: { id: input.brandId } } }), attributes: { create: input.attributes.map(attributeData) }, presentations: { create: input.presentations.map(presentationData) } })
       await synchronizePresentationAttributeValues(db, product, input)
+      await initializeProductStock(db, product, context)
       return product
     }
     return existingTransaction ? persist(existingTransaction) : prisma.$transaction(persist, { maxWait: 10_000, timeout: 30_000 })
@@ -189,17 +237,16 @@ export const productService = {
   async updateCategory(id: string, input: Partial<CreateCategoryInput>) { const existing = await productRepository.findCategory(id); if (!existing) throw new AppError('CATEGORY_NOT_FOUND', 'Categoría no encontrada.', 404); if (input.name) { const duplicate = await productRepository.findCategoryByName(input.name); if (duplicate && duplicate.id !== id) throw new AppError('CATEGORY_NAME_EXISTS', 'La categoría ya existe.', 409) } const complete = { code: existing.code, name: existing.name, description: existing.description, status: existing.status, attributes: existing.attributes, subcategories: existing.subcategories, ...input } as CreateCategoryInput; return productRepository.updateCategory(id, categoryUpdateData(complete)) },
   async removeCategory(id: string) { if (!await productRepository.findCategory(id)) throw new AppError('CATEGORY_NOT_FOUND', 'Categoría no encontrada.', 404); await productRepository.deleteCategory(id) },
   async createAttributeDefinition(input: CreateAttributeDefinitionInput) {
-    if (await productRepository.findAttributeDefinitionByCode(input.code)) throw new AppError('ATTRIBUTE_CODE_EXISTS', 'El código del atributo ya existe.', 409)
     if (await productRepository.findAttributeDefinitionByName(input.name)) throw new AppError('ATTRIBUTE_NAME_EXISTS', 'El nombre del atributo ya existe.', 409)
-    return productRepository.createAttributeDefinition({ ...input, suffix: input.suffix ?? null })
+    return productRepository.createAttributeDefinition({ ...input, code: await nextAttributeDefinitionCode(input.name), suffix: input.suffix ?? null })
   },
   async updateAttributeDefinition(id: string, input: Partial<CreateAttributeDefinitionInput>) {
     const existing = await productRepository.findAttributeDefinition(id)
     if (!existing) throw new AppError('ATTRIBUTE_NOT_FOUND', 'Atributo no encontrado.', 404)
     if ((input.isWeight ?? existing.isWeight) && (input.dataType ?? existing.dataType) !== 'NUMBER') throw new AppError('WEIGHT_ATTRIBUTE_NOT_NUMERIC', 'El atributo configurado como peso debe ser numérico.', 422)
-    if (input.code) { const duplicate = await productRepository.findAttributeDefinitionByCode(input.code); if (duplicate && duplicate.id !== id) throw new AppError('ATTRIBUTE_CODE_EXISTS', 'El código del atributo ya existe.', 409) }
     if (input.name) { const duplicate = await productRepository.findAttributeDefinitionByName(input.name); if (duplicate && duplicate.id !== id) throw new AppError('ATTRIBUTE_NAME_EXISTS', 'El nombre del atributo ya existe.', 409) }
-    return productRepository.updateAttributeDefinition(id, { ...input, ...(input.suffix !== undefined && { suffix: input.suffix ?? null }) })
+    const { code: _ignoredCode, ...data } = input
+    return productRepository.updateAttributeDefinition(id, { ...data, ...(input.suffix !== undefined && { suffix: input.suffix ?? null }) })
   },
   async removeAttributeDefinition(id: string) { if (!await productRepository.findAttributeDefinition(id)) throw new AppError('ATTRIBUTE_NOT_FOUND', 'Atributo no encontrado.', 404); await productRepository.deleteAttributeDefinition(id) },
 }

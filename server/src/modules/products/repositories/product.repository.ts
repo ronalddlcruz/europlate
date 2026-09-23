@@ -21,6 +21,7 @@ export const productRepository = {
   updateCategory: (id: string, data: Prisma.CategoryUpdateInput) => prisma.category.update({ where: { id }, data, include: categoryInclude }),
   deleteCategory: (id: string) => prisma.category.delete({ where: { id } }),
   listAttributeDefinitions: () => prisma.attributeDefinition.findMany({ orderBy: { name: 'asc' } }),
+  listAttributeDefinitionCodes: () => prisma.attributeDefinition.findMany({ select: { code: true } }),
   findAttributeDefinition: (id: string) => prisma.attributeDefinition.findUnique({ where: { id } }),
   findAttributeDefinitionByCode: (code: string) => prisma.attributeDefinition.findUnique({ where: { code } }),
   findAttributeDefinitionByName: (name: string) => prisma.attributeDefinition.findUnique({ where: { name } }),

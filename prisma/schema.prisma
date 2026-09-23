@@ -476,6 +476,7 @@ model Customer {
   id String @id @default(cuid())
   companyId String
   name String
+  ruc String?
   phone String
   email String
   address String
@@ -488,6 +489,7 @@ model Customer {
   updatedAt DateTime @updatedAt
   @@index([companyId, name])
   @@index([companyId, status])
+  @@unique([companyId, ruc])
 }
 
 model CustomsAgent {
