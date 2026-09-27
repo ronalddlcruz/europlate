@@ -50,17 +50,23 @@ async function validateSupplierAndWarehouses(db: Prisma.TransactionClient | type
 }
 
 async function resolveItems(db: Prisma.TransactionClient, input: ImportInput): Promise<ResolvedItem[]> {
-  return Promise.all(input.items.map(async item => {
-    if (!isVariableItem(item)) return {
-      productId: item.productId,
-      presentationId: item.presentationId,
-      warehouseId: item.warehouseId,
-      quantity: item.quantity,
-      unitCostUsd: item.unitCostUsd,
-      requestedWeightAttributeId: item.weightAttributeId,
-      requestedWeightValue: item.weightValue,
-      calculationType: ImportCalculationType.STANDARD,
-      subtotalUsd: calculateImportLineSubtotal({ calculationType: 'STANDARD', quantity: item.quantity, unitCostUsd: item.unitCostUsd }),
+  const resolved: ResolvedItem[] = []
+  // Las líneas variables deben crearse en orden: cada producto toma el siguiente
+  // correlativo visible dentro de esta misma transacción.
+  for (const item of input.items) {
+    if (!isVariableItem(item)) {
+      resolved.push({
+        productId: item.productId,
+        presentationId: item.presentationId,
+        warehouseId: item.warehouseId,
+        quantity: item.quantity,
+        unitCostUsd: item.unitCostUsd,
+        requestedWeightAttributeId: item.weightAttributeId,
+        requestedWeightValue: item.weightValue,
+        calculationType: ImportCalculationType.STANDARD,
+        subtotalUsd: calculateImportLineSubtotal({ calculationType: 'STANDARD', quantity: item.quantity, unitCostUsd: item.unitCostUsd }),
+      })
+      continue
     }
 
     const unit = await db.unit.findFirst({ where: { code: { equals: item.unitCode, mode: 'insensitive' }, status: ProductStatus.ACTIVE } })
@@ -68,7 +74,7 @@ async function resolveItems(db: Prisma.TransactionClient, input: ImportInput): P
     const product = await productService.createFromVariableSubcategory({ subcategoryId: item.variableSubcategoryId, name: item.name, values: item.values, unitId: unit.id, factor: item.factor, minimumStock: item.minimumStock, currentStock: 0, roles: item.roles, status: ProductStatus.ACTIVE }, db)
     const presentation = product.presentations[0]
     if (!presentation) throw new AppError('VARIABLE_PRODUCT_INVALID', 'No se pudo crear la presentación del producto variable.', 422)
-    return {
+    resolved.push({
       productId: product.id,
       presentationId: presentation.id,
       warehouseId: item.warehouseId,
@@ -77,8 +83,9 @@ async function resolveItems(db: Prisma.TransactionClient, input: ImportInput): P
       requestedWeightValue: item.weightValue,
       calculationType: ImportCalculationType.STANDARD,
       subtotalUsd: calculateImportLineSubtotal({ calculationType: 'STANDARD', quantity: item.quantity, unitCostUsd: item.unitCostUsd }),
-    }
-  }))
+    })
+  }
+  return resolved
 }
 
 /** Resuelve la estrategia desde el atributo persistido; el cliente nunca decide el subtotal final. */

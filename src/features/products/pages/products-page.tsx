@@ -1741,7 +1741,8 @@ function VariantDialog({
   const [unit, setUnit] = useState(item?.unit ?? units[0]?.code ?? "UND");
   const [factor, setFactor] = useState(item?.factor ?? 1);
   const [minimum, setMinimum] = useState(item?.minimum ?? 0);
-  const [stock, setStock] = useState(item?.stock ?? 0);
+  // Se conserva para no sobrescribir el valor histórico al editar una presentación.
+  const [stock] = useState(item?.stock ?? 0);
   const [status, setStatus] = useState<ProductStatus>(item?.status ?? "Activo");
   const name = [
     base.name,
@@ -1851,14 +1852,6 @@ function VariantDialog({
             min="0"
             value={minimum}
             onChange={(e) => setMinimum(Number(e.target.value))}
-          />
-        </Field>
-        <Field label="Stock actual">
-          <Input
-            type="number"
-            min="0"
-            value={stock}
-            onChange={(e) => setStock(Number(e.target.value))}
           />
         </Field>
         <Field label="Estado">

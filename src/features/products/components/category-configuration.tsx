@@ -51,6 +51,9 @@ export function CategoryConfiguration({
 }) {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
+  const [subcategoryType, setSubcategoryType] = useState<
+    "Todas" | "Variables" | "Estándar"
+  >("Todas");
   const ordered = useMemo(
     () =>
       [...categories].sort((left, right) =>
@@ -60,17 +63,28 @@ export function CategoryConfiguration({
   );
   const filteredCategories = useMemo(() => {
     const term = search.trim().toLocaleLowerCase();
-    if (!term) return ordered.map((category) => ({ category, subcategories: category.subcategories }));
     return ordered.flatMap((category) => {
+      const typedSubcategories = category.subcategories.filter(
+        (subcategory) =>
+          subcategoryType === "Todas" ||
+          (subcategoryType === "Variables"
+            ? subcategory.isVariable
+            : !subcategory.isVariable),
+      );
+      if (!term) {
+        return typedSubcategories.length || subcategoryType === "Todas"
+          ? [{ category, subcategories: typedSubcategories }]
+          : [];
+      }
       const categoryMatches = `${category.name} ${category.code ?? ""} ${category.description ?? ""}`.toLocaleLowerCase().includes(term);
-      const matchingSubcategories = category.subcategories.filter((subcategory) =>
+      const matchingSubcategories = typedSubcategories.filter((subcategory) =>
         `${subcategory.name} ${subcategory.code ?? ""} ${subcategory.description ?? ""}`.toLocaleLowerCase().includes(term),
       );
-      return categoryMatches || matchingSubcategories.length
-        ? [{ category, subcategories: categoryMatches ? category.subcategories : matchingSubcategories }]
+      return (categoryMatches && (typedSubcategories.length || subcategoryType === "Todas")) || matchingSubcategories.length
+        ? [{ category, subcategories: categoryMatches ? typedSubcategories : matchingSubcategories }]
         : [];
     });
-  }, [ordered, search]);
+  }, [ordered, search, subcategoryType]);
   const pageSize = 10;
   const totalPages = Math.max(1, Math.ceil(filteredCategories.length / pageSize));
   const currentPage = Math.min(page, totalPages);
@@ -93,17 +107,39 @@ export function CategoryConfiguration({
           Nueva categoría
         </Button>
       </header>
-      <div className="relative max-w-md">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
-        <Input
-          value={search}
-          onChange={(event) => {
-            setSearch(event.target.value);
-            setPage(1);
-          }}
-          className="h-10 bg-white pl-9"
-          placeholder="Buscar categoría o subcategoría…"
-        />
+      <div className="flex flex-wrap items-end justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50/70 p-3.5">
+        <div>
+          <p className="mb-2 text-[11px] font-semibold uppercase tracking-[.4px] text-slate-500">
+            Tipos de producto
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {(["Todas", "Variables", "Estándar"] as const).map((type) => (
+              <Button
+                key={type}
+                size="sm"
+                variant={subcategoryType === type ? "default" : "outline"}
+                onClick={() => {
+                  setSubcategoryType(type);
+                  setPage(1);
+                }}
+              >
+                {type === "Variables" ? "Productos variables" : type}
+              </Button>
+            ))}
+          </div>
+        </div>
+        <div className="relative w-full max-w-md">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+          <Input
+            value={search}
+            onChange={(event) => {
+              setSearch(event.target.value);
+              setPage(1);
+            }}
+            className="h-10 bg-white pl-9"
+            placeholder="Buscar categoría o subcategoría…"
+          />
+        </div>
       </div>
       <div className="overflow-x-auto rounded-xl border border-blue-100 bg-white shadow-[0_8px_24px_rgba(37,99,235,0.07)]">
         <table className="w-full min-w-[920px] border-collapse text-left">

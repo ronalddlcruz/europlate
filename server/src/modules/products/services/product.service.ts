@@ -5,7 +5,8 @@ import { productRepository } from '../repositories/product.repository.js'
 import type { CreateAttributeDefinitionInput, CreateCategoryInput, CreateProductInput, CreateUnitInput, CreateVariableProductInput, UpdateProductInput } from '../schemas/product.schema.js'
 
 const decimal = (value: number) => new Prisma.Decimal(value)
-const presentationCode = (index: number) => `VAR-${Date.now().toString().slice(-8)}-${index + 1}`
+/** El código de presentación se ancla al código único de su producto. */
+const presentationCode = (productCode: string, index: number) => `PRE-${productCode}-${index + 1}`
 const codePart = (value: string, length: number) => {
   const words = value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().match(/[A-Z0-9]+/g) ?? []
   const initials = words.map(word => word[0]).join('')
@@ -33,19 +34,19 @@ async function nextAttributeDefinitionCode(name: string) {
   return `${base}-${suffix}`
 }
 type ProductMutationContext = { companyId: string; userId: string }
-async function nextProductCode(categoryId?: string | null, subcategoryId?: string | null) {
-  const [products, categories] = await Promise.all([productRepository.listCodes(), productRepository.listCategories()])
-  const category = categories.find(item => item.id === categoryId)
+async function nextProductCode(db: Prisma.TransactionClient, categoryId?: string | null, subcategoryId?: string | null) {
+  const category = categoryId ? await db.category.findUnique({ where: { id: categoryId }, include: { subcategories: true } }) : null
   const subcategory = category?.subcategories.find(item => item.id === subcategoryId)
   const categoryCode = category ? configuredCodePart(category.code, category.name, 2) : 'PRO'
   const subcategoryCode = subcategory ? configuredCodePart(subcategory.code, subcategory.name, 2) : 'GEN'
   const prefix = `${categoryCode}-${subcategoryCode}`
   const expression = new RegExp(`^${escapeExpression(prefix)}-(\\d+)$`)
-  const latest = products.reduce((maximum, product) => Math.max(maximum, Number(product.code.match(expression)?.[1]) || 0), 0)
+  const latestProduct = await db.product.findFirst({ where: { code: { startsWith: prefix } }, orderBy: { code: 'desc' }, select: { code: true } })
+  const latest = Number(latestProduct?.code.match(expression)?.[1]) || 0
   return `${prefix}-${String(latest + 1).padStart(3, '0')}`
 }
-const presentationData = (presentation: CreateProductInput['presentations'][number], index: number) => ({
-  code: presentation.code ?? presentationCode(index), name: presentation.name,
+const presentationData = (presentation: CreateProductInput['presentations'][number], index: number, productCode?: string) => ({
+  code: presentation.code ?? (productCode ? presentationCode(productCode, index) : `PRE-${Date.now().toString().slice(-8)}-${index + 1}`), name: presentation.name,
   unit: { connect: presentation.unitId ? { id: presentation.unitId } : { code: presentation.unitCode! } },
   attributeValues: presentation.attributeValues, factor: decimal(presentation.factor),
   minimumStock: decimal(presentation.minimumStock), currentStock: decimal(presentation.currentStock), status: presentation.status,
@@ -193,10 +194,10 @@ export const productService = {
   async getById(id: string) { const product = await productRepository.findById(id); if (!product) throw new AppError('PRODUCT_NOT_FOUND', 'Producto no encontrado.', 404); return product },
   async create(input: CreateProductInput, existingTransaction?: Prisma.TransactionClient, context?: ProductMutationContext) {
     validateWeightAttributes(input.attributes)
-    const code = await nextProductCode(input.categoryId, input.subcategoryId)
     await validateSubcategory(input.categoryId, input.subcategoryId)
     const persist = async (db: Prisma.TransactionClient) => {
-      const product = await productRepository.create(db, { code, name: input.name, status: input.status, roles: { set: input.roles }, variantType: input.variantType, immediateConsumption: input.immediateConsumption, ...(input.categoryId && { category: { connect: { id: input.categoryId } } }), ...(input.subcategoryId && { subcategory: { connect: { id: input.subcategoryId } } }), ...(input.brandId && { brand: { connect: { id: input.brandId } } }), attributes: { create: input.attributes.map(attributeData) }, presentations: { create: input.presentations.map(presentationData) } })
+      const code = await nextProductCode(db, input.categoryId, input.subcategoryId)
+      const product = await productRepository.create(db, { code, name: input.name, status: input.status, roles: { set: input.roles }, variantType: input.variantType, immediateConsumption: input.immediateConsumption, ...(input.categoryId && { category: { connect: { id: input.categoryId } } }), ...(input.subcategoryId && { subcategory: { connect: { id: input.subcategoryId } } }), ...(input.brandId && { brand: { connect: { id: input.brandId } } }), attributes: { create: input.attributes.map(attributeData) }, presentations: { create: input.presentations.map((presentation, index) => presentationData(presentation, index, code)) } })
       await synchronizePresentationAttributeValues(db, product, input)
       await initializeProductStock(db, product, context)
       return product
@@ -204,7 +205,7 @@ export const productService = {
     return existingTransaction ? persist(existingTransaction) : prisma.$transaction(persist, { maxWait: 10_000, timeout: 30_000 })
   },
   async update(id: string, input: UpdateProductInput) {
-    await this.getById(id)
+    const existing = await this.getById(id)
     if (input.subcategoryId !== undefined) await validateSubcategory(input.categoryId, input.subcategoryId)
     const data = productData(input)
     if (input.attributes !== undefined) {
@@ -217,8 +218,8 @@ export const productService = {
       }
     }
     if (input.presentations !== undefined) data.presentations = {
-      update: input.presentations.flatMap(presentation => presentation.id ? [{ where: { id: presentation.id }, data: presentationData(presentation, 0) }] : []),
-      create: input.presentations.filter(presentation => !presentation.id).map(presentationData),
+      update: input.presentations.flatMap((presentation, index) => presentation.id ? [{ where: { id: presentation.id }, data: presentationData(presentation, index, existing.code) }] : []),
+      create: input.presentations.filter(presentation => !presentation.id).map((presentation, index) => presentationData(presentation, index, existing.code)),
     }
     return prisma.$transaction(async db => {
       const product = await productRepository.update(db, id, data)

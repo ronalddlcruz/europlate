@@ -19,21 +19,22 @@ const Field = ({ label, children }: { label: string; children: React.ReactNode }
 <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[.4px] text-slate-600">{label}</span>{children}</label>
 
 export function PurchasesPage() {
-  const queryClient = useQueryClient(); const purchasesQuery = useQuery({ queryKey: ['purchases'], queryFn: listPurchases, staleTime: 30_000 }); const catalogQuery = useQuery({ queryKey: ['purchases', 'catalog'], queryFn: loadPurchaseCatalog, staleTime: 5 * 60_000, gcTime: 15 * 60_000, refetchOnWindowFocus: false }); const productsCatalogQuery = useQuery({ queryKey: ['products', 'catalog'], queryFn: loadCatalog, staleTime: 5 * 60_000, gcTime: 15 * 60_000, refetchOnWindowFocus: false }); const [modal, setModal] = useState<'new' | 'detail' | null>(null); const [selected, setSelected] = useState<Purchase>(); const detailQuery = useQuery({ queryKey: ['purchases', 'detail', selected?.id], queryFn: () => getPurchase(selected!.id), enabled: modal === 'detail' && Boolean(selected) }); const [notice, setNotice] = useState('')
+  const queryClient = useQueryClient(); const purchasesQuery = useQuery({ queryKey: ['purchases'], queryFn: listPurchases, staleTime: 0 }); const catalogQuery = useQuery({ queryKey: ['purchases', 'catalog'], queryFn: loadPurchaseCatalog, staleTime: 0, gcTime: 15 * 60_000, refetchOnMount: 'always' }); const productsCatalogQuery = useQuery({ queryKey: ['products', 'catalog'], queryFn: loadCatalog, staleTime: 0, gcTime: 15 * 60_000, refetchOnMount: 'always' }); const [modal, setModal] = useState<'new' | 'detail' | null>(null); const [selected, setSelected] = useState<Purchase>(); const detailQuery = useQuery({ queryKey: ['purchases', 'detail', selected?.id], queryFn: () => getPurchase(selected!.id), enabled: modal === 'detail' && Boolean(selected) }); const [notice, setNotice] = useState('')
   const notify = (message: string) => { setNotice(message); window.setTimeout(() => setNotice(''), 2800) }
+  const refreshPurchaseConsumers = () => {
+    void queryClient.invalidateQueries({ queryKey: ['purchases'], exact: true, refetchType: 'active' })
+    void queryClient.invalidateQueries({ queryKey: ['products', 'catalog'], refetchType: 'all' })
+    void queryClient.invalidateQueries({ queryKey: ['purchases', 'catalog'], refetchType: 'all' })
+    void queryClient.invalidateQueries({ queryKey: ['imports', 'catalog'], refetchType: 'all' })
+    void queryClient.invalidateQueries({ queryKey: ['production', 'catalog'], refetchType: 'all' })
+    void queryClient.invalidateQueries({ queryKey: ['inventory'], refetchType: 'all' })
+    void queryClient.invalidateQueries({ queryKey: ['reports'], refetchType: 'all' })
+    void queryClient.invalidateQueries({ queryKey: ['dashboard'], refetchType: 'all' })
+  }
   const createMutation = useMutation({
     mutationFn: createPurchase,
-    onMutate: async payload => {
-      await queryClient.cancelQueries({ queryKey: ['purchases'] })
-      const temporaryId = `pending-${crypto.randomUUID()}`
-      const catalog = queryClient.getQueryData<PurchaseCatalog>(['purchases', 'catalog'])
-      const supplier = catalog?.suppliers.find(item => item.id === payload.supplierId)?.name ?? 'Proveedor seleccionado'
-      const pending: Purchase = { id: temporaryId, number: 'Guardando…', supplier, date: payload.purchaseDate, receiptDate: payload.receiptDate, invoice: payload.supplierInvoiceNumber, currency: payload.currency, total: payload.items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0), status: 'Guardando', lines: [], attachments: [] }
-      queryClient.setQueryData<Purchase[]>(['purchases'], current => [pending, ...(current ?? [])])
-      return { temporaryId }
-    },
-    onSuccess: (purchase, _payload, context) => { queryClient.setQueryData<Purchase[]>(['purchases'], current => [purchase, ...(current ?? []).filter(item => item.id !== context?.temporaryId)]); void queryClient.invalidateQueries({ queryKey: ['purchases'] }); void queryClient.invalidateQueries({ queryKey: ['products', 'catalog'], refetchType: 'all' }); void queryClient.invalidateQueries({ queryKey: ['purchases', 'catalog'], refetchType: 'all' }); void queryClient.invalidateQueries({ queryKey: ['imports', 'catalog'], refetchType: 'all' }); void queryClient.invalidateQueries({ queryKey: ['production', 'catalog'], refetchType: 'all' }); void queryClient.invalidateQueries({ queryKey: ['inventory'], refetchType: 'all' }); void queryClient.invalidateQueries({ queryKey: ['reports'], refetchType: 'all' }); void queryClient.invalidateQueries({ queryKey: ['dashboard'], refetchType: 'all' }); notify('Compra registrada, stock actualizado y catálogo sincronizado') },
-    onError: (error, _payload, context) => { queryClient.setQueryData<Purchase[]>(['purchases'], current => (current ?? []).filter(item => item.id !== context?.temporaryId)); notify(error instanceof Error ? error.message : 'No se pudo registrar la compra') },
+    onSuccess: purchase => { queryClient.setQueryData<Purchase[]>(['purchases'], current => [purchase, ...(current ?? []).filter(item => item.id !== purchase.id)]); refreshPurchaseConsumers(); notify('Compra registrada, stock actualizado y catálogos sincronizados') },
+    onError: error => notify(error instanceof Error ? error.message : 'No se pudo registrar la compra'),
   })
   const deleteMutation = useMutation({ mutationFn: deletePurchase, onSuccess: (_, id) => { queryClient.setQueryData<Purchase[]>(['purchases'], current => current?.filter(item => item.id !== id) ?? []); notify('Compra eliminada') }, onError: error => notify(error instanceof Error ? error.message : 'Solo se pueden eliminar compras en borrador') })
   const purchases = purchasesQuery.data ?? []
@@ -78,9 +79,9 @@ export function PurchasesPage() {
 </tr>}</tbody>
 </table>
 </div>
-</section>{modal === 'new' && catalogQuery.data && productsCatalogQuery.data && <PurchaseDialog catalog={catalogQuery.data} productsCatalog={productsCatalogQuery.data} saving={createMutation.isPending} onClose={() => setModal(null)} onSave={async payload => { createMutation.mutate(payload); setModal(null); notify('Compra validada. Guardando en segundo plano…') }} />}{modal === 'detail' && selected && <DetailDialog purchase={detailQuery.data ?? selected} onClose={() => setModal(null)} />}{notice && <div className="fixed bottom-6 right-6 z-[60] rounded-md border border-border border-l-4 border-l-emerald-600 bg-white px-4 py-3 text-sm shadow-panel">{notice}</div>}</div>
+</section>{modal === 'new' && catalogQuery.data && productsCatalogQuery.data && <PurchaseDialog catalog={catalogQuery.data} productsCatalog={productsCatalogQuery.data} saving={createMutation.isPending} onClose={() => setModal(null)} onSave={async payload => { try { await createMutation.mutateAsync(payload); setModal(null) } catch { /* El error ya se muestra en la notificación y en el formulario. */ } }} />}{modal === 'detail' && selected && <DetailDialog purchase={detailQuery.data ?? selected} onClose={() => setModal(null)} />}{notice && <div className="fixed bottom-6 right-6 z-[60] rounded-md border border-border border-l-4 border-l-emerald-600 bg-white px-4 py-3 text-sm shadow-panel">{notice}</div>}</div>
 }
-function Status({ status }: { status: Purchase['status'] }) { const style = status === 'Guardando' ? 'bg-blue-100 text-brand' : status === 'Recibida' ? 'bg-emerald-100 text-emerald-700' : status === 'Borrador' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'; return <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${style}`}>{status}</span> }
+function Status({ status }: { status: Purchase['status'] }) { const style = status === 'Recibida' ? 'bg-emerald-100 text-emerald-700' : status === 'Borrador' ? 'bg-amber-100 text-amber-700' : status === 'Aprobada' ? 'bg-blue-100 text-brand' : 'bg-red-100 text-red-700'; return <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${style}`}>{status}</span> }
 function PurchaseDialog({ catalog, productsCatalog, saving, onClose, onSave }: { catalog: PurchaseCatalog; productsCatalog: Awaited<ReturnType<typeof loadCatalog>>; saving: boolean; onClose: () => void; onSave: (payload: Parameters<typeof createPurchase>[0]) => Promise<void> }) {
   const [supplierName, setSupplierName] = useState(''); const [supplierId, setSupplierId] = useState(''); const [invoice, setInvoice] = useState(''); const [date, setDate] = useState(today); const [receiptDate, setReceiptDate] = useState(today); const [currency, setCurrency] = useState<'PEN' | 'USD'>('PEN'); const [attachments, setAttachments] = useState<UploadedPurchaseDocument[]>([]); const [uploading, setUploading] = useState(false); const [attachmentError, setAttachmentError] = useState(''); const [formError, setFormError] = useState(''); const [isSubmitting, setIsSubmitting] = useState(false); const [lines, setLines] = useState<DraftLine[]>([{ productId: '', presentationId: '', variableSubcategoryId: '', isVariable: false, warehouseId: catalog.warehouses[0]?.id ?? '', quantity: '', price: '' }]); const input = useRef<HTMLInputElement>(null)
   const [inlineVariableIndex, setInlineVariableIndex] = useState<number | null>(null)
@@ -138,7 +139,7 @@ function PurchaseDialog({ catalog, productsCatalog, saving, onClose, onSave }: {
   }
   return <><Dialog open title="Nueva Compra Nacional" onClose={onClose} extraWide footer={<>
 <Button variant="outline" onClick={onClose} disabled={saving || isSubmitting}>Cancelar</Button>
-<Button form="purchase-form" type="submit" disabled={saving || isSubmitting || uploading}>{saving || isSubmitting ? 'Guardando en la BD…' : uploading ? 'Subiendo PDF…' : 'Registrar Compra'}</Button>
+<Button form="purchase-form" type="submit" disabled={saving || isSubmitting || uploading}>{saving || isSubmitting ? 'Registrando compra…' : uploading ? 'Subiendo PDF…' : 'Registrar Compra'}</Button>
 </>}>
 <form id="purchase-form" onSubmit={submit} className="space-y-5">
 <div className="grid gap-4 md:grid-cols-2">
@@ -180,6 +181,7 @@ function PurchaseDialog({ catalog, productsCatalog, saving, onClose, onSave }: {
       })),
     ]}
     value={line.isVariable && line.variableSubcategoryId ? `${variableSubcategoryPrefix}${line.variableSubcategoryId}` : line.productId}
+    disabled={line.isVariable && Boolean(line.variableDraft)}
     onChange={selection => {
       if (selection.startsWith(variableSubcategoryPrefix)) {
         const variableSubcategoryId = selection.slice(variableSubcategoryPrefix.length)
@@ -200,8 +202,8 @@ function PurchaseDialog({ catalog, productsCatalog, saving, onClose, onSave }: {
 <td className="p-2">
 <Select value={line.warehouseId} onChange={event => patch(index, { warehouseId: event.target.value })}>{catalog.warehouses.map(warehouse => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</Select>
 </td>
-<td className="p-2">
-{line.isVariable && line.variableDraft ? <Select value={line.variableDraft.unit} onChange={event => patch(index, { variableDraft: { ...line.variableDraft!, unit: event.target.value } })}>{productsCatalog.units.filter(unit => unit.status === 'Activo').map(unit => <option key={unit.code} value={unit.code}>{unit.code}</option>)}</Select> : <Input value={line.isVariable ? '' : presentationFor(line)?.unit.code ?? ''} readOnly placeholder="UM" />}
+<td className="min-w-[190px] p-2">
+{line.isVariable && line.variableDraft ? <CatalogPicker label="unidad" items={productsCatalog.units.filter(unit => unit.status === 'Activo').map(unit => ({ id: unit.code, title: unit.description, detail: unit.code }))} value={line.variableDraft.unit} clearSelectionOnInput={false} onChange={unit => patch(index, { variableDraft: { ...line.variableDraft!, unit } })} /> : <Input value={line.isVariable ? '' : presentationFor(line)?.unit.description ?? presentationFor(line)?.unit.code ?? ''} readOnly placeholder="UM" />}
 </td>
 <td className="p-2">
 <Input type="number" min="0" value={line.quantity} onFocus={event => event.currentTarget.select()} onChange={event => patch(index, { quantity: event.target.value === '' ? '' : Number(event.target.value) })} />
@@ -247,10 +249,10 @@ function PurchaseDocumentDropzone({ inputRef, documents, uploading, error, onUpl
 <X className="h-4 w-4" />
 </button>
 </div>)}</div>}</div> }
-function CatalogPicker({ items, value, onChange, label, disabled = false }: { items: { id: string; title: string; detail?: string }[]; value: string; onChange: (id: string) => void; label: string; disabled?: boolean }) { const [query, setQuery] = useState(''); const [open, setOpen] = useState(false); const ref = useRef<HTMLDivElement>(null); const selected = items.find(item => item.id === value); const filtered = items.filter(item => (item.title + ' ' + (item.detail ?? '')).toLowerCase().includes(query.toLowerCase())); useEffect(() => { setQuery(selected?.title ?? '') }, [selected?.title]); useEffect(() => { const close = (event: MouseEvent) => { if (ref.current && !ref.current.contains(event.target as Node)) setOpen(false) }; document.addEventListener('mousedown', close); return () => document.removeEventListener('mousedown', close) }, []); return <div ref={ref} className="relative">
+function CatalogPicker({ items, value, onChange, label, disabled = false, clearSelectionOnInput = true }: { items: { id: string; title: string; detail?: string }[]; value: string; onChange: (id: string) => void; label: string; disabled?: boolean; clearSelectionOnInput?: boolean }) { const [query, setQuery] = useState(''); const [open, setOpen] = useState(false); const ref = useRef<HTMLDivElement>(null); const selected = items.find(item => item.id === value); const filtered = items.filter(item => (item.title + ' ' + (item.detail ?? '')).toLowerCase().includes(query.toLowerCase())); useEffect(() => { setQuery(selected?.title ?? '') }, [selected?.title]); useEffect(() => { const close = (event: MouseEvent) => { if (ref.current && !ref.current.contains(event.target as Node)) setOpen(false) }; document.addEventListener('mousedown', close); return () => document.removeEventListener('mousedown', close) }, []); return <div ref={ref} className="relative">
 <div className={disabled ? 'flex h-10 items-center rounded-md border border-border bg-slate-50 px-3 opacity-60' : open ? 'flex h-10 items-center rounded-md border border-brand bg-white px-3 ring-1 ring-brand' : 'flex h-10 items-center rounded-md border border-border bg-white px-3'}>
 <Search className="mr-2 h-4 w-4 text-slate-400" />
-<input disabled={disabled} value={query} onFocus={() => setOpen(true)} onChange={event => { setQuery(event.target.value); onChange(''); setOpen(true) }} placeholder={'Buscar ' + label + '...'} className="min-w-0 flex-1 bg-transparent text-sm outline-none" />
+<input disabled={disabled} value={query} onFocus={() => setOpen(true)} onChange={event => { setQuery(event.target.value); if (clearSelectionOnInput) onChange(''); setOpen(true) }} placeholder={'Buscar ' + label + '...'} className="min-w-0 flex-1 bg-transparent text-sm outline-none" />
 <button disabled={disabled} type="button" onClick={() => setOpen(current => !current)}>
 <ChevronDown className="h-4 w-4 text-slate-400" />
 </button>

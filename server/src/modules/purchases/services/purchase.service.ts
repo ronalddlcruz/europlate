@@ -22,15 +22,22 @@ async function validateReferences(db: Prisma.TransactionClient | typeof prisma, 
   for (const line of input.items) { const presentation = presentations.find(value => value.id === line.presentationId); if (!presentation || presentation.productId !== line.productId) throw new AppError('PURCHASE_PRODUCT_MISMATCH', 'La presentación no corresponde al producto seleccionado.', 422) }
 }
 async function resolveItems(db: Prisma.TransactionClient, input: PurchaseInput): Promise<ResolvedItem[]> {
-  return Promise.all(input.items.map(async item => {
-    if (!isVariableItem(item)) return item
+  const resolved: ResolvedItem[] = []
+  // Evita que productos variables de la misma categoría compitan por el mismo
+  // correlativo dentro de una compra con varias líneas.
+  for (const item of input.items) {
+    if (!isVariableItem(item)) {
+      resolved.push(item)
+      continue
+    }
     const unit = await db.unit.findFirst({ where: { code: { equals: item.unitCode, mode: 'insensitive' }, status: ProductStatus.ACTIVE } })
     if (!unit) throw new AppError('VARIABLE_UNIT_INVALID', 'La unidad de inventario del producto variable no está disponible.', 422)
     const product = await productService.createFromVariableSubcategory({ subcategoryId: item.variableSubcategoryId, name: item.name, values: item.values, unitId: unit.id, factor: item.factor, minimumStock: item.minimumStock, currentStock: 0, roles: item.roles, status: ProductStatus.ACTIVE }, db)
     const presentation = product.presentations[0]
     if (!presentation) throw new AppError('VARIABLE_PRODUCT_INVALID', 'No se pudo crear la presentación del producto variable.', 422)
-    return { productId: product.id, presentationId: presentation.id, warehouseId: item.warehouseId, quantity: item.quantity, unitPrice: item.unitPrice }
-  }))
+    resolved.push({ productId: product.id, presentationId: presentation.id, warehouseId: item.warehouseId, quantity: item.quantity, unitPrice: item.unitPrice })
+  }
+  return resolved
 }
 async function applyReceipt(db: Prisma.TransactionClient, purchase: { number: string; items: { productId: string; presentationId: string; warehouseId: string; quantity: Prisma.Decimal; presentation: { factor: Prisma.Decimal } }[] }, userId: string) { for (const line of purchase.items) { const quantity = line.quantity.mul(line.presentation.factor); await db.stock.upsert({ where: { productId_warehouseId: { productId: line.productId, warehouseId: line.warehouseId } }, create: { productId: line.productId, warehouseId: line.warehouseId, quantity }, update: { quantity: { increment: quantity } } }); await db.productPresentation.update({ where: { id: line.presentationId }, data: { currentStock: { increment: line.quantity } } }); await db.inventoryMovement.create({ data: { productId: line.productId, warehouseId: line.warehouseId, createdByUserId: userId, type: 'PURCHASE_RECEIPT', quantity, reference: purchase.number, note: `Recepción de compra ${purchase.number}` } }) } }
 const receiptInclude = { items: { include: { presentation: true } } } satisfies Prisma.PurchaseInclude
