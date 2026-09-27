@@ -737,6 +737,7 @@ export function ProductsPage() {
               <GroupedProductsTable
                 bases={visibleBases}
                 variants={variants}
+                units={units}
                 onEditBase={(item) => setModal({ type: "base", item })}
                 onEditVariant={(variant) => {
                   const base = bases.find((item) => item.id === variant.baseId);
@@ -998,11 +999,13 @@ function Metric({
 function GroupedProductsTable({
   bases,
   variants,
+  units,
   onEditBase,
   onToggleVariant,
 }: {
   bases: ProductBase[];
   variants: ProductVariant[];
+  units: Unit[];
   onEditBase: (base: ProductBase) => void;
   onEditVariant: (variant: ProductVariant) => void;
   onToggleVariant: (variant: ProductVariant) => void;
@@ -1078,7 +1081,8 @@ function GroupedProductsTable({
                   </td>
                   <td className="px-4 py-3.5">
                     <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-700">
-                      {inventory?.unit ?? "—"}
+                      {units.find((unit) => unit.code === inventory?.unit)
+                        ?.description ?? inventory?.unit ?? "—"}
                     </span>
                     {inventory && inventory.factor !== 1 && (
                       <span className="ml-1.5 font-mono text-[11px] text-slate-500">
@@ -1919,9 +1923,6 @@ function UnitDialog({
             placeholder="ej. Kilogramo, Metro, Balde"
             required
           />
-        </Field>
-        <Field label="Código autogenerado">
-          <Input value={code} disabled placeholder="—" />
         </Field>
         <Field label="Estado">
           <Select

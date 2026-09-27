@@ -17,8 +17,13 @@
 }
 
 /* Inventario conserva el lienzo abierto y la tabla plana de la versión local original. */
-.inventory-module { background: #f0f4f9; min-height: calc(100vh - 58px); padding: 0 1rem 1.5rem; }
+.inventory-module { width: 100%; max-width: none !important; margin: 0; background: #f0f4f9; min-height: calc(100vh - 58px); padding: 0 1rem 1.5rem; }
 .inventory-surface { padding: 2rem 1.5rem; border: 1px solid #dde4ef; border-radius: 10px; background: #fff; box-shadow: 0 1px 6px rgba(30, 50, 100, .08); }
+.inventory-module .card { padding: .85rem; }
+.inventory-module .inventory-metric { padding: .6rem .85rem; }
+.inventory-module .inventory-metric ~ div.mt-5 { margin-top: .75rem; padding: .65rem .85rem; }
+.inventory-module .card table > thead > tr > th { padding-top: .55rem !important; padding-bottom: .55rem !important; }
+.inventory-module .card table > tbody > tr > td { padding-top: .65rem !important; padding-bottom: .65rem !important; }
 @media (min-width: 640px) { .inventory-module { padding-left: 1.75rem; padding-right: 1.75rem; } }
 
 /* Panel reutilizado por los módulos con el acabado del index.html legado. */
@@ -27,6 +32,7 @@
 /* Todos los módulos comparten un ancho legible y centrado. Las tablas mantienen
    su desplazamiento solamente dentro de su propia tarjeta en pantallas angostas. */
 .page-frame { width: 100%; max-width: 1500px; margin-inline: auto; }
+.page-frame.page-frame--wide { max-width: none; margin-inline: 0; }
 
 /* Ajustes transversales para módulos en teléfono y tablet. Las tablas conservan
    datos completos mediante desplazamiento horizontal dentro de su tarjeta. */

@@ -1,6 +1,6 @@
 import { accessToken, api, apiBaseUrl, ApiError } from '../../../lib/api-client'
 
-export type ImportStatus = 'En tránsito' | 'Recibido' | 'Cancelado' | 'Guardando'
+export type ImportStatus = 'En tránsito' | 'Recibido' | 'Cancelado'
 export type ImportCalculationType = 'STANDARD' | 'WEIGHT_BASED'
 export type ImportLine = { id: string; productId: string; presentationId: string; warehouseId: string; product: string; presentation: string; warehouse: string; unit: string; quantity: number; unitCostUsd: number; calculationType: ImportCalculationType; weightAttributeId: string | null; weightValue: number | null; weightUnit: string | null; subtotalUsd: number }
 export type ImportRecord = { id: string; number: string; supplier: string; country: string; container: string; dua: string; purchaseOrder: string; status: ImportStatus; date: string; total: number; currency: 'USD' | 'PEN'; customsAgent: string | null; customsCostUsd: number; customsCostPen: number; lines: ImportLine[]; attachments: { name: string; size: number | null; mimeType: string | null; link: string | null }[] }
