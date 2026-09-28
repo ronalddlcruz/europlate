@@ -7,6 +7,41 @@ import type { InventoryAdjustmentInput, StockTransferInput, WarehouseInput } fro
 const decimal = (value: number) => new Prisma.Decimal(value)
 const transaction = <T>(callback: (db: Prisma.TransactionClient) => Promise<T>) => prisma.$transaction(callback, { maxWait: 10_000, timeout: 30_000 })
 
+type ProductCost = { quantity: number; usd: number; pen: number }
+
+function receivedCosts(
+  purchases: Awaited<ReturnType<typeof inventoryRepository.costSources>>[0],
+  imports: Awaited<ReturnType<typeof inventoryRepository.costSources>>[1],
+) {
+  const byProduct = new Map<string, ProductCost>()
+  const add = (productId: string, quantity: number, usd: number, pen: number) => {
+    if (quantity <= 0) return
+    const current = byProduct.get(productId) ?? { quantity: 0, usd: 0, pen: 0 }
+    byProduct.set(productId, { quantity: current.quantity + quantity, usd: current.usd + usd, pen: current.pen + pen })
+  }
+
+  for (const item of purchases) {
+    const quantity = Number(item.quantity) * Number(item.presentation.factor)
+    const value = Number(item.quantity) * Number(item.unitPrice)
+    add(item.productId, quantity, item.purchase.currency === 'USD' ? value : 0, item.purchase.currency === 'PEN' ? value : 0)
+  }
+  const importTotals = new Map<string, number>()
+  for (const item of imports) {
+    const lineValue = Number(item.quantity) * Number(item.unitCostUsd)
+    importTotals.set(item.importId, (importTotals.get(item.importId) ?? 0) + lineValue)
+  }
+  for (const item of imports) {
+    const quantity = Number(item.quantity) * Number(item.presentation.factor)
+    const lineValue = Number(item.quantity) * Number(item.unitCostUsd)
+    const documentTotal = importTotals.get(item.importId) ?? 0
+    const share = documentTotal > 0 ? lineValue / documentTotal : 0
+    const usd = (item.import.currency === 'USD' ? lineValue : 0) + Number(item.import.customsCostUsd) * share
+    const pen = (item.import.currency === 'PEN' ? lineValue : 0) + Number(item.import.customsCostPen) * share
+    add(item.productId, quantity, usd, pen)
+  }
+  return byProduct
+}
+
 async function validateProductLine(companyId: string, input: { productId: string; presentationId: string; warehouseId: string }) {
   const [product, presentation, warehouse] = await Promise.all([
     prisma.product.findFirst({ where: { id: input.productId, status: ProductStatus.ACTIVE } }),
@@ -30,7 +65,15 @@ const reservationFactor = (material: { product: { presentations: { factor: Prism
 
 export const inventoryService = {
   async stock(companyId: string, filters: { search?: string; warehouseId?: string }) {
-    const [stocks, reserved, products] = await Promise.all([inventoryRepository.stock(companyId), inventoryRepository.reserved(companyId), inventoryRepository.stockProducts()])
+    const [stocks, reserved, products, [purchases, imports], exchangeRate] = await Promise.all([
+      inventoryRepository.stock(companyId),
+      inventoryRepository.reserved(companyId),
+      inventoryRepository.stockProducts(),
+      inventoryRepository.costSources(companyId),
+      inventoryRepository.currentExchangeRate(companyId),
+    ])
+    const costsByProduct = receivedCosts(purchases, imports)
+    const exchangeValue = Number(exchangeRate?.value ?? 0)
     const entriesByProduct = new Map<string, typeof stocks>()
     for (const entry of stocks) entriesByProduct.set(entry.productId, [...(entriesByProduct.get(entry.productId) ?? []), entry])
     const reservedByProduct = new Map<string, Prisma.Decimal>()
@@ -44,7 +87,11 @@ export const inventoryService = {
       const reservedValue = filters.warehouseId
         ? reserved.filter(item => item.warehouseId === filters.warehouseId && item.productId === product.id).reduce((sum, item) => sum.plus(item.quantity.mul(reservationFactor(item))), new Prisma.Decimal(0))
         : reservedByProduct.get(product.id) ?? new Prisma.Decimal(0)
-      return { productId: product.id, code: product.code, product: product.name, category: product.category?.name ?? 'Sin categoría', subcategory: product.subcategory?.name ?? '—', roles: product.roles, presentationId: presentation?.id ?? null, unit: presentation?.unit.code ?? '—', unitName: presentation?.unit.description ?? presentation?.unit.code ?? '—', factor: Number(presentation?.factor ?? 1), minimum: Number(presentation?.minimumStock ?? 0), total: Number(total), available: Number(Prisma.Decimal.max(total.minus(reservedValue), 0)), inProduction: Number(reservedValue), costUsd: 0, costPen: 0, status: product.status, warehouses: entries.map(entry => ({ id: entry.warehouseId, name: entry.warehouse.name, quantity: Number(entry.quantity) })) }
+      const cost = costsByProduct.get(product.id)
+      const averageUsd = cost && cost.quantity > 0 ? cost.usd / cost.quantity : 0
+      const averagePen = cost && cost.quantity > 0 ? cost.pen / cost.quantity : 0
+      const totalQuantity = Number(total)
+      return { productId: product.id, code: product.code, product: product.name, category: product.category?.name ?? 'Sin categoría', subcategory: product.subcategory?.name ?? '—', roles: product.roles, presentationId: presentation?.id ?? null, unit: presentation?.unit.code ?? '—', unitName: presentation?.unit.description ?? presentation?.unit.code ?? '—', factor: Number(presentation?.factor ?? 1), minimum: Number(presentation?.minimumStock ?? 0), total: totalQuantity, available: Number(Prisma.Decimal.max(total.minus(reservedValue), 0)), inProduction: Number(reservedValue), costUsd: totalQuantity * averageUsd, costPen: totalQuantity * (averagePen + averageUsd * exchangeValue), status: product.status, warehouses: entries.map(entry => ({ id: entry.warehouseId, name: entry.warehouse.name, quantity: Number(entry.quantity) })) }
     }).filter(item => !filters.search || `${item.code} ${item.product}`.toLowerCase().includes(filters.search.toLowerCase()))
   },
   movements: (companyId: string) => inventoryRepository.movements(companyId),

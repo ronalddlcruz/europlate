@@ -1,9 +1,20 @@
-import type { Prisma, PrismaClient } from '@prisma/client'
+import { ImportStatus, PurchaseStatus, type Prisma, type PrismaClient } from '@prisma/client'
 import { prisma } from '../../../infrastructure/database/prisma.client.js'
 type Database = PrismaClient | Prisma.TransactionClient
 export const inventoryRepository = {
   stock: (companyId: string) => prisma.stock.findMany({ where: { warehouse: { companyId } }, include: { product: { include: { presentations: { where: { status: 'ACTIVE' }, include: { unit: true }, orderBy: { name: 'asc' } } } }, warehouse: true } }),
   stockProducts: () => prisma.product.findMany({ orderBy: { name: 'asc' }, include: { category: { select: { name: true } }, subcategory: { select: { name: true } }, presentations: { include: { unit: true }, orderBy: { name: 'asc' } } } }),
+  costSources: (companyId: string) => Promise.all([
+    prisma.purchaseItem.findMany({
+      where: { purchase: { companyId, status: PurchaseStatus.RECEIVED } },
+      select: { productId: true, quantity: true, unitPrice: true, presentation: { select: { factor: true } }, purchase: { select: { currency: true } } },
+    }),
+    prisma.importItem.findMany({
+      where: { import: { companyId, status: ImportStatus.RECEIVED } },
+      select: { importId: true, productId: true, quantity: true, unitCostUsd: true, presentation: { select: { factor: true } }, import: { select: { currency: true, customsCostUsd: true, customsCostPen: true } } },
+    }),
+  ]),
+  currentExchangeRate: (companyId: string) => prisma.exchangeRate.findFirst({ where: { companyId }, select: { value: true }, orderBy: [{ effectiveDate: 'desc' }, { createdAt: 'desc' }] }),
   reserved: (companyId: string) => prisma.productionMaterial.findMany({ where: { status: 'RESERVED', shareReservation: false, warehouse: { companyId } }, include: { product: { include: { presentations: { where: { status: 'ACTIVE' }, select: { factor: true }, orderBy: { name: 'asc' }, take: 1 } } } } }),
   movements: (companyId: string) => prisma.inventoryMovement.findMany({ where: { warehouse: { companyId } }, include: { product: { include: { presentations: { where: { status: 'ACTIVE' }, include: { unit: true }, take: 1 } } }, warehouse: true, presentation: { include: { unit: true } }, createdBy: true }, orderBy: { createdAt: 'desc' } }),
   transfers: (companyId: string) => prisma.stockTransfer.findMany({ where: { companyId }, include: { product: true, presentation: { include: { unit: true } }, fromWarehouse: true, toWarehouse: true, createdBy: true }, orderBy: { createdAt: 'desc' } }),

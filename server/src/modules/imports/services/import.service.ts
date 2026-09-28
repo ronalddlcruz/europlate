@@ -110,8 +110,8 @@ async function applyCalculationStrategy(db: Prisma.TransactionClient, items: Res
     const storedWeight = numericValue((presentation.attributeValues as Record<string, unknown> | null)?.[weightAttribute.id])
     const weightValue = item.requestedWeightValue ?? storedWeight
     if (!weightValue || weightValue <= 0) throw new AppError('WEIGHT_VALUE_REQUIRED', `Ingresa un valor de peso mayor que cero para ${presentation.product.name}.`, 422)
-    const subtotalUsd = calculateImportLineSubtotal({ calculationType: 'WEIGHT_BASED', weight: weightValue, quantity: item.quantity, unitCostUsd: item.unitCostUsd })
-    return { ...item, calculationType: ImportCalculationType.WEIGHT_BASED, weightAttributeId: weightAttribute.id, weightValue, weightUnit: weightAttribute.suffix ?? '', subtotalUsd }
+    const subtotalUsd = calculateImportLineSubtotal({ calculationType: 'STANDARD', quantity: item.quantity, unitCostUsd: item.unitCostUsd })
+    return { ...item, calculationType: ImportCalculationType.STANDARD, weightAttributeId: weightAttribute.id, weightValue, weightUnit: weightAttribute.suffix ?? '', subtotalUsd }
   })
 }
 

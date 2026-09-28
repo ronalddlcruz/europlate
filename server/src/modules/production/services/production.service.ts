@@ -129,7 +129,7 @@ export const productionService = {
       const presentation = product.presentations[0]
       const factor = Number(presentation?.factor ?? 1)
       const baseQuantity = stockTotals.get(product.id) ?? Number(presentation?.currentStock ?? 0) * factor
-      return { id: product.id, code: product.code, name: product.name, unit: presentation?.unit.code ?? null, factor, available: baseQuantity / factor }
+      return { id: product.id, code: product.code, name: product.name, unit: presentation?.unit.code ?? null, unitName: presentation?.unit.description ?? presentation?.unit.code ?? null, factor, available: baseQuantity / factor }
     }
     return { products: products.map(mapProduct), materials: materials.map(mapProduct), warehouses, stocks, customers, sharedReservations }
   },
