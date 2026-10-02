@@ -33,12 +33,12 @@ export const productionRepository = {
   catalog: (companyId: string) =>
     Promise.all([
       prisma.product.findMany({
-        where: { status: 'ACTIVE', roles: { has: 'FINISHED_PRODUCT' } },
+        where: { status: 'ACTIVE', roles: { has: 'FINISHED_PRODUCT' }, presentations: { some: { status: 'ACTIVE' } } },
         orderBy: { name: 'asc' },
         include: productInclude,
       }),
       prisma.product.findMany({
-        where: { status: 'ACTIVE', roles: { has: 'SUPPLY' } },
+        where: { status: 'ACTIVE', roles: { has: 'SUPPLY' }, presentations: { some: { status: 'ACTIVE' } } },
         orderBy: { name: 'asc' },
         include: productInclude,
       }),

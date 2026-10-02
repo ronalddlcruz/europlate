@@ -12,7 +12,9 @@ type PickerItem = { id: string; name: string; code?: string | null }
 const roles: ProductRole[] = ['Mercadería', 'Insumo', 'Producto terminado']
 const uid = () => crypto.randomUUID()
 const num = (value: string, fallback: number) => Number.isFinite(Number(value)) ? Number(value) : fallback
-const description = (attributes: Attribute[], values: Record<string, string>) => attributes.map(attribute => values[attribute.id]?.trim() ? `${values[attribute.id].trim()}${attribute.suffix ? ` ${attribute.suffix}` : ''}` : '').filter(Boolean).join(' · ')
+// Cada especificación se presenta como una sola pieza: valor + sufijo.
+// Así el texto automático queda, por ejemplo, "16cal · 12g".
+const description = (attributes: Attribute[], values: Record<string, string>) => attributes.map(attribute => values[attribute.id]?.trim() ? `${values[attribute.id].trim()}${attribute.suffix?.trim() ?? ''}` : '').filter(Boolean).join(' · ')
 
 function ClassificationPicker({ items, value, placeholder, disabled, onChange }: { items: PickerItem[]; value: string; placeholder: string; disabled?: boolean; onChange: (id: string) => void }) {
   const [query, setQuery] = useState('')

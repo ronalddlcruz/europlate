@@ -4,6 +4,7 @@ import { LoginPage } from '../features/auth/pages/login-page'
 import { DashboardPage } from '../features/dashboard/pages/dashboard-page'
 import { ProductsPage } from '../features/products/pages/products-page'
 import { InventoryPage } from '../features/inventory/pages/inventory-page'
+import { WarehousesPage } from '../features/inventory/pages/warehouses-page'
 import { PurchasesPage } from '../features/purchases/pages/purchases-page'
 import { ProductionPage } from '../features/production/pages/production-page'
 import { UsersPage } from '../features/users/pages/users-page'
@@ -20,7 +21,7 @@ import { PATHS } from './router/constants/paths'
 export function App() {
   return <Routes>
     <Route element={<PublicRoute />}><Route path={PATHS.AUTH.LOGIN} element={<LoginPage />} /></Route>
-    <Route element={<ProtectedRoute />}><Route element={<AppLayout />}><Route path="/dashboard" element={<DashboardPage />} /><Route path="/productos/*" element={<ProductsPage />} /><Route path="/clientes" element={<CustomersPage />} /><Route path="/proveedores" element={<SuppliersPage />} /><Route path="/agentes-aduana" element={<CustomsAgentsPage />} /><Route path="/inventario" element={<InventoryPage />} /><Route path="/compras" element={<PurchasesPage />} /><Route path="/importaciones" element={<ImportsPage />} /><Route path="/produccion" element={<ProductionPage />} /><Route path="/usuarios" element={<UsersPage />} /><Route path="/reportes" element={<ReportsPage />} /><Route path="/configuracion" element={<SettingsPage />} /></Route></Route>
+    <Route element={<ProtectedRoute />}><Route element={<AppLayout />}><Route path="/dashboard" element={<DashboardPage />} /><Route path="/productos/*" element={<ProductsPage />} /><Route path="/clientes" element={<CustomersPage />} /><Route path="/proveedores" element={<SuppliersPage />} /><Route path="/agentes-aduana" element={<CustomsAgentsPage />} /><Route path="/almacenes" element={<WarehousesPage />} /><Route path="/inventario" element={<InventoryPage />} /><Route path="/compras" element={<PurchasesPage />} /><Route path="/importaciones" element={<ImportsPage />} /><Route path="/produccion" element={<ProductionPage />} /><Route path="/usuarios" element={<UsersPage />} /><Route path="/reportes" element={<ReportsPage />} /><Route path="/configuracion" element={<SettingsPage />} /></Route></Route>
     <Route path="*" element={<Navigate to={PATHS.AUTH.LOGIN} replace />} />
   </Routes>
 }

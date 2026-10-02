@@ -3,7 +3,9 @@ import { prisma } from '../../../infrastructure/database/prisma.client.js'
 type Database = PrismaClient | Prisma.TransactionClient
 export const inventoryRepository = {
   stock: (companyId: string) => prisma.stock.findMany({ where: { warehouse: { companyId } }, include: { product: { include: { presentations: { where: { status: 'ACTIVE' }, include: { unit: true }, orderBy: { name: 'asc' } } } }, warehouse: true } }),
-  stockProducts: () => prisma.product.findMany({ orderBy: { name: 'asc' }, include: { category: { select: { name: true } }, subcategory: { select: { name: true } }, presentations: { include: { unit: true }, orderBy: { name: 'asc' } } } }),
+  // El stock es una vista operativa: los productos inactivos conservan su
+  // trazabilidad, pero no deben mostrarse ni contribuir a sus indicadores.
+  stockProducts: () => prisma.product.findMany({ where: { status: 'ACTIVE', presentations: { some: { status: 'ACTIVE' } } }, orderBy: { name: 'asc' }, include: { category: { select: { name: true } }, subcategory: { select: { name: true } }, presentations: { where: { status: 'ACTIVE' }, include: { unit: true }, orderBy: { name: 'asc' } } } }),
   costSources: (companyId: string) => Promise.all([
     prisma.purchaseItem.findMany({
       where: { purchase: { companyId, status: PurchaseStatus.RECEIVED } },

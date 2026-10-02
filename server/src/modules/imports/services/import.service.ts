@@ -5,6 +5,7 @@ import { getImportDocumentUrl, removeImportDocument, uploadImportDocument } from
 import { importRepository } from '../repositories/import.repository.js'
 import type { ImportInput, UpdateImportInput } from '../schemas/import.schema.js'
 import { productService } from '../../products/services/product.service.js'
+import { exchangeRateService } from '../../exchange-rates/services/exchange-rate.service.js'
 import { calculateImportLineSubtotal } from './import-line-calculator.js'
 
 const decimal = (value: number) => new Prisma.Decimal(value)
@@ -140,6 +141,10 @@ export const importService = {
   async create(companyId: string, input: ImportInput, userId: string) {
     if (await importRepository.findDuplicateDua(companyId, input.duaNumber)) throw new AppError('IMPORT_DUA_EXISTS', 'Ese número de DUA ya fue registrado.', 409)
     if (input.documents.some(document => document.storageKey && !document.storageKey.startsWith(`imports/${companyId}/`))) throw new AppError('IMPORT_DOCUMENT_INVALID', 'El documento adjunto no pertenece a esta empresa.', 422)
+    // Sin una tasa USD → PEN el valor recibido se registraba correctamente,
+    // pero su valorización en soles quedaba en cero. Se obtiene una sola vez y
+    // queda disponible para esta y las siguientes importaciones.
+    if (input.currency === 'USD') await exchangeRateService.ensureCurrent(companyId, userId)
     return transaction(async db => {
       const unresolvedItems = await resolveItems(db, input)
       await validateSupplierAndWarehouses(db, companyId, { supplierId: input.supplierId, customsAgentId: input.customsAgentId, warehouseIds: unresolvedItems.map(item => item.warehouseId) })
@@ -163,6 +168,7 @@ export const importService = {
     if (input.duaNumber && input.duaNumber !== current.duaNumber) { const duplicate = await importRepository.findDuplicateDua(companyId, input.duaNumber); if (duplicate) throw new AppError('IMPORT_DUA_EXISTS', 'Ese número de DUA ya fue registrado.', 409) }
     if (input.documents?.some(document => document.storageKey && !document.storageKey.startsWith(`imports/${companyId}/`))) throw new AppError('IMPORT_DOCUMENT_INVALID', 'El documento adjunto no pertenece a esta empresa.', 422)
     const shouldReceive = input.status === ImportStatus.RECEIVED && current.status === ImportStatus.IN_TRANSIT
+    if (shouldReceive && (input.currency ?? current.currency) === 'USD') await exchangeRateService.ensureCurrent(companyId, userId)
     return transaction(async db => {
       const items = inputItems ? await applyCalculationStrategy(db, inputItems) : undefined
       await validateSupplierAndWarehouses(db, companyId, { supplierId, customsAgentId, warehouseIds: (items ?? current.items).map(item => item.warehouseId) })
@@ -176,6 +182,7 @@ export const importService = {
   async receive(companyId: string, id: string, userId: string) {
     const current = await this.getById(companyId, id)
     if (current.status !== ImportStatus.IN_TRANSIT) throw new AppError('IMPORT_NOT_RECEIVABLE', 'Solo se pueden recibir importaciones en tránsito.', 409)
+    if (current.currency === 'USD') await exchangeRateService.ensureCurrent(companyId, userId)
     return transaction(async db => { const receipt = await db.import.findUniqueOrThrow({ where: { id }, include: receiptInclude }); await applyReceipt(db, receipt, userId); return importRepository.update(db, id, { status: ImportStatus.RECEIVED }) })
   },
   async remove(companyId: string, id: string) { const current = await this.getById(companyId, id); if (current.status === ImportStatus.RECEIVED) throw new AppError('IMPORT_LOCKED', 'No se puede eliminar una importación recibida.', 409); await importRepository.remove(prisma, id) },

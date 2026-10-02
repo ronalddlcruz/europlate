@@ -45,6 +45,7 @@ const mapOrder = (order: ApiOrder): ProductionOrder => ({
 })
 
 export async function listProductionOrders() { return (await api<ApiOrder[]>('/api/production')).map(mapOrder) }
+export async function getProductionOrder(id: string) { return mapOrder(await api<ApiOrder>(`/api/production/${id}`)) }
 export async function loadProductionCatalog() { return api<ProductionCatalog>('/api/production/catalog') }
 export async function createProductionOrder(payload: ProductionPayload) { return mapOrder(await api<ApiOrder>('/api/production', { method: 'POST', body: JSON.stringify(payload) })) }
 export async function completeProductionOrder(id: string, payload: { outputDispatched: boolean; outputJustification?: string | null }) { return mapOrder(await api<ApiOrder>(`/api/production/${id}/complete`, { method: 'POST', body: JSON.stringify(payload) })) }

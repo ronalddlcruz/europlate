@@ -9,7 +9,7 @@ import { getCurrentExchangeRate } from '../../features/settings/services/exchang
 import { useAuth } from '../../features/auth/hooks/use-auth'
 
 const primaryItems = [{ label: 'Dashboard', icon: LayoutDashboard, to: '/dashboard' }]
-const setupItems = [{ label: 'Productos', icon: Package, to: '/productos' }, { label: 'Clientes', icon: Users, to: '/clientes' }, { label: 'Proveedores', icon: Users, to: '/proveedores' }, { label: 'Agentes de Aduana', icon: Boxes, to: '/agentes-aduana' }]
+const setupItems = [{ label: 'Productos', icon: Package, to: '/productos' }, { label: 'Almacenes', icon: Boxes, to: '/almacenes' }, { label: 'Clientes', icon: Users, to: '/clientes' }, { label: 'Proveedores', icon: Users, to: '/proveedores' }, { label: 'Agentes de Aduana', icon: Boxes, to: '/agentes-aduana' }]
 const operationItems = [{ label: 'Compras Nacionales', icon: ShoppingCart, to: '/compras' }, { label: 'Importaciones', icon: FileBarChart, to: '/importaciones' }, { label: 'Producción', icon: ClipboardList, to: '/produccion' }, { label: 'Almacén e Inventario', icon: Boxes, to: '/inventario' }]
 const adminItems = [{ label: 'Usuarios y Permisos', icon: Users, to: '/usuarios' }, { label: 'Tipo de Cambio', icon: Settings, to: '/configuracion' }, { label: 'Reportes', icon: FileBarChart, to: '/reportes' }]
 
@@ -34,7 +34,7 @@ export function AppLayout() {
   const { pathname } = useLocation()
   const [menuOpen, setMenuOpen] = useState(false)
   const exchangeRate = useQuery({ queryKey: ['exchange-rates', 'current'], queryFn: getCurrentExchangeRate })
-  const titles: Record<string, string> = { '/dashboard': 'Dashboard', '/productos': 'Productos', '/clientes': 'Clientes', '/proveedores': 'Proveedores', '/agentes-aduana': 'Agentes de Aduana', '/compras': 'Compras Nacionales', '/importaciones': 'Importaciones', '/produccion': 'Producción', '/inventario': 'Almacén e Inventario', '/usuarios': 'Usuarios y Permisos', '/reportes': 'Reportes', '/configuracion': 'Tipo de Cambio' }
+  const titles: Record<string, string> = { '/dashboard': 'Dashboard', '/productos': 'Productos', '/almacenes': 'Almacenes', '/clientes': 'Clientes', '/proveedores': 'Proveedores', '/agentes-aduana': 'Agentes de Aduana', '/compras': 'Compras Nacionales', '/importaciones': 'Importaciones', '/produccion': 'Producción', '/inventario': 'Almacén e Inventario', '/usuarios': 'Usuarios y Permisos', '/reportes': 'Reportes', '/configuracion': 'Tipo de Cambio' }
   useEffect(() => { setMenuOpen(false) }, [pathname])
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => { if (event.key === 'Escape') setMenuOpen(false) }

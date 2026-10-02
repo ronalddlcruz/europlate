@@ -51,6 +51,26 @@ const presentationData = (presentation: CreateProductInput['presentations'][numb
   attributeValues: presentation.attributeValues, factor: decimal(presentation.factor),
   minimumStock: decimal(presentation.minimumStock), currentStock: decimal(presentation.currentStock), status: presentation.status,
 })
+/**
+ * La tabla Stock guarda unidades físicas. Si cambia el factor de conversión,
+ * ajustamos ese saldo con la misma proporción para conservar la cantidad que
+ * el usuario ve y administra en su unidad de inventario.
+ */
+async function preserveInventoryQuantityOnFactorChange(
+  db: Prisma.TransactionClient,
+  productId: string,
+  previousFactor: Prisma.Decimal,
+  nextFactor: number,
+) {
+  const next = decimal(nextFactor)
+  if (previousFactor.equals(next)) return
+
+  const stocks = await db.stock.findMany({ where: { productId }, select: { id: true, quantity: true } })
+  await Promise.all(stocks.map(stock => db.stock.update({
+    where: { id: stock.id },
+    data: { quantity: stock.quantity.div(previousFactor).mul(next) },
+  })))
+}
 const attributeData = (attribute: CreateProductInput['attributes'][number], position: number) => {
   const { id: _id, ...data } = attribute
   return { ...data, suffix: data.suffix ?? null, position }
@@ -184,7 +204,7 @@ export const productService = {
     const attributes = [...category.attributes, ...subcategory.attributes]
     const missing = attributes.find(attribute => attribute.required && !input.values[attribute.id]?.trim())
     if (missing) throw new AppError('VARIABLE_ATTRIBUTE_REQUIRED', `Completa el atributo obligatorio: ${missing.name}.`, 422)
-    const name = input.name ?? [subcategory.name, ...attributes.map(attribute => input.values[attribute.id] ? `${input.values[attribute.id]}${attribute.suffix ? ` ${attribute.suffix}` : ''}` : '')].filter(Boolean).join(' · ')
+    const name = input.name ?? [subcategory.name, ...attributes.map(attribute => input.values[attribute.id] ? `${input.values[attribute.id]}${attribute.suffix ?? ''}` : '')].filter(Boolean).join(' · ')
     return this.create({ name, categoryId: category.id, subcategoryId: subcategory.id, status: input.status, roles: input.roles, variantType: 'BASIC', immediateConsumption: true, attributes: attributes.map(attribute => ({ id: attribute.id, name: attribute.name, dataType: attribute.dataType, suffix: attribute.suffix, required: attribute.required, status: attribute.status, useInSubtotal: false, isWeight: attribute.attributeDefinition?.isWeight ?? false })), presentations: [{ name, unitId: input.unitId, attributeValues: input.values, factor: input.factor, minimumStock: input.minimumStock, currentStock: input.currentStock, status: input.status }] }, db, context)
   },
   async getCatalog(filters: { search?: string; status?: ProductStatus; role?: 'MERCHANDISE' | 'SUPPLY' | 'FINISHED_PRODUCT' }) {
@@ -208,6 +228,12 @@ export const productService = {
     const existing = await this.getById(id)
     if (input.subcategoryId !== undefined) await validateSubcategory(input.categoryId, input.subcategoryId)
     const data = productData(input)
+    // No permitimos que un producto quede activo si todas las presentaciones
+    // recibidas están inactivas. Esto mantiene consistente el estado que usan
+    // Inventario, reportes y los selectores operativos.
+    if (input.presentations?.length && input.presentations.every(presentation => presentation.status === ProductStatus.INACTIVE)) {
+      data.status = ProductStatus.INACTIVE
+    }
     if (input.attributes !== undefined) {
       validateWeightAttributes(input.attributes)
       const retainedIds = input.attributes.flatMap(attribute => attribute.id ? [attribute.id] : [])
@@ -223,11 +249,33 @@ export const productService = {
     }
     return prisma.$transaction(async db => {
       const product = await productRepository.update(db, id, data)
+      if (input.presentations !== undefined) {
+        // Stock es un saldo por producto. La vista de inventario utiliza su
+        // presentación principal; por ello solo esa conversión puede
+        // recalibrar el saldo físico, aun cuando el producto tenga variantes.
+        const inventoryPresentation = existing.presentations[0]
+        const updatedPresentation = input.presentations.find(presentation => presentation.id === inventoryPresentation?.id)
+        if (inventoryPresentation && updatedPresentation) {
+          await preserveInventoryQuantityOnFactorChange(db, id, inventoryPresentation.factor, updatedPresentation.factor)
+        }
+      }
       if (input.attributes !== undefined && input.presentations !== undefined) await synchronizePresentationAttributeValues(db, product, input as CreateProductInput)
       return product
     }, { maxWait: 10_000, timeout: 30_000 })
   },
-  async remove(id: string) { await this.getById(id); await productRepository.delete(id) },
+  async remove(id: string) {
+    await this.getById(id)
+    try {
+      // Prisma elimina en cascada las presentaciones, atributos e identificadores
+      // del producto cuando no existen operaciones que lo referencien.
+      await productRepository.delete(id)
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2003') {
+        throw new AppError('PRODUCT_IN_USE', 'No se puede eliminar este producto porque ya tiene operaciones registradas. Puedes inactivarlo para conservar su historial.', 409)
+      }
+      throw error
+    }
+  },
   getUnits: () => productRepository.listUnits(),
   getCategories: () => productRepository.listCategories(),
   getAttributeDefinitions: () => productRepository.listAttributeDefinitions(),

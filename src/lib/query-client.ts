@@ -1,4 +1,4 @@
-import { dehydrate, hydrate, QueryClient } from '@tanstack/react-query'
+import { dehydrate, hydrate, MutationCache, QueryClient, type QueryKey } from '@tanstack/react-query'
 import { listCustomsAgents } from '../features/customs-agents/services/customs-agent-api.service'
 import { listCustomers } from '../features/customers/services/customer-api.service'
 import { listImports, loadImportCatalog } from '../features/imports/services/import-api.service'
@@ -16,8 +16,43 @@ let activeUserId: string | null = null
 let stopPersistence: (() => void) | undefined
 let persistTimer: number | undefined
 let isRefreshingCoreData = false
+let synchronizationTimer: number | undefined
+
+/**
+ * Familias de datos que se relacionan entre módulos. Una operación exitosa
+ * invalida estas vistas de forma centralizada, para que Stock, reportes,
+ * dashboard y los catálogos no queden con datos de una operación anterior.
+ */
+const synchronizedQueryFamilies: QueryKey[] = [
+  ['products'], ['suppliers'], ['customers'], ['customs-agents'],
+  ['purchases'], ['imports'], ['production'], ['inventory'],
+  ['reports'], ['dashboard'], ['exchange-rates'], ['users'],
+]
+
+const synchronizationChannel = typeof BroadcastChannel === 'undefined'
+  ? null
+  : new BroadcastChannel('europlate:data-synchronization:v1')
+
+function synchronizeActiveViews(broadcast = false) {
+  if (!activeUserId) return
+  void Promise.all(synchronizedQueryFamilies.map(queryKey =>
+    queryClient.invalidateQueries({ queryKey, refetchType: 'active' }),
+  ))
+  if (broadcast) synchronizationChannel?.postMessage({ type: 'data-changed' })
+}
+
+/** Agrupa varias mutaciones cercanas para no duplicar solicitudes de lectura. */
+function scheduleDataSynchronization(broadcast = false) {
+  window.clearTimeout(synchronizationTimer)
+  synchronizationTimer = window.setTimeout(() => synchronizeActiveViews(broadcast), 0)
+}
 
 export const queryClient = new QueryClient({
+  mutationCache: new MutationCache({
+    // Toda mutación exitosa pasa por este punto. Las pantallas conservan sus
+    // actualizaciones optimistas, y aquí se confirma el estado real desde BD.
+    onSuccess: () => scheduleDataSynchronization(true),
+  }),
   defaultOptions: {
     queries: {
       // Al hidratar datos previos, React Query los muestra de inmediato y los
@@ -25,11 +60,18 @@ export const queryClient = new QueryClient({
       staleTime: 5 * 60_000,
       gcTime: 30 * 60_000,
       retry: 1,
+      // El listener central de foco invalida solo una vez todas las vistas
+      // relacionadas; evitamos un segundo refetch automático por consulta.
       refetchOnWindowFocus: false,
       refetchOnReconnect: true,
     },
   },
 })
+
+// También sincroniza cambios realizados en otra pestaña del mismo usuario y
+// refresca al volver a la aplicación después de una pausa.
+synchronizationChannel?.addEventListener('message', () => scheduleDataSynchronization(false))
+if (typeof window !== 'undefined') window.addEventListener('focus', () => scheduleDataSynchronization(false))
 
 const storageKey = (userId: string) => `${cachePrefix}.v${cacheVersion}.${userId}`
 
@@ -83,6 +125,7 @@ export function clearQueryCache(userId?: string) {
     stopPersistence = undefined
     activeUserId = null
     window.clearTimeout(persistTimer)
+    window.clearTimeout(synchronizationTimer)
     queryClient.clear()
   }
 }

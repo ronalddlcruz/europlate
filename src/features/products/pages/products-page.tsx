@@ -11,9 +11,7 @@ import {
   Trash2,
 } from "lucide-react";
 
-// La eliminación queda preparada para una futura habilitación. Por ahora los
-// productos y sus presentaciones se administran mediante edición e inactivación.
-const ENABLE_PRODUCT_DELETION = false;
+const ENABLE_PRODUCT_DELETION = true;
 import { Button } from "../../../components/ui/button";
 import { Dialog } from "../../../components/ui/dialog";
 import { Input } from "../../../components/ui/input";
@@ -33,6 +31,7 @@ import {
   createCatalogProduct,
   createCatalogUnit,
   deleteAttributeDefinition,
+  deleteCatalogProduct,
   deleteCatalogUnit,
   loadCatalog,
   updateAttributeDefinition,
@@ -40,6 +39,7 @@ import {
   updateCatalogProduct,
   updateCatalogUnit,
 } from "../services/product-api.service";
+import { loadProductionCatalog, type ProductionCatalog } from "../../production/services/production-api.service";
 import type {
   Attribute,
   AttributeDefinition,
@@ -168,6 +168,48 @@ export function ProductsPage() {
       queryClient.invalidateQueries({ queryKey: ["imports", "catalog"], refetchType: "all" }),
       queryClient.invalidateQueries({ queryKey: ["purchases", "catalog"], refetchType: "all" }),
     ]);
+  /**
+   * Hace visible al instante el producto modificado en Nueva Orden de
+   * Producción. El refetch posterior conserva disponible/stock confirmado.
+   */
+  const syncProductionCatalogProduct = (product: CatalogData["products"][number]) => {
+    const activeVariant = product.variants.find((variant) => variant.status === "Activo");
+    const mapped = activeVariant
+      ? {
+          id: product.base.id,
+          code: product.base.code,
+          name: product.base.name,
+          unit: activeVariant.unit,
+          unitName: units.find((unit) => unit.code === activeVariant.unit)?.description ?? activeVariant.unit,
+          factor: activeVariant.factor,
+          available: activeVariant.stock,
+        }
+      : null;
+    const updateRole = (
+      current: ProductionCatalog["products"],
+      role: ProductRole,
+    ) => {
+      const eligible = Boolean(mapped && product.base.status === "Activo" && product.base.roles.includes(role));
+      if (!eligible || !mapped) return current.filter((item) => item.id !== product.base.id);
+      return [...current.filter((item) => item.id !== product.base.id), mapped].sort((left, right) => left.name.localeCompare(right.name));
+    };
+    queryClient.setQueryData<ProductionCatalog>(["production", "catalog"], (current) => current
+      ? { ...current, products: updateRole(current.products, "Producto terminado"), materials: updateRole(current.materials, "Insumo") }
+      : current,
+    );
+  };
+  const removeProductFromProductionCatalog = (productId: string) => {
+    queryClient.setQueryData<ProductionCatalog>(["production", "catalog"], (current) => current
+      ? { ...current, products: current.products.filter((item) => item.id !== productId), materials: current.materials.filter((item) => item.id !== productId) }
+      : current,
+    );
+  };
+  const warmProductionCatalog = () => {
+    // Si Producción aún no se visitó en esta sesión, iniciamos su carga al
+    // guardar el producto para que Nueva Orden abra con el selector listo.
+    if (queryClient.getQueryData<ProductionCatalog>(["production", "catalog"])) return;
+    void queryClient.prefetchQuery({ queryKey: ["production", "catalog"], queryFn: loadProductionCatalog, staleTime: 0 });
+  };
   const productMutation = useMutation({
     mutationFn: ({
       base,
@@ -229,6 +271,8 @@ export function ProductsPage() {
         },
       );
       setSearch("");
+      syncProductionCatalogProduct(saved);
+      warmProductionCatalog();
       void refreshProductConsumers();
       notify("Producto guardado y verificado en la base de datos");
     },
@@ -281,7 +325,22 @@ export function ProductsPage() {
           : "No se pudo actualizar el estado del producto",
       );
     },
-    onSuccess: () => void refreshProductConsumers(),
+    onSuccess: (saved) => { syncProductionCatalogProduct(saved); warmProductionCatalog(); void refreshProductConsumers(); },
+    onSettled: () => void refreshCatalog(),
+  });
+  const deleteProductMutation = useMutation({
+    mutationFn: deleteCatalogProduct,
+    onMutate: async (id) => {
+      await queryClient.cancelQueries({ queryKey: ['products', 'catalog'] });
+      const previous = queryClient.getQueryData<CatalogData>(['products', 'catalog']);
+      queryClient.setQueryData<CatalogData>(['products', 'catalog'], current => current ? { ...current, products: current.products.filter(product => product.base.id !== id) } : current);
+      return { previous };
+    },
+    onSuccess: (_result, id) => { removeProductFromProductionCatalog(id); warmProductionCatalog(); void refreshProductConsumers(); notify('Producto eliminado físicamente de la base de datos.'); },
+    onError: (reason, _id, context) => {
+      if (context?.previous) queryClient.setQueryData(['products', 'catalog'], context.previous);
+      notify(reason instanceof Error ? reason.message : 'No se pudo eliminar el producto.');
+    },
     onSettled: () => void refreshCatalog(),
   });
   const unitMutation = useMutation({
@@ -546,14 +605,21 @@ export function ProductsPage() {
   const filteredBases = useMemo(
     () =>
       bases.filter(
-        (base) =>
+        (base) => {
+          // La fila expone el estado de su presentación de inventario. El
+          // filtro debe evaluar ese mismo estado, no solo el estado base.
+          const inventory = variants.find((variant) => variant.baseId === base.id);
+          const visibleStatus = inventory?.status ?? base.status;
+          return (
           (roleFilter === "Todos" || base.roles.includes(roleFilter)) &&
-          (statusFilter === "Todos" || base.status === statusFilter) &&
+          (statusFilter === "Todos" || visibleStatus === statusFilter) &&
           `${base.name} ${base.code} ${base.categoryName ?? ""} ${base.subcategoryName ?? ""}`
             .toLowerCase()
-            .includes(search.toLowerCase()),
+            .includes(search.toLowerCase())
+          );
+        },
       ),
-    [bases, roleFilter, statusFilter, search],
+    [bases, variants, roleFilter, statusFilter, search],
   );
   const orderedBases = useMemo(
     () =>
@@ -612,7 +678,16 @@ export function ProductsPage() {
             }
           : value,
       );
-    statusMutation.mutate({ base, nextVariants });
+    // El estado operativo pertenece al producto y a sus presentaciones. Al
+    // inactivar la última presentación, el producto completo deja de estar
+    // disponible en Inventario, reportes y demás catálogos operativos.
+    const nextBase = {
+      ...base,
+      status: nextVariants.some((variant) => variant.status === "Activo")
+        ? "Activo"
+        : "Inactivo",
+    } as ProductBase;
+    statusMutation.mutate({ base: nextBase, nextVariants });
   };
   return (
     <div className="-mx-2 max-w-none sm:-mx-4">
@@ -744,6 +819,9 @@ export function ProductsPage() {
                   if (base) setModal({ type: "base", item: base });
                 }}
                 onToggleVariant={toggleVariantStatus}
+                onDeleteProduct={(base) => {
+                  if (window.confirm(`¿Eliminar físicamente el producto ${base.name}? Esta acción solo será posible si no tiene operaciones registradas.`)) deleteProductMutation.mutate(base.id);
+                }}
               />
               {orderedBases.length > pageSize && (
                 <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3 text-xs text-muted">
@@ -1002,6 +1080,7 @@ function GroupedProductsTable({
   units,
   onEditBase,
   onToggleVariant,
+  onDeleteProduct,
 }: {
   bases: ProductBase[];
   variants: ProductVariant[];
@@ -1009,6 +1088,7 @@ function GroupedProductsTable({
   onEditBase: (base: ProductBase) => void;
   onEditVariant: (variant: ProductVariant) => void;
   onToggleVariant: (variant: ProductVariant) => void;
+  onDeleteProduct: (base: ProductBase) => void;
 }) {
   return (
     <div className="mt-5 overflow-x-auto rounded-xl border border-slate-200">
@@ -1113,6 +1193,13 @@ function GroupedProductsTable({
                           <Power className="h-3.5 w-3.5" />
                         </IconButton>
                       )}
+                      <IconButton
+                        label="Eliminar producto"
+                        danger
+                        onClick={() => onDeleteProduct(base)}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </IconButton>
                     </ActionGroup>
                   </td>
                 </tr>
@@ -1747,11 +1834,13 @@ function VariantDialog({
   const name = [
     base.name,
     ...base.attributes.map((attribute) =>
-      values[attribute.id] ? `${values[attribute.id]}${attribute.suffix}` : "",
+      values[attribute.id]
+        ? `${values[attribute.id]}${attribute.suffix ?? ""}`
+        : "",
     ),
   ]
     .filter(Boolean)
-    .join(" ");
+    .join(" · ");
   const submit = (event: FormEvent) => {
     event.preventDefault();
     if (

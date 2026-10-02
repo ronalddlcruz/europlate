@@ -31,5 +31,10 @@ export const exchangeRateService = {
     return exchangeRateRepository.update(prisma, id, { ...(input.effectiveDate && { effectiveDate: toDate(input.effectiveDate) }), ...(input.value !== undefined && { value: new Prisma.Decimal(input.value) }), ...(input.source !== undefined && { source: input.source || null }), ...(input.note !== undefined && { note: input.note || null }), createdBy: { connect: { id: userId } } })
   },
   async remove(companyId: string, id: string) { const current = await exchangeRateRepository.findById(companyId, id); if (!current) throw notFound(); const count = await prisma.exchangeRate.count({ where: { companyId } }); if (count <= 1) throw new AppError('EXCHANGE_RATE_REQUIRED', 'Debe existir al menos un tipo de cambio.', 422); await exchangeRateRepository.remove(prisma, id) },
-  async refresh(companyId: string, userId: string) { const quote = await latestUsdPen(); return exchangeRateRepository.upsertForDate(prisma, companyId, toDate(quote.effectiveDate), { createdByUserId: userId, value: new Prisma.Decimal(quote.value), source: 'Frankfurter', note: 'Actualización automática USD → PEN' }) },
+  async refresh(companyId: string, userId?: string) { const quote = await latestUsdPen(); return exchangeRateRepository.upsertForDate(prisma, companyId, toDate(quote.effectiveDate), { ...(userId && { createdByUserId: userId }), value: new Prisma.Decimal(quote.value), source: 'Frankfurter', note: 'Actualización automática USD → PEN' }) },
+  /** Garantiza una tasa para valorizar importaciones en USD sin esperar una acción manual. */
+  async ensureCurrent(companyId: string, userId?: string) {
+    const current = await exchangeRateRepository.current(companyId)
+    return current && new Prisma.Decimal(current.value).greaterThan(0) ? current : this.refresh(companyId, userId)
+  },
 }
