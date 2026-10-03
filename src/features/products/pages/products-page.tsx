@@ -82,6 +82,13 @@ const normalizeSearch = (value: string) => value
   .replace(/\p{Diacritic}/gu, "")
   .toLocaleLowerCase()
   .trim();
+const productNameWithCategory = (base: ProductBase) => {
+  const category = base.categoryName?.trim();
+  if (!category) return base.name;
+  return normalizeSearch(base.name).startsWith(normalizeSearch(category))
+    ? base.name
+    : `${category} · ${base.name}`;
+};
 
 function StatusBadge({ status }: { status: ProductStatus }) {
   return (
@@ -1114,13 +1121,14 @@ function GroupedProductsTable({
 }) {
   return (
     <div className="mt-5 overflow-x-auto rounded-xl border border-slate-200">
-      <table className="w-full min-w-[940px] border-collapse text-left">
+      <table className="w-full min-w-[1080px] border-collapse text-left">
         <thead>
           <tr className="bg-[#f5f8fc] text-[11px] uppercase tracking-[.55px] text-slate-500">
             {[
               "Código",
               "Categoría",
               "Subcategoría",
+              "Tipo de producto",
               "Producto",
               "Inventario",
               "Estado",
@@ -1147,41 +1155,41 @@ function GroupedProductsTable({
                   key={base.id}
                   className={`group border-b border-slate-100 text-[13px] transition-colors last:border-0 hover:bg-blue-50/40 ${status === "Inactivo" ? "bg-slate-50/70 text-slate-400" : "text-slate-700"}`}
                 >
-                  <td className="px-4 py-3.5 font-mono text-[11px] font-bold text-brand">
+                  <td className="px-4 py-3 font-mono text-[11px] font-bold text-brand">
                     {base.code}
                   </td>
-                  <td className="px-4 py-3.5">
+                  <td className="px-4 py-3">
                     <span className="inline-flex rounded-md border border-blue-100 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
                       {base.categoryName ?? "Sin categoría"}
                     </span>
                   </td>
-                  <td className="px-4 py-3.5 text-sm font-medium text-slate-600">
+                  <td className="px-4 py-3 text-sm font-medium text-slate-600">
                     {base.subcategoryName ?? "General"}
                   </td>
-                  <td className="w-[320px] max-w-[320px] px-4 py-3.5">
+                  <td className="w-[130px] min-w-[130px] max-w-[130px] pl-4 pr-1 py-3">
+                    <span className="flex flex-wrap gap-1">
+                      {base.roles.map((role) => (
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${badge[role]}`}
+                          key={role}
+                        >
+                          {role === "Producto terminado" ? "P. terminado" : role}
+                        </span>
+                      ))}
+                    </span>
+                  </td>
+                  <td className="w-[270px] max-w-[270px] px-2 py-3">
                     <button
                       onClick={() => onViewBase(base)}
                       className="w-full text-left"
-                      title={base.name}
+                      title={productNameWithCategory(base)}
                     >
                       <span className="block truncate font-semibold text-ink group-hover:text-brand">
-                        {base.name}
-                      </span>
-                      <span className="mt-1 flex flex-wrap gap-1">
-                        {base.roles.map((role) => (
-                          <span
-                            className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${badge[role]}`}
-                            key={role}
-                          >
-                            {role === "Producto terminado"
-                              ? "P. terminado"
-                              : role}
-                          </span>
-                        ))}
+                        {productNameWithCategory(base)}
                       </span>
                     </button>
                   </td>
-                  <td className="px-4 py-3.5">
+                  <td className="px-4 py-3">
                     <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-700">
                       {units.find((unit) => unit.code === inventory?.unit)
                         ?.description ?? inventory?.unit ?? "—"}
@@ -1192,10 +1200,10 @@ function GroupedProductsTable({
                       </span>
                     )}
                   </td>
-                  <td className="px-4 py-3.5">
+                  <td className="px-4 py-3">
                     <StatusBadge status={status} />
                   </td>
-                  <td className="whitespace-nowrap px-4 py-3.5 text-right">
+                  <td className="whitespace-nowrap px-4 py-3 text-right">
                     <ActionGroup>
                       <IconButton
                         label="Editar producto"
@@ -1229,7 +1237,7 @@ function GroupedProductsTable({
             })
           ) : (
             <tr>
-              <td colSpan={7} className="p-10 text-center text-sm text-muted">
+              <td colSpan={8} className="p-10 text-center text-sm text-muted">
                 No se encontraron productos con los filtros seleccionados.
               </td>
             </tr>
