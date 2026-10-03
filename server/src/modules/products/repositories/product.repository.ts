@@ -2,7 +2,7 @@ import type { Prisma, PrismaClient } from '@prisma/client'
 import { prisma } from '../../../infrastructure/database/prisma.client.js'
 
 const categoryInclude = { attributes: { include: { attributeDefinition: true }, orderBy: { position: 'asc' } }, subcategories: { include: { attributes: { include: { attributeDefinition: true }, orderBy: { position: 'asc' } } }, orderBy: { name: 'asc' } } } satisfies Prisma.CategoryInclude
-const productInclude = { category: { include: categoryInclude }, subcategory: { include: { attributes: { orderBy: { position: 'asc' } } } }, brand: true, attributes: { orderBy: { position: 'asc' } }, presentations: { include: { unit: true }, orderBy: { name: 'asc' } }, identifiers: true } satisfies Prisma.ProductInclude
+const productInclude = { category: { include: categoryInclude }, subcategory: { include: { attributes: { include: { attributeDefinition: true }, orderBy: { position: 'asc' } } } }, brand: true, attributes: { include: { attributeDefinition: true }, orderBy: { position: 'asc' } }, presentations: { include: { unit: true }, orderBy: { name: 'asc' } }, identifiers: true } satisfies Prisma.ProductInclude
 type Database = PrismaClient | Prisma.TransactionClient
 
 export const productRepository = {
@@ -27,7 +27,6 @@ export const productRepository = {
   findAttributeDefinitionByName: (name: string) => prisma.attributeDefinition.findUnique({ where: { name } }),
   createAttributeDefinition: (data: Prisma.AttributeDefinitionCreateInput) => prisma.attributeDefinition.create({ data }),
   updateAttributeDefinition: (id: string, data: Prisma.AttributeDefinitionUpdateInput) => prisma.attributeDefinition.update({ where: { id }, data }),
-  deleteAttributeDefinition: (id: string) => prisma.attributeDefinition.delete({ where: { id } }),
   findUnit: (id: string) => prisma.unit.findUnique({ where: { id } }),
   findUnitByCode: (code: string) => prisma.unit.findUnique({ where: { code } }),
   createUnit: (data: Prisma.UnitCreateInput) => prisma.unit.create({ data }),

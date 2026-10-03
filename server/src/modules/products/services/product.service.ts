@@ -117,8 +117,8 @@ async function synchronizeDeclaredStock(
   }
 }
 const attributeData = (attribute: CreateProductInput['attributes'][number], position: number) => {
-  const { id: _id, ...data } = attribute
-  return { ...data, suffix: data.suffix ?? null, position }
+  const { id: _id, attributeDefinitionId, ...data } = attribute
+  return { ...data, suffix: data.suffix ?? null, position, ...(attributeDefinitionId && { attributeDefinition: { connect: { id: attributeDefinitionId } } }) }
 }
 function productData(input: CreateProductInput | UpdateProductInput): Prisma.ProductUpdateInput {
   const data: Prisma.ProductUpdateInput = {}
@@ -190,12 +190,59 @@ function categoryUpdateData(input: CreateCategoryInput): Prisma.CategoryUpdateIn
     },
   }
 }
+
+/**
+ * Una configuración de atributo que ya fue usada no se borra aunque un cliente
+ * envíe una actualización directa a la API. Se conserva como inactiva: deja de
+ * servir para altas nuevas y mantiene intactas las fichas históricas.
+ */
+const retainHistoricalAttributes = (
+  incoming: CreateCategoryInput['attributes'],
+  persisted: Array<CreateCategoryInput['attributes'][number] & { id: string }>,
+  protectHistory: boolean,
+) => {
+  if (!protectHistory) return incoming
+  const retainedIds = new Set(incoming.flatMap(attribute => attribute.id ? [attribute.id] : []))
+  const retired = persisted
+    .filter(attribute => !retainedIds.has(attribute.id))
+    .map(attribute => ({
+      id: attribute.id,
+      attributeDefinitionId: attribute.attributeDefinitionId,
+      name: attribute.name,
+      dataType: attribute.dataType,
+      suffix: attribute.suffix,
+      required: attribute.required,
+      status: ProductStatus.INACTIVE,
+    }))
+  return [...incoming, ...retired]
+}
+
+function preserveCategoryAttributeHistory(
+  input: CreateCategoryInput,
+  existing: NonNullable<Awaited<ReturnType<typeof productRepository.findCategory>>>,
+  products: Array<{ subcategoryId: string | null }>,
+): CreateCategoryInput {
+  const usedSubcategoryIds = new Set(products.flatMap(product => product.subcategoryId ? [product.subcategoryId] : []))
+  return {
+    ...input,
+    attributes: retainHistoricalAttributes(input.attributes, existing.attributes, products.length > 0),
+    subcategories: input.subcategories.map(subcategory => {
+      const persisted = subcategory.id ? existing.subcategories.find(item => item.id === subcategory.id) : undefined
+      if (!persisted) return subcategory
+      return {
+        ...subcategory,
+        attributes: retainHistoricalAttributes(subcategory.attributes, persisted.attributes, usedSubcategoryIds.has(subcategory.id!)),
+      }
+    }),
+  }
+}
 async function validateSubcategory(categoryId?: string | null, subcategoryId?: string | null) {
   if (!subcategoryId) return
   if (!categoryId) throw new AppError('SUBCATEGORY_REQUIRES_CATEGORY', 'Selecciona la categoría de la subcategoría.', 422)
   const category = await productRepository.findCategory(categoryId)
   if (!category?.subcategories.some(subcategory => subcategory.id === subcategoryId)) throw new AppError('INVALID_SUBCATEGORY', 'La subcategoría no pertenece a la categoría seleccionada.', 422)
 }
+const isAvailableAttribute = (attribute: { status: ProductStatus; attributeDefinition?: { status: ProductStatus } | null }) => attribute.status === ProductStatus.ACTIVE && attribute.attributeDefinition?.status !== ProductStatus.INACTIVE
 async function synchronizePresentationAttributeValues(
   db: Prisma.TransactionClient,
   product: { attributes: { id: string }[]; presentations: { id: string; name: string }[] },
@@ -246,11 +293,11 @@ export const productService = {
     const category = (await productRepository.listCategories()).find(value => value.subcategories.some(subcategory => subcategory.id === input.subcategoryId))
     const subcategory = category?.subcategories.find(value => value.id === input.subcategoryId)
     if (!category || !subcategory?.isVariable) throw new AppError('VARIABLE_SUBCATEGORY_INVALID', 'La subcategoría no está habilitada como producto variable.', 422)
-    const attributes = [...category.attributes, ...subcategory.attributes]
+    const attributes = [...category.attributes, ...subcategory.attributes].filter(isAvailableAttribute)
     const missing = attributes.find(attribute => attribute.required && !input.values[attribute.id]?.trim())
     if (missing) throw new AppError('VARIABLE_ATTRIBUTE_REQUIRED', `Completa el atributo obligatorio: ${missing.name}.`, 422)
     const name = input.name ?? [category.name, subcategory.name, ...attributes.map(attribute => input.values[attribute.id] ? `${input.values[attribute.id]}${attribute.suffix ?? ''}` : '')].filter(Boolean).join(' · ')
-    return this.create({ name, categoryId: category.id, subcategoryId: subcategory.id, status: input.status, roles: input.roles, variantType: 'BASIC', immediateConsumption: true, attributes: attributes.map(attribute => ({ id: attribute.id, name: attribute.name, dataType: attribute.dataType, suffix: attribute.suffix, required: attribute.required, status: attribute.status, useInSubtotal: false, isWeight: attribute.attributeDefinition?.isWeight ?? false })), presentations: [{ name, unitId: input.unitId, attributeValues: input.values, factor: input.factor, minimumStock: input.minimumStock, currentStock: input.currentStock, status: input.status }] }, db, context)
+    return this.create({ name, categoryId: category.id, subcategoryId: subcategory.id, status: input.status, roles: input.roles, variantType: 'BASIC', immediateConsumption: true, attributes: attributes.map(attribute => ({ id: attribute.id, attributeDefinitionId: attribute.attributeDefinitionId, name: attribute.name, dataType: attribute.dataType, suffix: attribute.suffix, required: attribute.required, status: attribute.status, useInSubtotal: false, isWeight: attribute.attributeDefinition?.isWeight ?? false })), presentations: [{ name, unitId: input.unitId, attributeValues: input.values, factor: input.factor, minimumStock: input.minimumStock, currentStock: input.currentStock, status: input.status }] }, db, context)
   },
   async getCatalog(filters: { search?: string; status?: ProductStatus; role?: 'MERCHANDISE' | 'SUPPLY' | 'FINISHED_PRODUCT' }) {
     const where: Prisma.ProductWhereInput = { ...(filters.status && { status: filters.status }), ...(filters.role && { roles: { has: filters.role } }), ...(filters.search && { OR: [{ code: { contains: filters.search, mode: 'insensitive' } }, { name: { contains: filters.search, mode: 'insensitive' } }, { presentations: { some: { name: { contains: filters.search, mode: 'insensitive' } } } }] }) }
@@ -331,7 +378,18 @@ export const productService = {
   async updateUnit(id: string, input: Partial<CreateUnitInput>) { if (!await productRepository.findUnit(id)) throw new AppError('UNIT_NOT_FOUND', 'Unidad de medida no encontrada.', 404); if (input.code) { const duplicate = await productRepository.findUnitByCode(input.code); if (duplicate && duplicate.id !== id) throw new AppError('UNIT_CODE_EXISTS', 'El código de unidad ya existe.', 409) } return productRepository.updateUnit(id, input) },
   async removeUnit(id: string) { if (!await productRepository.findUnit(id)) throw new AppError('UNIT_NOT_FOUND', 'Unidad de medida no encontrada.', 404); await productRepository.deleteUnit(id) },
   async createCategory(input: CreateCategoryInput) { if (await productRepository.findCategoryByName(input.name)) throw new AppError('CATEGORY_NAME_EXISTS', 'La categoría ya existe.', 409); return productRepository.createCategory(categoryCreateData(input)) },
-  async updateCategory(id: string, input: Partial<CreateCategoryInput>) { const existing = await productRepository.findCategory(id); if (!existing) throw new AppError('CATEGORY_NOT_FOUND', 'Categoría no encontrada.', 404); if (input.name) { const duplicate = await productRepository.findCategoryByName(input.name); if (duplicate && duplicate.id !== id) throw new AppError('CATEGORY_NAME_EXISTS', 'La categoría ya existe.', 409) } const complete = { code: existing.code, name: existing.name, description: existing.description, status: existing.status, attributes: existing.attributes, subcategories: existing.subcategories, ...input } as CreateCategoryInput; return productRepository.updateCategory(id, categoryUpdateData(complete)) },
+  async updateCategory(id: string, input: Partial<CreateCategoryInput>) {
+    const existing = await productRepository.findCategory(id)
+    if (!existing) throw new AppError('CATEGORY_NOT_FOUND', 'Categoría no encontrada.', 404)
+    if (input.name) {
+      const duplicate = await productRepository.findCategoryByName(input.name)
+      if (duplicate && duplicate.id !== id) throw new AppError('CATEGORY_NAME_EXISTS', 'La categoría ya existe.', 409)
+    }
+    const complete = { code: existing.code, name: existing.name, description: existing.description, status: existing.status, attributes: existing.attributes, subcategories: existing.subcategories, ...input } as CreateCategoryInput
+    const products = await prisma.product.findMany({ where: { categoryId: id }, select: { subcategoryId: true } })
+    const safeConfiguration = preserveCategoryAttributeHistory(complete, existing, products)
+    return productRepository.updateCategory(id, categoryUpdateData(safeConfiguration))
+  },
   async removeCategory(id: string) { if (!await productRepository.findCategory(id)) throw new AppError('CATEGORY_NOT_FOUND', 'Categoría no encontrada.', 404); await productRepository.deleteCategory(id) },
   async createAttributeDefinition(input: CreateAttributeDefinitionInput) {
     if (await productRepository.findAttributeDefinitionByName(input.name)) throw new AppError('ATTRIBUTE_NAME_EXISTS', 'El nombre del atributo ya existe.', 409)
@@ -343,7 +401,29 @@ export const productService = {
     if ((input.isWeight ?? existing.isWeight) && (input.dataType ?? existing.dataType) !== 'NUMBER') throw new AppError('WEIGHT_ATTRIBUTE_NOT_NUMERIC', 'El atributo configurado como peso debe ser numérico.', 422)
     if (input.name) { const duplicate = await productRepository.findAttributeDefinitionByName(input.name); if (duplicate && duplicate.id !== id) throw new AppError('ATTRIBUTE_NAME_EXISTS', 'El nombre del atributo ya existe.', 409) }
     const { code: _ignoredCode, ...data } = input
-    return productRepository.updateAttributeDefinition(id, { ...data, ...(input.suffix !== undefined && { suffix: input.suffix ?? null }) })
+    const definitionData = { ...data, ...(input.suffix !== undefined && { suffix: input.suffix ?? null }) }
+    // La definición es la fuente maestra de atributos reutilizables. Los
+    // productos ya creados mantienen su propia instantánea para no alterar
+    // valores históricos ni desarmar nombres automáticos existentes.
+    return prisma.$transaction(async db => {
+      const definition = await db.attributeDefinition.update({ where: { id }, data: definitionData })
+      const configurationData = {
+        ...(input.name !== undefined && { name: input.name }),
+        ...(input.dataType !== undefined && { dataType: input.dataType }),
+        ...(input.suffix !== undefined && { suffix: input.suffix ?? null }),
+      }
+      if (Object.keys(configurationData).length) {
+        await Promise.all([
+          db.categoryAttribute.updateMany({ where: { attributeDefinitionId: id }, data: configurationData }),
+          db.subcategoryAttribute.updateMany({ where: { attributeDefinitionId: id }, data: configurationData }),
+        ])
+      }
+      return definition
+    })
   },
-  async removeAttributeDefinition(id: string) { if (!await productRepository.findAttributeDefinition(id)) throw new AppError('ATTRIBUTE_NOT_FOUND', 'Atributo no encontrado.', 404); await productRepository.deleteAttributeDefinition(id) },
+  async removeAttributeDefinition(id: string) {
+    // Compatibilidad con clientes antiguos: eliminar ahora significa retirar
+    // del catálogo. Nunca se elimina físicamente un atributo maestro.
+    return this.updateAttributeDefinition(id, { status: ProductStatus.INACTIVE })
+  },
 }

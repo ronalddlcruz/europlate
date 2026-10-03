@@ -24,6 +24,7 @@ type ApiAttribute = {
     suffix: string | null;
     name: string;
     dataType: "TEXT" | "NUMBER";
+    status: "ACTIVE" | "INACTIVE";
     isWeight?: boolean;
   } | null;
 };
@@ -105,6 +106,8 @@ const isPersistedId = (value: string) => /^c[a-z0-9]{24,}$/i.test(value) || /^[0
 
 const mapAttribute = (attribute: ApiAttribute): Attribute => ({
   id: attribute.id,
+  definitionId: attribute.attributeDefinition?.id ?? null,
+  definitionStatus: attribute.attributeDefinition ? toStatus(attribute.attributeDefinition.status) : null,
   name: attribute.name,
   type: attribute.dataType === "NUMBER" ? "Numérico" : "Texto",
   required: attribute.required,
@@ -216,6 +219,7 @@ function productPayload(
     immediateConsumption: base.immediateConsumption ?? true,
     attributes: base.attributes.map((attribute: Attribute) => ({
       ...(isPersistedId(attribute.id) && { id: attribute.id }),
+      attributeDefinitionId: attribute.definitionId || null,
       name: attribute.name,
       dataType: attribute.type === "Numérico" ? "NUMBER" : "TEXT",
       suffix: attribute.suffix || null,
@@ -388,7 +392,4 @@ export async function updateAttributeDefinition(
       }),
     }),
   );
-}
-export async function deleteAttributeDefinition(id: string) {
-  await api<void>(`/api/products/attributes/${id}`, { method: "DELETE" });
 }

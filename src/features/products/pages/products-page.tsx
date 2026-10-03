@@ -30,7 +30,6 @@ import {
   createCatalogCategory,
   createCatalogProduct,
   createCatalogUnit,
-  deleteAttributeDefinition,
   deleteCatalogProduct,
   deleteCatalogUnit,
   loadCatalog,
@@ -180,6 +179,49 @@ export function ProductsPage() {
       queryClient.invalidateQueries({ queryKey: ["imports", "catalog"], refetchType: "all" }),
       queryClient.invalidateQueries({ queryKey: ["purchases", "catalog"], refetchType: "all" }),
     ]);
+  const synchronizeAttributeDefinition = (
+    current: CatalogData,
+    definition: AttributeDefinition,
+  ): CatalogData => {
+    const synchronizeConfigured = (attribute: Attribute) =>
+      attribute.definitionId === definition.id
+        ? {
+            ...attribute,
+            name: definition.name,
+            type: definition.type,
+            suffix: definition.suffix,
+            definitionStatus: definition.status,
+            isWeight: definition.isWeight,
+          }
+        : attribute;
+    return {
+      ...current,
+      attributes: current.attributes.map((attribute) =>
+        attribute.id === definition.id ? definition : attribute,
+      ),
+      categories: current.categories.map((category) => ({
+        ...category,
+        attributes: category.attributes.map(synchronizeConfigured),
+        subcategories: category.subcategories.map((subcategory) => ({
+          ...subcategory,
+          attributes: subcategory.attributes.map(synchronizeConfigured),
+        })),
+      })),
+      // Un producto conserva nombre, sufijo y valores como una instantánea;
+      // solo recibe el estado maestro para mostrarlo como histórico.
+      products: current.products.map((product) => ({
+        ...product,
+        base: {
+          ...product.base,
+          attributes: product.base.attributes.map((attribute) =>
+            attribute.definitionId === definition.id
+              ? { ...attribute, definitionStatus: definition.status }
+              : attribute,
+          ),
+        },
+      })),
+    };
+  };
   /**
    * Hace visible al instante el producto modificado en Nueva Orden de
    * Producción. El refetch posterior conserva disponible/stock confirmado.
@@ -545,17 +587,10 @@ export function ProductsPage() {
         ["products", "catalog"],
         (current) => {
           if (!current) return current;
-          const attributes = editing
-            ? current.attributes.map((attribute) =>
-                attribute.id === item.id ? item : attribute,
-              )
-            : [...current.attributes, item];
-          return {
-            ...current,
-            attributes: attributes.sort((left, right) =>
-              left.name.localeCompare(right.name),
-            ),
-          };
+          const next = editing
+            ? synchronizeAttributeDefinition(current, item)
+            : { ...current, attributes: [...current.attributes, item] };
+          return { ...next, attributes: [...next.attributes].sort((left, right) => left.name.localeCompare(right.name)) };
         },
       );
       setModal(null);
@@ -567,23 +602,13 @@ export function ProductsPage() {
         ["products", "catalog"],
         (current) => {
           if (!current) return current;
-          const attributes = current.attributes.map((attribute) =>
-            context?.editing
-              ? attribute.id === saved.id
-                ? saved
-                : attribute
-              : attribute.id === context?.optimisticId
-                ? saved
-                : attribute,
-          );
-          return {
-            ...current,
-            attributes: attributes.sort((left, right) =>
-              left.name.localeCompare(right.name),
-            ),
-          };
+          const next = context?.editing
+            ? synchronizeAttributeDefinition(current, saved)
+            : { ...current, attributes: current.attributes.map((attribute) => attribute.id === context?.optimisticId ? saved : attribute) };
+          return { ...next, attributes: [...next.attributes].sort((left, right) => left.name.localeCompare(right.name)) };
         },
       );
+      void refreshProductConsumers();
       notify("Atributo guardado y verificado en la base de datos");
     },
     onError: (reason, variables, context) => {
@@ -600,19 +625,6 @@ export function ProductsPage() {
           : "No se pudo guardar el atributo. Se restauró el cambio anterior.",
       );
     },
-  });
-  const deleteAttributeMutation = useMutation({
-    mutationFn: deleteAttributeDefinition,
-    onSuccess: async () => {
-      await refreshCatalog();
-      notify("Atributo eliminado de la base de datos");
-    },
-    onError: (reason) =>
-      notify(
-        reason instanceof Error
-          ? reason.message
-          : "No se pudo eliminar el atributo",
-      ),
   });
   const filteredBases = useMemo(
     () =>
@@ -939,7 +951,15 @@ export function ProductsPage() {
               attributes={attributes}
               onNew={() => setModal({ type: "attribute" })}
               onEdit={(item) => setModal({ type: "attribute", item })}
-              onDelete={(id) => deleteAttributeMutation.mutate(id)}
+              onToggleStatus={(item) =>
+                attributeMutation.mutate({
+                  item: {
+                    ...item,
+                    status: item.status === "Activo" ? "Inactivo" : "Activo",
+                  },
+                  editing: true,
+                })
+              }
             />
           ) : (
             <UnitsSection

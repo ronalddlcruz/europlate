@@ -938,7 +938,7 @@ function AssociationList({
             {attribute.type}
             {attribute.suffix && ` · ${attribute.suffix}`}
           </span>
-          {attribute.status === "Inactivo" && (
+          {(attribute.status === "Inactivo" || attribute.definitionStatus === "Inactivo") && (
             <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-600">
               Inactivo
             </span>
@@ -946,7 +946,8 @@ function AssociationList({
           <button
             type="button"
             onClick={() => onToggleRequired(scope, attribute.id)}
-            className={`rounded-full px-2.5 py-1 text-xs font-semibold ${attribute.required ? "bg-blue-100 text-brand" : "bg-slate-100 text-slate-600"}`}
+            disabled={attribute.status === "Inactivo" || attribute.definitionStatus === "Inactivo"}
+            className={`rounded-full px-2.5 py-1 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-60 ${attribute.required ? "bg-blue-100 text-brand" : "bg-slate-100 text-slate-600"}`}
           >
             {attribute.required ? "Obligatorio" : "Opcional"}
           </button>
@@ -955,12 +956,12 @@ function AssociationList({
             onClick={() => onRemove(attribute.id)}
             className="text-red-600"
             aria-label={
-              attribute.status === "Inactivo"
+              attribute.status === "Inactivo" || attribute.definitionStatus === "Inactivo"
                 ? `Reactivar o conservar ${attribute.name}`
                 : `Quitar ${attribute.name}`
             }
             title={
-              attribute.status === "Inactivo"
+              attribute.status === "Inactivo" || attribute.definitionStatus === "Inactivo"
                 ? "Atributo inactivo"
                 : `Quitar ${attribute.name}`
             }

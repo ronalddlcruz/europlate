@@ -2,6 +2,8 @@ export type ProductRole = "Mercadería" | "Insumo" | "Producto terminado";
 export type ProductStatus = "Activo" | "Inactivo";
 export interface Attribute {
   id: string;
+  definitionId?: string | null;
+  definitionStatus?: ProductStatus | null;
   name: string;
   type: "Texto" | "Numérico";
   required: boolean;
