@@ -49,7 +49,9 @@ const presentationData = (presentation: CreateProductInput['presentations'][numb
   code: presentation.code ?? (productCode ? presentationCode(productCode, index) : `PRE-${Date.now().toString().slice(-8)}-${index + 1}`), name: presentation.name,
   unit: { connect: presentation.unitId ? { id: presentation.unitId } : { code: presentation.unitCode! } },
   attributeValues: presentation.attributeValues, factor: decimal(presentation.factor),
-  minimumStock: decimal(presentation.minimumStock), currentStock: decimal(presentation.currentStock), status: presentation.status,
+  minimumStock: decimal(presentation.minimumStock), currentStock: decimal(presentation.currentStock),
+  ...(presentation.openingUnitCostPen !== undefined && { openingUnitCostPen: presentation.openingUnitCostPen === null ? null : decimal(presentation.openingUnitCostPen) }),
+  status: presentation.status,
 })
 /**
  * La tabla Stock guarda unidades físicas. Si cambia el factor de conversión,
@@ -70,6 +72,49 @@ async function preserveInventoryQuantityOnFactorChange(
     where: { id: stock.id },
     data: { quantity: stock.quantity.div(previousFactor).mul(next) },
   })))
+}
+
+/** Ajusta el saldo total a la toma física declarada, sin borrar su trazabilidad. */
+async function synchronizeDeclaredStock(
+  db: Prisma.TransactionClient,
+  product: { id: string; code: string; roles: ProductRoleType[] },
+  presentation: { id: string; factor: number; currentStock: number },
+  context: ProductMutationContext,
+) {
+  const target = decimal(presentation.currentStock).mul(decimal(presentation.factor))
+  const stocks = await db.stock.findMany({
+    where: { productId: product.id, warehouse: { companyId: context.companyId } },
+    include: { warehouse: { select: { id: true, name: true, status: true } } },
+  })
+  const current = stocks.reduce((total, stock) => total.plus(stock.quantity), new Prisma.Decimal(0))
+  const delta = target.minus(current)
+  if (delta.isZero()) return
+
+  const reference = `TOMA-${product.code}`
+  const note = 'Regularización de stock actual desde la ficha del producto.'
+  if (delta.greaterThan(0)) {
+    const warehouses = await db.warehouse.findMany({ where: { companyId: context.companyId, status: ProductStatus.ACTIVE }, orderBy: { name: 'asc' } })
+    const preferred = product.roles.includes(ProductRoleType.FINISHED_PRODUCT) ? /terminad/i : product.roles.includes(ProductRoleType.SUPPLY) ? /insumo/i : /principal/i
+    const warehouse = warehouses.find(item => preferred.test(item.name)) ?? warehouses[0]
+    if (!warehouse) throw new AppError('INITIAL_STOCK_WAREHOUSE_REQUIRED', 'Crea un almacén activo antes de registrar el stock actual.', 422)
+    await db.stock.upsert({
+      where: { productId_warehouseId: { productId: product.id, warehouseId: warehouse.id } },
+      create: { productId: product.id, warehouseId: warehouse.id, quantity: delta },
+      update: { quantity: { increment: delta } },
+    })
+    await db.inventoryMovement.create({ data: { productId: product.id, presentationId: presentation.id, warehouseId: warehouse.id, createdByUserId: context.userId, type: 'INITIAL_STOCK', quantity: delta, reference, note } })
+    return
+  }
+
+  let remaining = delta.abs()
+  for (const stock of [...stocks].sort((left, right) => left.warehouse.name.localeCompare(right.warehouse.name))) {
+    if (remaining.isZero()) break
+    const reduction = Prisma.Decimal.min(stock.quantity, remaining)
+    if (reduction.isZero()) continue
+    await db.stock.update({ where: { id: stock.id }, data: { quantity: { decrement: reduction } } })
+    await db.inventoryMovement.create({ data: { productId: product.id, presentationId: presentation.id, warehouseId: stock.warehouseId, createdByUserId: context.userId, type: 'INITIAL_STOCK', quantity: reduction.negated(), reference, note } })
+    remaining = remaining.minus(reduction)
+  }
 }
 const attributeData = (attribute: CreateProductInput['attributes'][number], position: number) => {
   const { id: _id, ...data } = attribute
@@ -224,7 +269,7 @@ export const productService = {
     }
     return existingTransaction ? persist(existingTransaction) : prisma.$transaction(persist, { maxWait: 10_000, timeout: 30_000 })
   },
-  async update(id: string, input: UpdateProductInput) {
+  async update(id: string, input: UpdateProductInput, context?: ProductMutationContext) {
     const existing = await this.getById(id)
     if (input.subcategoryId !== undefined) await validateSubcategory(input.categoryId, input.subcategoryId)
     const data = productData(input)
@@ -257,6 +302,9 @@ export const productService = {
         const updatedPresentation = input.presentations.find(presentation => presentation.id === inventoryPresentation?.id)
         if (inventoryPresentation && updatedPresentation) {
           await preserveInventoryQuantityOnFactorChange(db, id, inventoryPresentation.factor, updatedPresentation.factor)
+          if (context && !inventoryPresentation.currentStock.equals(decimal(updatedPresentation.currentStock))) {
+            await synchronizeDeclaredStock(db, product, { id: inventoryPresentation.id, factor: updatedPresentation.factor, currentStock: updatedPresentation.currentStock }, context)
+          }
         }
       }
       if (input.attributes !== undefined && input.presentations !== undefined) await synchronizePresentationAttributeValues(db, product, input as CreateProductInput)

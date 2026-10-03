@@ -67,6 +67,7 @@ type ApiProduct = {
     factor: string | number;
     minimumStock: string | number;
     currentStock: string | number;
+    openingUnitCostPen: string | number | null;
     status: "ACTIVE" | "INACTIVE";
     unit: { code: string };
   }[];
@@ -100,7 +101,7 @@ const toStatus = (status: "ACTIVE" | "INACTIVE"): ProductStatus =>
   status === "ACTIVE" ? "Activo" : "Inactivo";
 const fromStatus = (status: ProductStatus) =>
   status === "Activo" ? "ACTIVE" : "INACTIVE";
-const isPersistedId = (value: string) => /^c[a-z0-9]{24,}$/i.test(value);
+const isPersistedId = (value: string) => /^c[a-z0-9]{24,}$/i.test(value) || /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 
 const mapAttribute = (attribute: ApiAttribute): Attribute => ({
   id: attribute.id,
@@ -163,6 +164,7 @@ export const mapProduct = (
     factor: Number(presentation.factor),
     minimum: Number(presentation.minimumStock),
     stock: Number(presentation.currentStock),
+    openingUnitCostPen: Number(presentation.openingUnitCostPen ?? 0),
     status: toStatus(presentation.status),
   })),
 });
@@ -236,6 +238,7 @@ function productPayload(
         factor: variant.factor,
         minimumStock: variant.minimum,
         currentStock: variant.stock,
+        openingUnitCostPen: variant.openingUnitCostPen,
         status: fromStatus(variant.status),
       };
     }),

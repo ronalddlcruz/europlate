@@ -105,8 +105,12 @@ export const inventoryService = {
         ? reserved.filter(item => item.warehouseId === filters.warehouseId && item.productId === product.id).reduce((sum, item) => sum.plus(item.quantity.mul(reservationFactor(item))), new Prisma.Decimal(0))
         : reservedByProduct.get(product.id) ?? new Prisma.Decimal(0)
       const cost = costsByProduct.get(product.id)
-      const averageUsd = cost && cost.quantity > 0 ? cost.usd / cost.quantity : 0
-      const averagePen = cost && cost.quantity > 0 ? cost.pen / cost.quantity : 0
+      // Mientras el inventario inicial no tenga documentos de compra o
+      // importación, usamos el costo unitario declarado durante la toma.
+      // Cuando existen documentos recibidos, estos conservan prioridad.
+      const hasDocumentCost = Boolean(cost && cost.quantity > 0)
+      const averageUsd = hasDocumentCost ? cost!.usd / cost!.quantity : 0
+      const averagePen = hasDocumentCost ? cost!.pen / cost!.quantity : Number(presentation?.openingUnitCostPen ?? 0)
       const totalQuantity = Number(total)
       const factor = presentation?.factor ?? new Prisma.Decimal(1)
       const inventoryQuantity = Number(total.div(factor))

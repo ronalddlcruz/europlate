@@ -41,7 +41,7 @@ async function validateReferences(companyId: string, input: Pick<ProductionOrder
   if (materialProductIds.some(id => !presentations.has(id))) throw new AppError('PRODUCTION_MATERIAL_UNIT_INVALID', 'Uno de los insumos no tiene una unidad de inventario activa.', 422)
 }
 
-async function validateStock(companyId: string, materials: MaterialInput[]) {
+async function validateStock(companyId: string, materials: MaterialInput[], excludeOrderId?: string) {
   const factors = await activePresentations(prisma, materials.map(line => line.productId))
   const reservations = new Map<string, Prisma.Decimal>()
   for (const material of materials) {
@@ -51,12 +51,33 @@ async function validateStock(companyId: string, materials: MaterialInput[]) {
     const key = `${material.productId}:${material.warehouseId}`
     reservations.set(key, (reservations.get(key) ?? new Prisma.Decimal(0)).plus(decimal(material.quantity).mul(presentation.factor)))
   }
+  const pendingReservations = await prisma.productionMaterial.findMany({
+    where: {
+      status: ProductionMaterialStatus.RESERVED,
+      shareReservation: false,
+      warehouse: { companyId },
+      ...(excludeOrderId && { orderId: { not: excludeOrderId } }),
+      OR: [...reservations.keys()].map(key => {
+        const [productId, warehouseId] = key.split(':')
+        return { productId, warehouseId }
+      }),
+    },
+    select: { productId: true, warehouseId: true, quantity: true },
+  })
+  const alreadyReserved = new Map<string, Prisma.Decimal>()
+  for (const material of pendingReservations) {
+    const presentation = factors.get(material.productId)
+    if (!presentation) continue
+    const key = `${material.productId}:${material.warehouseId}`
+    alreadyReserved.set(key, (alreadyReserved.get(key) ?? new Prisma.Decimal(0)).plus(material.quantity.mul(presentation.factor)))
+  }
   for (const [key, requested] of reservations) {
     const [productId, warehouseId] = key.split(':')
     const presentation = factors.get(productId)
     if (!presentation) throw new AppError('PRODUCTION_MATERIAL_UNIT_INVALID', 'Uno de los insumos no tiene una unidad de inventario activa.', 422)
     const stock = await prisma.stock.findFirst({ where: { productId, warehouseId, warehouse: { companyId } } })
-    const available = stock?.quantity ?? new Prisma.Decimal(0)
+    const physical = stock?.quantity ?? new Prisma.Decimal(0)
+    const available = Prisma.Decimal.max(physical.minus(alreadyReserved.get(key) ?? 0), 0)
     if (available.lessThan(requested)) throw new AppError('PRODUCTION_INSUFFICIENT_STOCK', 'No hay stock suficiente para reservar los insumos de esta orden.', 422)
   }
 }
@@ -64,6 +85,11 @@ async function validateStock(companyId: string, materials: MaterialInput[]) {
 async function validateSharedReservations(companyId: string, materials: MaterialInput[]) {
   const shared = materials.filter(material => material.shareReservation)
   if (!shared.length) return
+  const newSourceKeys = new Set(
+    materials
+      .filter(material => !material.shareReservation)
+      .map(material => `${material.productId}:${material.warehouseId}`),
+  )
   const sources = await prisma.productionMaterial.findMany({
     where: {
       status: ProductionMaterialStatus.RESERVED,
@@ -74,8 +100,37 @@ async function validateSharedReservations(companyId: string, materials: Material
     select: { productId: true, warehouseId: true },
   })
   for (const material of shared) {
-    if (!sources.some(source => source.productId === material.productId && source.warehouseId === material.warehouseId)) throw new AppError('PRODUCTION_SHARED_RESERVATION_NOT_FOUND', 'El insumo seleccionado ya no tiene una reserva activa para compartir.', 422)
+    const key = `${material.productId}:${material.warehouseId}`
+    const hasPersistedSource = sources.some(source => source.productId === material.productId && source.warehouseId === material.warehouseId)
+    if (!newSourceKeys.has(key) && !hasPersistedSource) throw new AppError('PRODUCTION_SHARED_RESERVATION_NOT_FOUND', 'El insumo seleccionado ya no tiene una reserva activa para compartir.', 422)
   }
+}
+
+/**
+ * Una reserva pendiente representa una unidad física de insumo. Las órdenes
+ * posteriores que usan el mismo insumo y almacén se enlazan a esa reserva en
+ * lugar de reservarla y descontarla una segunda vez.
+ */
+async function sharePendingReservations(companyId: string, materials: MaterialInput[]) {
+  const candidates = materials.filter(material => !material.immediateConsumption && !material.shareReservation)
+  if (!candidates.length) return materials
+  const existing = await prisma.productionMaterial.findMany({
+    where: {
+      status: ProductionMaterialStatus.RESERVED,
+      shareReservation: false,
+      order: { companyId },
+      OR: candidates.map(material => ({ productId: material.productId, warehouseId: material.warehouseId })),
+    },
+    select: { productId: true, warehouseId: true },
+  })
+  const reservedKeys = new Set(existing.map(material => `${material.productId}:${material.warehouseId}`))
+  return materials.map(material => {
+    const key = `${material.productId}:${material.warehouseId}`
+    if (material.immediateConsumption || material.shareReservation) return material
+    if (reservedKeys.has(key)) return { ...material, shareReservation: true }
+    reservedKeys.add(key)
+    return material
+  })
 }
 
 async function consumeMaterials(db: Prisma.TransactionClient, order: { number: string; materials: { id: string; productId: string; warehouseId: string; quantity: Prisma.Decimal; status: ProductionMaterialStatus; shareReservation: boolean }[] }, userId: string) {
@@ -134,9 +189,11 @@ export const productionService = {
     return { products: products.map(mapProduct), materials: materials.map(mapProduct), warehouses, stocks, customers, sharedReservations }
   },
   async create(companyId: string, input: ProductionOrderInput, userId: string) {
-    await validateReferences(companyId, input)
-    await validateStock(companyId, input.materials)
-    await validateSharedReservations(companyId, input.materials)
+    const materials = await sharePendingReservations(companyId, input.materials)
+    const resolvedInput = { ...input, materials }
+    await validateReferences(companyId, resolvedInput)
+    await validateStock(companyId, resolvedInput.materials)
+    await validateSharedReservations(companyId, resolvedInput.materials)
     const outputCustomer = input.outputDispatched ? await prisma.customer.findFirst({ where: { id: input.outputCustomerId!, companyId, status: ProductStatus.ACTIVE }, select: { name: true } }) : null
     if (input.outputDispatched && !outputCustomer) throw new AppError('PRODUCTION_OUTPUT_CUSTOMER_INVALID', 'Selecciona un cliente activo para la salida de inventario.', 422)
     return transaction(async db => {
@@ -147,12 +204,14 @@ export const productionService = {
         warehouse: { connect: { id: input.warehouseId } },
         quantity: decimal(input.quantity),
         scheduledAt: input.scheduledAt,
+        // La producción terminada se registra de inmediato. Los insumos no
+        // inmediatos permanecen como reservas hasta que se marquen consumidos.
         status: ProductionStatus.COMPLETED,
         note: input.note || null,
         outputDispatched: input.outputDispatched,
         outputJustification: input.outputDispatched ? input.outputJustification : null,
         ...(input.outputDispatched && { outputCustomer: { connect: { id: input.outputCustomerId! } } }),
-        materials: { create: input.materials.map(materialData) },
+        materials: { create: resolvedInput.materials.map(materialData) },
       })
       const immediate = created.materials.filter(line => line.immediateConsumption)
       if (immediate.length) await consumeMaterials(db, { number: created.number, materials: immediate }, userId)
@@ -186,7 +245,7 @@ export const productionService = {
       materials: input.materials ?? current.materials.map(line => ({ productId: line.productId, warehouseId: line.warehouseId, quantity: Number(line.quantity), immediateConsumption: line.immediateConsumption, shareReservation: line.shareReservation })),
     }
     await validateReferences(companyId, full)
-    await validateStock(companyId, full.materials)
+    await validateStock(companyId, full.materials, current.id)
     await validateSharedReservations(companyId, full.materials)
     return productionRepository.update(prisma, id, {
       product: { connect: { id: full.productId } },
@@ -219,7 +278,6 @@ export const productionService = {
   },
   async consumeMaterial(companyId: string, orderId: string, materialId: string, userId: string) {
     const current = await this.getById(companyId, orderId)
-    if (current.status !== ProductionStatus.PLANNED && current.status !== ProductionStatus.IN_PROGRESS) throw new AppError('PRODUCTION_MATERIAL_LOCKED', 'Solo puedes consumir insumos de órdenes activas.', 409)
     const material = current.materials.find(item => item.id === materialId)
     if (!material) throw new AppError('PRODUCTION_MATERIAL_NOT_FOUND', 'El insumo no pertenece a esta orden.', 404)
     if (material.status === ProductionMaterialStatus.CONSUMED) return current

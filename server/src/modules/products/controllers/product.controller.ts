@@ -9,7 +9,7 @@ export const productController = {
   async get(request: Request, response: Response) { response.json({ data: await productService.getById(paramId(request)) }) },
   async create(request: Request, response: Response) { const product = await productService.create(createProductSchema.parse(request.body), undefined, { companyId: request.auth!.companyId, userId: request.auth!.id }); response.status(201).json({ data: product }) },
   async createFromVariableSubcategory(request: Request, response: Response) { const product = await productService.createFromVariableSubcategory(createVariableProductSchema.parse({ ...request.body, subcategoryId: paramId(request) }), undefined, { companyId: request.auth!.companyId, userId: request.auth!.id }); response.status(201).json({ data: product }) },
-  async update(request: Request, response: Response) { response.json({ data: await productService.update(paramId(request), updateProductSchema.parse(request.body)) }) },
+  async update(request: Request, response: Response) { response.json({ data: await productService.update(paramId(request), updateProductSchema.parse(request.body), { companyId: request.auth!.companyId, userId: request.auth!.id }) }) },
   async remove(request: Request, response: Response) { await productService.remove(paramId(request)); response.status(204).send() },
   async listUnits(_request: Request, response: Response) { response.json({ data: await productService.getUnits() }) },
   async listCategories(_request: Request, response: Response) { response.json({ data: await productService.getCategories() }) },

@@ -43,6 +43,7 @@ export interface ProductVariant {
   factor: number;
   minimum: number;
   stock: number;
+  openingUnitCostPen?: number;
   status: ProductStatus;
 }
 export interface Unit {

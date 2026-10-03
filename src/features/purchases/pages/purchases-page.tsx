@@ -7,6 +7,7 @@ import { Input } from '../../../components/ui/input'
 import { ProductWizard } from '../../products/components/product-wizard'
 import { loadCatalog } from '../../products/services/product-api.service'
 import type { ProductBase, ProductVariant } from '../../products/types/product.types'
+import { addPurchaseToDashboard, type DashboardSummary } from '../../dashboard/services/dashboard-api.service'
 import { createPurchase, deletePurchase, getPurchase, listPurchases, loadPurchaseCatalog, removePurchaseDocument, uploadPurchaseDocument, type Purchase, type PurchaseCatalog, type UploadedPurchaseDocument } from '../services/purchase-api.service'
 
 type VariableDraft = { name: string; values: Record<string, string>; unit: string; factor: number; minimumStock: number; stock: number; roles: ProductBase['roles'] }
@@ -33,7 +34,12 @@ export function PurchasesPage() {
   }
   const createMutation = useMutation({
     mutationFn: createPurchase,
-    onSuccess: purchase => { queryClient.setQueryData<Purchase[]>(['purchases'], current => [purchase, ...(current ?? []).filter(item => item.id !== purchase.id)]); refreshPurchaseConsumers(); notify('Compra registrada, stock actualizado y catálogos sincronizados') },
+    onSuccess: purchase => {
+      queryClient.setQueryData<Purchase[]>(['purchases'], current => [purchase, ...(current ?? []).filter(item => item.id !== purchase.id)])
+      queryClient.setQueriesData<DashboardSummary>({ queryKey: ['dashboard', 'summary'] }, current => current ? addPurchaseToDashboard(current, purchase) : current)
+      refreshPurchaseConsumers()
+      notify('Compra registrada, stock actualizado y catálogos sincronizados')
+    },
     onError: error => notify(error instanceof Error ? error.message : 'No se pudo registrar la compra'),
   })
   const deleteMutation = useMutation({ mutationFn: deletePurchase, onSuccess: (_, id) => { queryClient.setQueryData<Purchase[]>(['purchases'], current => current?.filter(item => item.id !== id) ?? []); notify('Compra eliminada') }, onError: error => notify(error instanceof Error ? error.message : 'Solo se pueden eliminar compras en borrador') })

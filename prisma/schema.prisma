@@ -346,6 +346,7 @@ model ProductPresentation {
   factor Decimal @default(1) @db.Decimal(14, 3)
   minimumStock Decimal @default(0) @db.Decimal(14, 3)
   currentStock Decimal @default(0) @db.Decimal(14, 3)
+  openingUnitCostPen Decimal? @db.Decimal(14, 4)
   status ProductStatus @default(ACTIVE)
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
   unit Unit @relation(fields: [unitId], references: [id])

@@ -53,7 +53,7 @@ import type {
 } from "../types/product.types";
 
 type Modal =
-  | { type: "base"; item?: ProductBase }
+  | { type: "base"; item?: ProductBase; readOnly?: boolean }
   | { type: "variant"; item?: ProductVariant; baseId?: string }
   | { type: "unit"; item?: Unit }
   | { type: "category"; item?: ProductCategory }
@@ -77,6 +77,11 @@ const unitCode = (value: string) =>
     .join("")
     .slice(0, 4)
     .toUpperCase();
+const normalizeSearch = (value: string) => value
+  .normalize("NFD")
+  .replace(/\p{Diacritic}/gu, "")
+  .toLocaleLowerCase()
+  .trim();
 
 function StatusBadge({ status }: { status: ProductStatus }) {
   return (
@@ -610,16 +615,29 @@ export function ProductsPage() {
           // filtro debe evaluar ese mismo estado, no solo el estado base.
           const inventory = variants.find((variant) => variant.baseId === base.id);
           const visibleStatus = inventory?.status ?? base.status;
+          const category = categories.find((item) => item.id === base.categoryId);
+          const subcategory = category?.subcategories.find(
+            (item) => item.id === base.subcategoryId,
+          );
+          const searchableProductData = [
+            base.name,
+            base.code,
+            base.categoryName,
+            category?.name,
+            base.subcategoryName,
+            subcategory?.name,
+            ...base.roles,
+          ]
+            .filter(Boolean)
+            .join(" ");
           return (
           (roleFilter === "Todos" || base.roles.includes(roleFilter)) &&
           (statusFilter === "Todos" || visibleStatus === statusFilter) &&
-          `${base.name} ${base.code} ${base.categoryName ?? ""} ${base.subcategoryName ?? ""}`
-            .toLowerCase()
-            .includes(search.toLowerCase())
+          normalizeSearch(searchableProductData).includes(normalizeSearch(search))
           );
         },
       ),
-    [bases, variants, roleFilter, statusFilter, search],
+    [bases, variants, categories, roleFilter, statusFilter, search],
   );
   const orderedBases = useMemo(
     () =>
@@ -790,7 +808,7 @@ export function ProductsPage() {
               <Search className="absolute left-3 top-[35px] h-4 w-4 text-muted" />
               <Input
                 className="h-10 bg-white pl-9"
-                placeholder="Buscar producto, categoría o tipo..."
+                placeholder="Buscar producto, categoría o subcategoría..."
                 value={search}
                 onChange={(e) => {
                   setSearch(e.target.value);
@@ -814,6 +832,7 @@ export function ProductsPage() {
                 variants={variants}
                 units={units}
                 onEditBase={(item) => setModal({ type: "base", item })}
+                onViewBase={(item) => setModal({ type: "base", item, readOnly: true })}
                 onEditVariant={(variant) => {
                   const base = bases.find((item) => item.id === variant.baseId);
                   if (base) setModal({ type: "base", item: base });
@@ -937,6 +956,7 @@ export function ProductsPage() {
           products={bases}
           categories={categories}
           units={units}
+          readOnly={modal.readOnly}
           onClose={() => setModal(null)}
           onSave={({ base, variants: savedVariants }) =>
             productMutation.mutate({
@@ -1079,6 +1099,7 @@ function GroupedProductsTable({
   variants,
   units,
   onEditBase,
+  onViewBase,
   onToggleVariant,
   onDeleteProduct,
 }: {
@@ -1086,6 +1107,7 @@ function GroupedProductsTable({
   variants: ProductVariant[];
   units: Unit[];
   onEditBase: (base: ProductBase) => void;
+  onViewBase: (base: ProductBase) => void;
   onEditVariant: (variant: ProductVariant) => void;
   onToggleVariant: (variant: ProductVariant) => void;
   onDeleteProduct: (base: ProductBase) => void;
@@ -1138,7 +1160,7 @@ function GroupedProductsTable({
                   </td>
                   <td className="w-[320px] max-w-[320px] px-4 py-3.5">
                     <button
-                      onClick={() => onEditBase(base)}
+                      onClick={() => onViewBase(base)}
                       className="w-full text-left"
                       title={base.name}
                     >
