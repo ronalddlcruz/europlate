@@ -94,7 +94,7 @@ async function applyCalculationStrategy(db: Prisma.TransactionClient, items: Res
   const presentationIds = [...new Set(items.map(item => item.presentationId))]
   const presentations = await db.productPresentation.findMany({
     where: { id: { in: presentationIds }, status: ProductStatus.ACTIVE },
-    include: { product: { include: { attributes: { where: { isWeight: true, status: ProductStatus.ACTIVE } } } } },
+    include: { product: { include: { attributes: { where: { isWeight: true, status: ProductStatus.ACTIVE, OR: [{ attributeDefinitionId: null }, { attributeDefinition: { status: ProductStatus.ACTIVE } }] } } } } },
   })
   if (presentations.length !== presentationIds.length) throw new AppError('IMPORT_REFERENCE_INVALID', 'Producto o presentación no disponible.', 422)
 

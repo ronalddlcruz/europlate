@@ -148,7 +148,7 @@ export function refreshCoreDataInBackground() {
     () => queryClient.prefetchQuery({ queryKey: ['imports', 'catalog'], queryFn: loadImportCatalog, staleTime: 0 }),
     () => queryClient.prefetchQuery({ queryKey: ['production'], queryFn: listProductionOrders, staleTime: 0 }),
     () => queryClient.prefetchQuery({ queryKey: ['production', 'catalog'], queryFn: loadProductionCatalog, staleTime: 0 }),
-    () => queryClient.prefetchQuery({ queryKey: ['inventory', 'stock'], queryFn: listStock, staleTime: 0 }),
+    () => queryClient.prefetchQuery({ queryKey: ['inventory', 'stock', 'ACTIVE'], queryFn: () => listStock(), staleTime: 0 }),
     () => queryClient.prefetchQuery({ queryKey: ['inventory', 'catalog'], queryFn: loadInventoryCatalog, staleTime: 0 }),
     () => queryClient.prefetchQuery({ queryKey: ['inventory', 'warehouses'], queryFn: listWarehouses, staleTime: 0 }),
     () => queryClient.prefetchQuery({ queryKey: ['inventory', 'movements'], queryFn: listMovements, staleTime: 0 }),

@@ -952,15 +952,13 @@ export function ProductsPage() {
               onNew={() => setModal({ type: "attribute" })}
               onEdit={(item) => setModal({ type: "attribute", item })}
               onToggleStatus={(item) =>
-                item.isWeight
-                  ? notify("El atributo de peso debe permanecer activo.")
-                  : attributeMutation.mutate({
-                      item: {
-                        ...item,
-                        status: item.status === "Activo" ? "Inactivo" : "Activo",
-                      },
-                      editing: true,
-                    })
+                attributeMutation.mutate({
+                  item: {
+                    ...item,
+                    status: item.status === "Activo" ? "Inactivo" : "Activo",
+                  },
+                  editing: true,
+                })
               }
             />
           ) : (
@@ -1152,7 +1150,7 @@ function GroupedProductsTable({
               "Subcategoría",
               "Tipo de producto",
               "Producto",
-              "Inventario",
+              "Unidad de medida",
               "Estado",
               "",
             ].map((header) => (

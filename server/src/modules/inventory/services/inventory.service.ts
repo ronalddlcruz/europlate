@@ -67,11 +67,12 @@ const account = (userId: string, companyId: string) => ({ createdBy: { connect: 
 const reservationFactor = (material: { product: { presentations: { factor: Prisma.Decimal }[] } }) => material.product.presentations[0]?.factor ?? new Prisma.Decimal(1)
 
 export const inventoryService = {
-  async stock(companyId: string, filters: { search?: string; warehouseId?: string }) {
+  async stock(companyId: string, filters: { search?: string; warehouseId?: string; status?: 'ACTIVE' | 'INACTIVE' | 'ALL' }) {
+    const requestedStatus = filters.status ?? 'ACTIVE'
     const [stocks, reserved, products, [purchases, imports], currentExchangeRate] = await Promise.all([
       inventoryRepository.stock(companyId),
       inventoryRepository.reserved(companyId),
-      inventoryRepository.stockProducts(),
+      inventoryRepository.stockProducts(requestedStatus === 'ALL' ? undefined : requestedStatus),
       inventoryRepository.costSources(companyId),
       inventoryRepository.currentExchangeRate(companyId),
     ])

@@ -15,7 +15,7 @@ export const inventoryAdjustmentSchema = z.object({
 }).transform(input => ({ ...input, delta: input.type === 'IN' ? input.quantity : -input.quantity }))
 export const warehouseSchema = z.object({ name: z.string().trim().min(2).max(120), location: z.string().trim().max(255).optional().nullable(), description: z.string().trim().max(1_000).optional().nullable(), status: z.enum(['ACTIVE', 'INACTIVE']).default('ACTIVE') })
 export const updateWarehouseSchema = warehouseSchema.partial()
-export const inventoryQuerySchema = z.object({ search: z.string().trim().max(160).optional(), warehouseId: databaseIdSchema.optional() })
+export const inventoryQuerySchema = z.object({ search: z.string().trim().max(160).optional(), warehouseId: databaseIdSchema.optional(), status: z.enum(['ACTIVE', 'INACTIVE', 'ALL']).default('ACTIVE') })
 export type StockTransferInput = z.infer<typeof stockTransferSchema>
 export type InventoryAdjustmentInput = z.infer<typeof inventoryAdjustmentSchema>
 export type WarehouseInput = z.infer<typeof warehouseSchema>

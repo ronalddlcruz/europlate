@@ -142,7 +142,7 @@ export function CategoryConfiguration({
         </div>
       </div>
       <div className="overflow-x-auto rounded-xl border border-blue-100 bg-white shadow-[0_8px_24px_rgba(37,99,235,0.07)]">
-        <table className="w-full min-w-[920px] border-collapse text-left">
+        <table className="w-full min-w-[700px] border-collapse text-left">
           <thead>
             <tr className="bg-[#eef6ff] text-[11px] uppercase tracking-[.5px] text-slate-500">
               <th className="border-b border-blue-100 px-5 py-3.5 font-semibold">
@@ -150,9 +150,6 @@ export function CategoryConfiguration({
               </th>
               <th className="border-b border-blue-100 px-4 py-3.5 font-semibold">
                 Código
-              </th>
-              <th className="border-b border-blue-100 px-4 py-3.5 font-semibold">
-                Atributos comunes
               </th>
               <th className="border-b border-blue-100 px-4 py-3.5 font-semibold">
                 Subcategoría / Tipo
@@ -222,15 +219,6 @@ export function CategoryConfiguration({
                         >
                           {category.code || "—"}
                         </td>
-                        <td
-                          rowSpan={rowSpan}
-                          className="w-[220px] border-r border-slate-100 bg-[#fbfdff] px-4 align-middle"
-                        >
-                          <CompactAttributes
-                            attributes={category.attributes}
-                            empty="Sin atributos"
-                          />
-                        </td>
                       </>
                     )}
                     <td className="px-4 py-3.5">
@@ -280,7 +268,7 @@ export function CategoryConfiguration({
               })
             ) : (
               <tr>
-                <td colSpan={6} className="p-10 text-center text-sm text-muted">
+                <td colSpan={5} className="p-10 text-center text-sm text-muted">
                   No hay categorías o subcategorías que coincidan.
                 </td>
               </tr>

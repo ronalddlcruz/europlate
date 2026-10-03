@@ -10,7 +10,8 @@ export type Adjustment = { id: string; date: string; product: string; presentati
 
 const number = (value: string | number) => Number(value)
 const format = (value: string) => new Date(value).toLocaleString('es-PE', { dateStyle: 'short', timeStyle: 'short' })
-export const listStock = () => api<StockRecord[]>('/api/inventory/stock')
+export type StockStatusFilter = 'ACTIVE' | 'INACTIVE' | 'ALL'
+export const listStock = (status: StockStatusFilter = 'ACTIVE') => api<StockRecord[]>(`/api/inventory/stock?status=${status}`)
 export const loadInventoryCatalog = () => api<{ products: CatalogProduct[]; warehouses: Warehouse[]; customers: CatalogCustomer[] }>('/api/inventory/catalog')
 export const listMovements = async () => (await api<any[]>('/api/inventory/movements')).map(item => ({ id: item.id, date: format(item.createdAt), type: item.type, product: item.product.name, presentation: item.presentation?.name ?? item.product.presentations[0]?.name ?? '—', warehouse: item.warehouse.name, quantity: number(item.quantity), note: item.note ?? item.reference ?? '—', user: item.createdBy?.name ?? item.createdBy?.email ?? 'Sistema' }) satisfies Movement)
 export const listTransfers = async () => (await api<any[]>('/api/inventory/transfers')).map(item => ({ id: item.id, date: format(item.createdAt), product: item.product.name, presentation: item.presentation?.name ?? '—', origin: item.fromWarehouse.name, destination: item.toWarehouse.name, quantity: number(item.quantity), note: item.note ?? '—', user: item.createdBy?.email ?? 'Sistema' }) satisfies Transfer)

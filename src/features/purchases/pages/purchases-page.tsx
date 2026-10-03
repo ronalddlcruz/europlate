@@ -128,7 +128,7 @@ function PurchaseDialog({ catalog, productsCatalog, saving, onClose, onSave }: {
       const variableDraft = line.variableDraft
       const category = productsCatalog.categories.find(candidate => candidate.id === variableSubcategory.category.id || candidate.name === variableSubcategory.category.name)
       const subcategory = category?.subcategories.find(candidate => candidate.id === variableSubcategory.id)
-      const missing = [...(category?.attributes ?? []), ...(subcategory?.attributes ?? [])].find(attribute => attribute.required && !variableDraft.values[attribute.id]?.trim())
+      const missing = [...(category?.attributes ?? []), ...(subcategory?.attributes ?? [])].filter(attribute => attribute.status !== 'Inactivo' && attribute.definitionStatus !== 'Inactivo').find(attribute => attribute.required && !variableDraft.values[attribute.id]?.trim())
       if (missing) return `Completa el atributo obligatorio: ${missing.name}.`
       if (!productsCatalog.units.some(unit => unit.code === variableDraft.unit && unit.status === 'Activo')) return 'Selecciona una unidad de inventario activa para el producto variable.'
     }
