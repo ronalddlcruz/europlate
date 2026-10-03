@@ -398,7 +398,10 @@ export const productService = {
   async updateAttributeDefinition(id: string, input: Partial<CreateAttributeDefinitionInput>) {
     const existing = await productRepository.findAttributeDefinition(id)
     if (!existing) throw new AppError('ATTRIBUTE_NOT_FOUND', 'Atributo no encontrado.', 404)
-    if ((input.isWeight ?? existing.isWeight) && (input.dataType ?? existing.dataType) !== 'NUMBER') throw new AppError('WEIGHT_ATTRIBUTE_NOT_NUMERIC', 'El atributo configurado como peso debe ser numérico.', 422)
+    const nextIsWeight = input.isWeight ?? existing.isWeight
+    const nextStatus = input.status ?? existing.status
+    if (nextIsWeight && (input.dataType ?? existing.dataType) !== 'NUMBER') throw new AppError('WEIGHT_ATTRIBUTE_NOT_NUMERIC', 'El atributo configurado como peso debe ser numérico.', 422)
+    if (nextIsWeight && nextStatus !== ProductStatus.ACTIVE) throw new AppError('WEIGHT_ATTRIBUTE_MUST_REMAIN_ACTIVE', 'El atributo usado como peso debe permanecer activo.', 422)
     if (input.name) { const duplicate = await productRepository.findAttributeDefinitionByName(input.name); if (duplicate && duplicate.id !== id) throw new AppError('ATTRIBUTE_NAME_EXISTS', 'El nombre del atributo ya existe.', 409) }
     const { code: _ignoredCode, ...data } = input
     const definitionData = { ...data, ...(input.suffix !== undefined && { suffix: input.suffix ?? null }) }

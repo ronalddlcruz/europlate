@@ -927,7 +927,7 @@ function AssociationList({
 }) {
   return (
     <div className="mt-3 space-y-2">
-      {attributes.map((attribute) => (
+      {attributes.filter((attribute) => attribute.status !== "Inactivo" && attribute.definitionStatus !== "Inactivo").map((attribute) => (
         <div
           key={attribute.id}
           className="flex flex-wrap items-center gap-3 rounded-md border border-border px-3 py-2 text-sm"

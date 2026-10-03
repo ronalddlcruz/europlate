@@ -952,13 +952,15 @@ export function ProductsPage() {
               onNew={() => setModal({ type: "attribute" })}
               onEdit={(item) => setModal({ type: "attribute", item })}
               onToggleStatus={(item) =>
-                attributeMutation.mutate({
-                  item: {
-                    ...item,
-                    status: item.status === "Activo" ? "Inactivo" : "Activo",
-                  },
-                  editing: true,
-                })
+                item.isWeight
+                  ? notify("El atributo de peso debe permanecer activo.")
+                  : attributeMutation.mutate({
+                      item: {
+                        ...item,
+                        status: item.status === "Activo" ? "Inactivo" : "Activo",
+                      },
+                      editing: true,
+                    })
               }
             />
           ) : (
