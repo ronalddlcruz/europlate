@@ -25,6 +25,7 @@ export interface ProductBase {
   id: string;
   code: string;
   name: string;
+  sortOrder?: number;
   categoryId?: string | null;
   categoryName?: string | null;
   subcategoryId?: string | null;

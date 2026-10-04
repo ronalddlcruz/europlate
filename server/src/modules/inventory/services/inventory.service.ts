@@ -164,7 +164,31 @@ export const inventoryService = {
       return adjustment
     })
   },
-  async createWarehouse(companyId: string, input: WarehouseInput) { const duplicate = await prisma.warehouse.findFirst({ where: { companyId, name: { equals: input.name, mode: 'insensitive' } } }); if (duplicate) throw new AppError('WAREHOUSE_EXISTS', 'Ya existe un almacén con ese nombre.', 409); return inventoryRepository.createWarehouse({ company: { connect: { id: companyId } }, name: input.name, location: input.location || null, description: input.description || null, status: input.status }) },
-  async updateWarehouse(companyId: string, id: string, input: Partial<WarehouseInput>) { if (!await inventoryRepository.findWarehouse(id, companyId)) throw new AppError('WAREHOUSE_NOT_FOUND', 'El almacén no existe.', 404); if (input.name) { const duplicate = await prisma.warehouse.findFirst({ where: { companyId, name: { equals: input.name, mode: 'insensitive' }, NOT: { id } } }); if (duplicate) throw new AppError('WAREHOUSE_EXISTS', 'Ya existe un almacén con ese nombre.', 409) }; return inventoryRepository.updateWarehouse(id, { ...input, ...(input.location !== undefined && { location: input.location || null }), ...(input.description !== undefined && { description: input.description || null }) }) },
+  async createWarehouse(companyId: string, input: WarehouseInput) {
+    const duplicate = await prisma.warehouse.findFirst({ where: { companyId, name: { equals: input.name, mode: 'insensitive' } } })
+    if (duplicate) throw new AppError('WAREHOUSE_EXISTS', 'Ya existe un almacén con ese nombre.', 409)
+    return inventoryRepository.createWarehouse({
+      company: { connect: { id: companyId } }, name: input.name, location: input.location || null,
+      department: input.department || null, province: input.province || null,
+      district: input.district || null, address: input.address || input.location || null,
+      description: input.description || null, status: input.status,
+    })
+  },
+  async updateWarehouse(companyId: string, id: string, input: Partial<WarehouseInput>) {
+    if (!await inventoryRepository.findWarehouse(id, companyId)) throw new AppError('WAREHOUSE_NOT_FOUND', 'El almacén no existe.', 404)
+    if (input.name) {
+      const duplicate = await prisma.warehouse.findFirst({ where: { companyId, name: { equals: input.name, mode: 'insensitive' }, NOT: { id } } })
+      if (duplicate) throw new AppError('WAREHOUSE_EXISTS', 'Ya existe un almacén con ese nombre.', 409)
+    }
+    return inventoryRepository.updateWarehouse(id, {
+      ...input,
+      ...(input.location !== undefined && { location: input.location || null }),
+      ...(input.department !== undefined && { department: input.department || null }),
+      ...(input.province !== undefined && { province: input.province || null }),
+      ...(input.district !== undefined && { district: input.district || null }),
+      ...(input.address !== undefined && { address: input.address || null }),
+      ...(input.description !== undefined && { description: input.description || null }),
+    })
+  },
   async removeWarehouse(companyId: string, id: string) { if (!await inventoryRepository.findWarehouse(id, companyId)) throw new AppError('WAREHOUSE_NOT_FOUND', 'El almacén no existe.', 404); const [stock, movements, transfers, adjustments] = await Promise.all([prisma.stock.count({ where: { warehouseId: id, quantity: { not: 0 } } }), prisma.inventoryMovement.count({ where: { warehouseId: id } }), prisma.stockTransfer.count({ where: { OR: [{ fromWarehouseId: id }, { toWarehouseId: id }] } }), prisma.inventoryAdjustment.count({ where: { warehouseId: id } })]); if (stock || movements || transfers || adjustments) throw new AppError('WAREHOUSE_IN_USE', 'No se puede eliminar un almacén con stock o historial. Desactívalo en su lugar.', 409); await inventoryRepository.removeWarehouse(id) },
 }

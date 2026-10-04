@@ -51,6 +51,7 @@ type ApiProduct = {
   id: string;
   code: string;
   name: string;
+  sortOrder: number;
   categoryId: string | null;
   subcategoryId: string | null;
   category: ApiCategory | null;
@@ -146,6 +147,7 @@ export const mapProduct = (
     id: product.id,
     code: product.code,
     name: product.name,
+    sortOrder: product.sortOrder,
     categoryId: product.categoryId,
     categoryName: product.category?.name,
     subcategoryId: product.subcategoryId,

@@ -1,6 +1,6 @@
 import { api } from '../../../lib/api-client'
 
-export type Warehouse = { id: string; name: string; location: string | null; description: string | null; status: 'ACTIVE' | 'INACTIVE' }
+export type Warehouse = { id: string; name: string; location: string | null; department?: string | null; province?: string | null; district?: string | null; address?: string | null; description: string | null; status: 'ACTIVE' | 'INACTIVE' }
 export type CatalogProduct = { id: string; code: string; name: string; presentations: { id: string; name: string; unit: { code: string } }[] }
 export type CatalogCustomer = { id: string; name: string }
 export type StockRecord = { productId: string; code: string; product: string; category: string; subcategory: string; roles?: ('MERCHANDISE' | 'SUPPLY' | 'FINISHED_PRODUCT')[]; presentation?: string; presentationId: string | null; unit: string; unitName?: string; factor: number; minimum: number; total: number; available: number; inProduction: number; costUsd: number; costPen: number; status: 'ACTIVE' | 'INACTIVE'; warehouses: { id: string; name: string; quantity: number }[] }

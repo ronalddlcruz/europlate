@@ -13,7 +13,18 @@ export const inventoryAdjustmentSchema = z.object({
 }).superRefine((input, context) => {
   if (input.type === 'OUT' && !input.customerId) context.addIssue({ code: z.ZodIssueCode.custom, path: ['customerId'], message: 'Selecciona el cliente asociado a la salida.' })
 }).transform(input => ({ ...input, delta: input.type === 'IN' ? input.quantity : -input.quantity }))
-export const warehouseSchema = z.object({ name: z.string().trim().min(2).max(120), location: z.string().trim().max(255).optional().nullable(), description: z.string().trim().max(1_000).optional().nullable(), status: z.enum(['ACTIVE', 'INACTIVE']).default('ACTIVE') })
+const optionalLocationField = z.string().trim().max(120).optional().nullable()
+export const warehouseSchema = z.object({
+  name: z.string().trim().min(2).max(120),
+  // location se mantiene solo para compatibilidad con registros y clientes antiguos.
+  location: z.string().trim().max(255).optional().nullable(),
+  department: optionalLocationField,
+  province: optionalLocationField,
+  district: optionalLocationField,
+  address: z.string().trim().max(255).optional().nullable(),
+  description: z.string().trim().max(1_000).optional().nullable(),
+  status: z.enum(['ACTIVE', 'INACTIVE']).default('ACTIVE'),
+})
 export const updateWarehouseSchema = warehouseSchema.partial()
 export const inventoryQuerySchema = z.object({ search: z.string().trim().max(160).optional(), warehouseId: databaseIdSchema.optional(), status: z.enum(['ACTIVE', 'INACTIVE', 'ALL']).default('ACTIVE') })
 export type StockTransferInput = z.infer<typeof stockTransferSchema>

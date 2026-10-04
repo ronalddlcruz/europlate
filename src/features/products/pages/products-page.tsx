@@ -81,6 +81,14 @@ const normalizeSearch = (value: string) => value
   .replace(/\p{Diacritic}/gu, "")
   .toLocaleLowerCase()
   .trim();
+const searchTokens = (value: string) =>
+  normalizeSearch(value)
+    .replace(/(\d)\s*x\s*(\d)/g, "$1 $2")
+    .match(/[\p{L}\p{N}]+/gu) ?? [];
+const matchesProductSearch = (haystack: string, query: string) => {
+  const normalizedHaystack = normalizeSearch(haystack);
+  return searchTokens(query).every((term) => normalizedHaystack.includes(term));
+};
 const productNameWithCategory = (base: ProductBase) => {
   const category = base.categoryName?.trim();
   if (!category) return base.name;
@@ -293,12 +301,7 @@ export function ProductsPage() {
                 currentProduct.base.id === base.id ? product : currentProduct,
               )
             : [...current.products, product];
-          return {
-            ...current,
-            products: products.sort((left, right) =>
-              left.base.name.localeCompare(right.base.name),
-            ),
-          };
+          return { ...current, products };
         },
       );
       setModal(null);
@@ -316,12 +319,7 @@ export function ProductsPage() {
             : current.products.map((product) =>
                 product.base.id === context?.optimisticId ? saved : product,
               );
-          return {
-            ...current,
-            products: products.sort((left, right) =>
-              left.base.name.localeCompare(right.base.name),
-            ),
-          };
+          return { ...current, products };
         },
       );
       setSearch("");
@@ -638,6 +636,9 @@ export function ProductsPage() {
           const subcategory = category?.subcategories.find(
             (item) => item.id === base.subcategoryId,
           );
+          const productVariants = variants.filter(
+            (variant) => variant.baseId === base.id,
+          );
           const searchableProductData = [
             base.name,
             base.code,
@@ -646,13 +647,22 @@ export function ProductsPage() {
             base.subcategoryName,
             subcategory?.name,
             ...base.roles,
+            ...base.attributes.flatMap((attribute) => [
+              attribute.name,
+              attribute.suffix,
+            ]),
+            ...productVariants.flatMap((variant) => [
+              variant.name,
+              variant.unit,
+              ...Object.values(variant.values),
+            ]),
           ]
             .filter(Boolean)
             .join(" ");
           return (
           (roleFilter === "Todos" || base.roles.includes(roleFilter)) &&
           (statusFilter === "Todos" || visibleStatus === statusFilter) &&
-          normalizeSearch(searchableProductData).includes(normalizeSearch(search))
+          matchesProductSearch(searchableProductData, search)
           );
         },
       ),
@@ -675,7 +685,8 @@ export function ProductsPage() {
           rightVariants.every((variant) => variant.status === "Inactivo");
         return (
           Number(leftInactive) - Number(rightInactive) ||
-          left.name.localeCompare(right.name)
+          (left.sortOrder ?? Number.MAX_SAFE_INTEGER) -
+            (right.sortOrder ?? Number.MAX_SAFE_INTEGER)
         );
       }),
     [filteredBases, variants],
@@ -827,7 +838,7 @@ export function ProductsPage() {
               <Search className="absolute left-3 top-[35px] h-4 w-4 text-muted" />
               <Input
                 className="h-10 bg-white pl-9"
-                placeholder="Buscar producto, categoría o subcategoría..."
+                placeholder="Buscar producto, categoría, subcategoría o medida..."
                 value={search}
                 onChange={(e) => {
                   setSearch(e.target.value);

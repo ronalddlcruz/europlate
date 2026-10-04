@@ -298,6 +298,8 @@ model Product {
   id String @id @default(cuid())
   code String @unique
   name String
+  /// Orden estable de visualización. No cambia cuando se edita el producto.
+  sortOrder Int @default(0)
   categoryId String?
   subcategoryId String?
   brandId String?
@@ -319,6 +321,7 @@ model Product {
   materials ProductionMaterial[]
   stockTransfers StockTransfer[]
   inventoryAdjustments InventoryAdjustment[]
+  @@index([sortOrder])
   @@index([name, status])
 }
 
@@ -377,6 +380,10 @@ model Warehouse {
   companyId String
   name String
   location String?
+  department String?
+  province String?
+  district String?
+  address String?
   description String?
   status ProductStatus @default(ACTIVE)
   company Company @relation(fields: [companyId], references: [id])

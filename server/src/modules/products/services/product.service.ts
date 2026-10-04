@@ -45,6 +45,10 @@ async function nextProductCode(db: Prisma.TransactionClient, categoryId?: string
   const latest = Number(latestProduct?.code.match(expression)?.[1]) || 0
   return `${prefix}-${String(latest + 1).padStart(3, '0')}`
 }
+async function nextProductSortOrder(db: Prisma.TransactionClient) {
+  const latest = await db.product.aggregate({ _max: { sortOrder: true } })
+  return (latest._max.sortOrder ?? 0) + 1
+}
 const presentationData = (presentation: CreateProductInput['presentations'][number], index: number, productCode?: string) => ({
   code: presentation.code ?? (productCode ? presentationCode(productCode, index) : `PRE-${Date.now().toString().slice(-8)}-${index + 1}`), name: presentation.name,
   unit: { connect: presentation.unitId ? { id: presentation.unitId } : { code: presentation.unitCode! } },
@@ -309,7 +313,8 @@ export const productService = {
     await validateSubcategory(input.categoryId, input.subcategoryId)
     const persist = async (db: Prisma.TransactionClient) => {
       const code = await nextProductCode(db, input.categoryId, input.subcategoryId)
-      const product = await productRepository.create(db, { code, name: input.name, status: input.status, roles: { set: input.roles }, variantType: input.variantType, immediateConsumption: input.immediateConsumption, ...(input.categoryId && { category: { connect: { id: input.categoryId } } }), ...(input.subcategoryId && { subcategory: { connect: { id: input.subcategoryId } } }), ...(input.brandId && { brand: { connect: { id: input.brandId } } }), attributes: { create: input.attributes.map(attributeData) }, presentations: { create: input.presentations.map((presentation, index) => presentationData(presentation, index, code)) } })
+      const sortOrder = await nextProductSortOrder(db)
+      const product = await productRepository.create(db, { code, name: input.name, sortOrder, status: input.status, roles: { set: input.roles }, variantType: input.variantType, immediateConsumption: input.immediateConsumption, ...(input.categoryId && { category: { connect: { id: input.categoryId } } }), ...(input.subcategoryId && { subcategory: { connect: { id: input.subcategoryId } } }), ...(input.brandId && { brand: { connect: { id: input.brandId } } }), attributes: { create: input.attributes.map(attributeData) }, presentations: { create: input.presentations.map((presentation, index) => presentationData(presentation, index, code)) } })
       await synchronizePresentationAttributeValues(db, product, input)
       await initializeProductStock(db, product, context)
       return product
