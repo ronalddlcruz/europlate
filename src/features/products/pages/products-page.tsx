@@ -67,6 +67,11 @@ const badge: Record<ProductRole, string> = {
   Insumo: "bg-amber-100 text-amber-700",
   "Producto terminado": "bg-violet-100 text-violet-700",
 };
+const roleAbbreviation: Record<ProductRole, string> = {
+  Mercadería: "MER",
+  Insumo: "INS",
+  "Producto terminado": "TER",
+};
 const newId = () => crypto.randomUUID();
 const unitCode = (value: string) =>
   value
@@ -1203,8 +1208,13 @@ function GroupedProductsTable({
                         <span
                           className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${badge[role]}`}
                           key={role}
+                          title={role}
                         >
-                          {role === "Producto terminado" ? "P. terminado" : role}
+                          {base.roles.length >= 2
+                            ? roleAbbreviation[role]
+                            : role === "Producto terminado"
+                              ? "P. terminado"
+                              : role}
                         </span>
                       ))}
                     </span>

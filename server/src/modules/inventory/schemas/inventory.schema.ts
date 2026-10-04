@@ -6,13 +6,11 @@ export const stockTransferSchema = z.object({ productId: databaseIdSchema, prese
 export const inventoryAdjustmentSchema = z.object({
   productId: databaseIdSchema,
   warehouseId: databaseIdSchema,
-  type: z.enum(['IN', 'OUT']),
+  type: z.enum(['IN', 'OUT', 'WASTE']),
   quantity: z.coerce.number().finite().positive('La cantidad debe ser mayor que cero.'),
   customerId: databaseIdSchema.optional().nullable(),
   reason: z.string().trim().min(3).max(1_000),
-}).superRefine((input, context) => {
-  if (input.type === 'OUT' && !input.customerId) context.addIssue({ code: z.ZodIssueCode.custom, path: ['customerId'], message: 'Selecciona el cliente asociado a la salida.' })
-}).transform(input => ({ ...input, delta: input.type === 'IN' ? input.quantity : -input.quantity }))
+}).transform(input => ({ ...input, customerId: input.type === 'WASTE' ? null : input.customerId, delta: input.type === 'IN' ? input.quantity : -input.quantity }))
 const optionalLocationField = z.string().trim().max(120).optional().nullable()
 export const warehouseSchema = z.object({
   name: z.string().trim().min(2).max(120),

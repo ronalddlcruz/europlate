@@ -48,8 +48,10 @@ function receivedCosts(
     // El movimiento se registra en unidades físicas; se normaliza a la UM
     // de inventario antes de combinarlo con compras e importaciones.
     const quantity = Number(movement.quantity) / factor
-    const pen = quantity * Number(movement.presentation?.openingUnitCostPen ?? 0)
-    add(movement.productId, quantity, 0, pen)
+    const isUsd = movement.presentation?.openingUnitCostCurrency === 'USD'
+    const usd = isUsd ? quantity * Number(movement.presentation?.openingUnitCostUsd ?? 0) : 0
+    const pen = isUsd ? 0 : quantity * Number(movement.presentation?.openingUnitCostPen ?? 0)
+    add(movement.productId, quantity, usd, pen)
   }
   return byProduct
 }
@@ -153,14 +155,15 @@ export const inventoryService = {
       const current = await db.stock.findUnique({ where: { productId_warehouseId: { productId: input.productId, warehouseId: input.warehouseId } } }); const previous = current?.quantity ?? new Prisma.Decimal(0); const next = previous.plus(baseDelta)
       if (input.delta < 0 && previous.isZero()) throw new AppError('INVENTORY_ZERO_STOCK', 'No se puede registrar una salida porque el producto no tiene stock disponible.', 422)
       if (next.isNegative()) throw new AppError('INVENTORY_NEGATIVE_STOCK', 'El ajuste no puede dejar el stock en negativo.', 422)
-      if (input.delta < 0) {
-        const customer = await db.customer.findFirst({ where: { id: input.customerId!, companyId, status: ProductStatus.ACTIVE }, select: { id: true } })
-        if (!customer) throw new AppError('INVENTORY_CUSTOMER_INVALID', 'Selecciona un cliente activo para la salida.', 422)
+      if (input.type === 'OUT' && input.customerId) {
+        const customer = await db.customer.findFirst({ where: { id: input.customerId, companyId, status: ProductStatus.ACTIVE }, select: { id: true } })
+        if (!customer) throw new AppError('INVENTORY_CUSTOMER_INVALID', 'El cliente seleccionado no está activo.', 422)
       }
       await db.stock.upsert({ where: { productId_warehouseId: { productId: input.productId, warehouseId: input.warehouseId } }, create: { productId: input.productId, warehouseId: input.warehouseId, quantity: next }, update: { quantity: next } })
       await db.productPresentation.update({ where: { id: presentation.id }, data: { currentStock: { increment: decimal(input.delta) } } })
-      const adjustment = await inventoryRepository.createAdjustment(db, { ...account(userId, companyId), product: { connect: { id: input.productId } }, presentation: { connect: { id: presentation.id } }, warehouse: { connect: { id: input.warehouseId } }, ...(input.customerId && { customer: { connect: { id: input.customerId } } }), previousQuantity: previous, newQuantity: next, reason: input.reason })
-      await db.inventoryMovement.create({ data: { productId: input.productId, presentationId: presentation.id, warehouseId: input.warehouseId, createdByUserId: userId, type: input.delta > 0 ? 'ADJUSTMENT_IN' : 'ADJUSTMENT_OUT', quantity: baseDelta, reference: adjustment.id, note: input.reason } })
+      const adjustment = await inventoryRepository.createAdjustment(db, { ...account(userId, companyId), product: { connect: { id: input.productId } }, presentation: { connect: { id: presentation.id } }, warehouse: { connect: { id: input.warehouseId } }, ...(input.customerId && { customer: { connect: { id: input.customerId } } }), type: input.type, previousQuantity: previous, newQuantity: next, reason: input.reason })
+      const movementType = input.type === 'IN' ? 'ADJUSTMENT_IN' : input.type === 'WASTE' ? 'ADJUSTMENT_WASTE' : 'ADJUSTMENT_OUT'
+      await db.inventoryMovement.create({ data: { productId: input.productId, presentationId: presentation.id, warehouseId: input.warehouseId, createdByUserId: userId, type: movementType, quantity: baseDelta, reference: adjustment.id, note: input.reason } })
       return adjustment
     })
   },

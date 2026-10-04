@@ -46,7 +46,9 @@ export interface ProductVariant {
   factor: number;
   minimum: number;
   stock: number;
-  openingUnitCostPen?: number;
+  openingUnitCostPen?: number | null;
+  openingUnitCostUsd?: number | null;
+  openingUnitCostCurrency?: "PEN" | "USD";
   status: ProductStatus;
 }
 export interface Unit {

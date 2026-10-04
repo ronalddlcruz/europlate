@@ -56,7 +56,14 @@ enum InventoryMovementType {
   TRANSFER_OUT
   ADJUSTMENT_IN
   ADJUSTMENT_OUT
+  ADJUSTMENT_WASTE
   INITIAL_STOCK
+}
+
+enum InventoryAdjustmentType {
+  IN
+  OUT
+  WASTE
 }
 
 enum PurchaseStatus {
@@ -354,6 +361,8 @@ model ProductPresentation {
   minimumStock Decimal @default(0) @db.Decimal(14, 3)
   currentStock Decimal @default(0) @db.Decimal(14, 3)
   openingUnitCostPen Decimal? @db.Decimal(14, 4)
+  openingUnitCostUsd Decimal? @db.Decimal(14, 4)
+  openingUnitCostCurrency String @default("PEN")
   status ProductStatus @default(ACTIVE)
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
   unit Unit @relation(fields: [unitId], references: [id])
@@ -455,6 +464,7 @@ model InventoryAdjustment {
   companyId String?
   createdByUserId String?
   customerId String?
+  type InventoryAdjustmentType @default(IN)
   previousQuantity Decimal @db.Decimal(14, 3)
   newQuantity Decimal @db.Decimal(14, 3)
   reason String

@@ -17,7 +17,7 @@ export const inventoryRepository = {
     }),
     prisma.inventoryMovement.findMany({
       where: { type: 'INITIAL_STOCK', warehouse: { companyId } },
-      select: { productId: true, quantity: true, presentation: { select: { factor: true, openingUnitCostPen: true } } },
+      select: { productId: true, quantity: true, presentation: { select: { factor: true, openingUnitCostPen: true, openingUnitCostUsd: true, openingUnitCostCurrency: true } } },
     }),
   ]),
   currentExchangeRate: (companyId: string) => prisma.exchangeRate.findFirst({ where: { companyId }, select: { value: true }, orderBy: [{ effectiveDate: 'desc' }, { createdAt: 'desc' }] }),

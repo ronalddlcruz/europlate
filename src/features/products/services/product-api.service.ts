@@ -70,6 +70,8 @@ type ApiProduct = {
     minimumStock: string | number;
     currentStock: string | number;
     openingUnitCostPen: string | number | null;
+    openingUnitCostUsd: string | number | null;
+    openingUnitCostCurrency: "PEN" | "USD";
     status: "ACTIVE" | "INACTIVE";
     unit: { code: string };
   }[];
@@ -170,6 +172,8 @@ export const mapProduct = (
     minimum: Number(presentation.minimumStock),
     stock: Number(presentation.currentStock),
     openingUnitCostPen: Number(presentation.openingUnitCostPen ?? 0),
+    openingUnitCostUsd: Number(presentation.openingUnitCostUsd ?? 0),
+    openingUnitCostCurrency: presentation.openingUnitCostCurrency ?? "PEN",
     status: toStatus(presentation.status),
   })),
 });
@@ -245,6 +249,8 @@ function productPayload(
         minimumStock: variant.minimum,
         currentStock: variant.stock,
         openingUnitCostPen: variant.openingUnitCostPen,
+        openingUnitCostUsd: variant.openingUnitCostUsd,
+        openingUnitCostCurrency: variant.openingUnitCostCurrency ?? "PEN",
         status: fromStatus(variant.status),
       };
     }),
