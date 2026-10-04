@@ -1890,7 +1890,7 @@ function VariantDialog({
     ),
   ]
     .filter(Boolean)
-    .join(" · ");
+    .join(" ");
   const submit = (event: FormEvent) => {
     event.preventDefault();
     if (

@@ -54,7 +54,7 @@ function StockTable({ records, warehouses, loading, status, onStatusChange }: { 
   const [page, setPage] = useState(1)
   const activeWarehouses = warehouses.filter(item => item.status === 'ACTIVE')
   const visibleRecords = records.filter(item => `${item.code} ${item.category} ${item.subcategory} ${item.product}`.toLowerCase().includes(search.toLowerCase()))
-  const pageSize = 10
+  const pageSize = 25
   const totalPages = Math.max(1, Math.ceil(visibleRecords.length / pageSize))
   const currentPage = Math.min(page, totalPages)
   const paginatedRecords = visibleRecords.slice((currentPage - 1) * pageSize, currentPage * pageSize)

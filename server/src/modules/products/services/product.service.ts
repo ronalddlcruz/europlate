@@ -296,7 +296,7 @@ export const productService = {
     const attributes = [...category.attributes, ...subcategory.attributes].filter(isAvailableAttribute)
     const missing = attributes.find(attribute => attribute.required && !input.values[attribute.id]?.trim())
     if (missing) throw new AppError('VARIABLE_ATTRIBUTE_REQUIRED', `Completa el atributo obligatorio: ${missing.name}.`, 422)
-    const name = input.name ?? [category.name, subcategory.name, ...attributes.map(attribute => input.values[attribute.id] ? `${input.values[attribute.id]}${attribute.suffix ?? ''}` : '')].filter(Boolean).join(' · ')
+    const name = input.name ?? [category.name, subcategory.name, ...attributes.map(attribute => input.values[attribute.id] ? `${input.values[attribute.id]}${attribute.suffix ?? ''}` : '')].filter(Boolean).join(' ')
     return this.create({ name, categoryId: category.id, subcategoryId: subcategory.id, status: input.status, roles: input.roles, variantType: 'BASIC', immediateConsumption: true, attributes: attributes.map(attribute => ({ id: attribute.id, attributeDefinitionId: attribute.attributeDefinitionId, name: attribute.name, dataType: attribute.dataType, suffix: attribute.suffix, required: attribute.required, status: attribute.status, useInSubtotal: false, isWeight: attribute.attributeDefinition?.isWeight ?? false })), presentations: [{ name, unitId: input.unitId, attributeValues: input.values, factor: input.factor, minimumStock: input.minimumStock, currentStock: input.currentStock, status: input.status }] }, db, context)
   },
   async getCatalog(filters: { search?: string; status?: ProductStatus; role?: 'MERCHANDISE' | 'SUPPLY' | 'FINISHED_PRODUCT' }) {

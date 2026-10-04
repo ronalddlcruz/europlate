@@ -14,7 +14,7 @@ const uid = () => crypto.randomUUID()
 const num = (value: string, fallback: number) => Number.isFinite(Number(value)) ? Number(value) : fallback
 // Cada especificación se presenta como una sola pieza: valor + sufijo.
 // Así el texto automático queda, por ejemplo, "16cal · 12g".
-const description = (attributes: Attribute[], values: Record<string, string>) => attributes.map(attribute => values[attribute.id]?.trim() ? `${values[attribute.id].trim()}${attribute.suffix?.trim() ?? ''}` : '').filter(Boolean).join(' · ')
+const description = (attributes: Attribute[], values: Record<string, string>) => attributes.map(attribute => values[attribute.id]?.trim() ? `${values[attribute.id].trim()}${attribute.suffix?.trim() ?? ''}` : '').filter(Boolean).join(' ')
 const isAvailableAttribute = (attribute: Attribute) => attribute.status !== 'Inactivo' && attribute.definitionStatus !== 'Inactivo'
 
 function ClassificationPicker({ items, value, placeholder, disabled, onChange }: { items: PickerItem[]; value: string; placeholder: string; disabled?: boolean; onChange: (id: string) => void }) {
@@ -63,7 +63,7 @@ export function ProductWizard({ item, variants = [], products: _products, catego
   // Ocultar no es borrar: al guardar, `attributes` conserva la instantánea y
   // sus valores para que el nombre histórico del producto no se modifique.
   const visibleAttributes = attributes.filter(isAvailableAttribute)
-  const generatedName = useMemo(() => [category?.name, subcategory?.name, description(attributes, values)].filter(Boolean).join(' · ') || 'Producto', [attributes, category?.name, subcategory?.name, values])
+  const generatedName = useMemo(() => [category?.name, subcategory?.name, description(attributes, values)].filter(Boolean).join(' ') || 'Producto', [attributes, category?.name, subcategory?.name, values])
   const name = automatic ? generatedName : manualName
   const selectCategory = (id: string) => { const next = activeCategories.find(value => value.id === id); setCategoryId(id); setSubcategoryId(''); setAttributes((next?.attributes ?? []).filter(isAvailableAttribute)); setValues({}); setError('') }
   const selectSubcategory = (id: string) => { const next = subcategories.find(value => value.id === id); setSubcategoryId(id); setAttributes([...(category?.attributes ?? []), ...(next?.attributes ?? [])].filter(isAvailableAttribute)); setValues({}); setError('') }
