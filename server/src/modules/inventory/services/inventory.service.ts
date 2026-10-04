@@ -13,10 +13,11 @@ type ProductCost = { quantity: number; usd: number; pen: number }
 function receivedCosts(
   purchases: Awaited<ReturnType<typeof inventoryRepository.costSources>>[0],
   imports: Awaited<ReturnType<typeof inventoryRepository.costSources>>[1],
+  openingMovements: Awaited<ReturnType<typeof inventoryRepository.costSources>>[2],
 ) {
   const byProduct = new Map<string, ProductCost>()
   const add = (productId: string, quantity: number, usd: number, pen: number) => {
-    if (quantity <= 0) return
+    if (quantity === 0) return
     const current = byProduct.get(productId) ?? { quantity: 0, usd: 0, pen: 0 }
     byProduct.set(productId, { quantity: current.quantity + quantity, usd: current.usd + usd, pen: current.pen + pen })
   }
@@ -41,6 +42,14 @@ function receivedCosts(
     const usd = (item.import.currency === 'USD' ? lineValue : 0) + Number(item.import.customsCostUsd) * share
     const pen = (item.import.currency === 'PEN' ? lineValue : 0) + Number(item.import.customsCostPen) * share
     add(item.productId, quantity, usd, pen)
+  }
+  for (const movement of openingMovements) {
+    const factor = Number(movement.presentation?.factor ?? 1)
+    // El movimiento se registra en unidades físicas; se normaliza a la UM
+    // de inventario antes de combinarlo con compras e importaciones.
+    const quantity = Number(movement.quantity) / factor
+    const pen = quantity * Number(movement.presentation?.openingUnitCostPen ?? 0)
+    add(movement.productId, quantity, 0, pen)
   }
   return byProduct
 }
@@ -69,14 +78,14 @@ const reservationFactor = (material: { product: { presentations: { factor: Prism
 export const inventoryService = {
   async stock(companyId: string, filters: { search?: string; warehouseId?: string; status?: 'ACTIVE' | 'INACTIVE' | 'ALL' }) {
     const requestedStatus = filters.status ?? 'ACTIVE'
-    const [stocks, reserved, products, [purchases, imports], currentExchangeRate] = await Promise.all([
+    const [stocks, reserved, products, [purchases, imports, openingMovements], currentExchangeRate] = await Promise.all([
       inventoryRepository.stock(companyId),
       inventoryRepository.reserved(companyId),
       inventoryRepository.stockProducts(requestedStatus === 'ALL' ? undefined : requestedStatus),
       inventoryRepository.costSources(companyId),
       inventoryRepository.currentExchangeRate(companyId),
     ])
-    const costsByProduct = receivedCosts(purchases, imports)
+    const costsByProduct = receivedCosts(purchases, imports, openingMovements)
     const hasUsdCosts = purchases.some(item => item.purchase.currency === 'USD') || imports.some(item => item.import.currency === 'USD')
     // Reparación transparente para importaciones históricas: si existen costos
     // en USD y aún no hay tasa, se registra una sola tasa vigente. Después de
@@ -106,16 +115,17 @@ export const inventoryService = {
         ? reserved.filter(item => item.warehouseId === filters.warehouseId && item.productId === product.id).reduce((sum, item) => sum.plus(item.quantity.mul(reservationFactor(item))), new Prisma.Decimal(0))
         : reservedByProduct.get(product.id) ?? new Prisma.Decimal(0)
       const cost = costsByProduct.get(product.id)
-      // Mientras el inventario inicial no tenga documentos de compra o
-      // importación, usamos el costo unitario declarado durante la toma.
-      // Cuando existen documentos recibidos, estos conservan prioridad.
-      const hasDocumentCost = Boolean(cost && cost.quantity > 0)
-      const averageUsd = hasDocumentCost ? cost!.usd / cost!.quantity : 0
-      const averagePen = hasDocumentCost ? cost!.pen / cost!.quantity : Number(presentation?.openingUnitCostPen ?? 0)
       const totalQuantity = Number(total)
       const factor = presentation?.factor ?? new Prisma.Decimal(1)
       const inventoryQuantity = Number(total.div(factor))
-      return { productId: product.id, code: product.code, product: product.name, category: product.category?.name ?? 'Sin categoría', subcategory: product.subcategory?.name ?? '—', roles: product.roles, presentationId: presentation?.id ?? null, unit: presentation?.unit.code ?? '—', unitName: presentation?.unit.description ?? presentation?.unit.code ?? '—', factor: Number(factor), minimum: Number(presentation?.minimumStock ?? 0), total: totalQuantity, available: Number(Prisma.Decimal.max(total.minus(reservedValue), 0)), inProduction: Number(reservedValue), costUsd: inventoryQuantity * averageUsd, costPen: inventoryQuantity * (averagePen + averageUsd * exchangeValue), status: product.status, warehouses: entries.map(entry => ({ id: entry.warehouseId, name: entry.warehouse.name, quantity: Number(entry.quantity) })) }
+      // Valorización por promedio ponderado de las cantidades con origen
+      // conocido. Nunca asignamos el costo de una compra a stock sin costo.
+      const knownQuantity = Math.max(0, cost?.quantity ?? 0)
+      const valuedQuantity = Math.min(inventoryQuantity, knownQuantity)
+      const averageUsd = knownQuantity > 0 ? (cost?.usd ?? 0) / knownQuantity : 0
+      const averagePen = knownQuantity > 0 ? (cost?.pen ?? 0) / knownQuantity : Number(presentation?.openingUnitCostPen ?? 0)
+      const fallbackValuedQuantity = knownQuantity > 0 ? valuedQuantity : (averagePen > 0 ? inventoryQuantity : 0)
+      return { productId: product.id, code: product.code, product: product.name, category: product.category?.name ?? 'Sin categoría', subcategory: product.subcategory?.name ?? '—', roles: product.roles, presentationId: presentation?.id ?? null, unit: presentation?.unit.code ?? '—', unitName: presentation?.unit.description ?? presentation?.unit.code ?? '—', factor: Number(factor), minimum: Number(presentation?.minimumStock ?? 0), total: totalQuantity, available: Number(Prisma.Decimal.max(total.minus(reservedValue), 0)), inProduction: Number(reservedValue), costUsd: fallbackValuedQuantity * averageUsd, costPen: fallbackValuedQuantity * (averagePen + averageUsd * exchangeValue), status: product.status, warehouses: entries.map(entry => ({ id: entry.warehouseId, name: entry.warehouse.name, quantity: Number(entry.quantity) })) }
     }).filter(item => !filters.search || `${item.code} ${item.product}`.toLowerCase().includes(filters.search.toLowerCase()))
   },
   movements: (companyId: string) => inventoryRepository.movements(companyId),

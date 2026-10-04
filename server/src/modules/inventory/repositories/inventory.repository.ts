@@ -15,6 +15,10 @@ export const inventoryRepository = {
       where: { import: { companyId, status: ImportStatus.RECEIVED } },
       select: { importId: true, productId: true, quantity: true, unitCostUsd: true, presentation: { select: { factor: true } }, import: { select: { currency: true, customsCostUsd: true, customsCostPen: true } } },
     }),
+    prisma.inventoryMovement.findMany({
+      where: { type: 'INITIAL_STOCK', warehouse: { companyId } },
+      select: { productId: true, quantity: true, presentation: { select: { factor: true, openingUnitCostPen: true } } },
+    }),
   ]),
   currentExchangeRate: (companyId: string) => prisma.exchangeRate.findFirst({ where: { companyId }, select: { value: true }, orderBy: [{ effectiveDate: 'desc' }, { createdAt: 'desc' }] }),
   reserved: (companyId: string) => prisma.productionMaterial.findMany({ where: { status: 'RESERVED', shareReservation: false, warehouse: { companyId } }, include: { product: { include: { presentations: { where: { status: 'ACTIVE' }, select: { factor: true }, orderBy: { name: 'asc' }, take: 1 } } } } }),
