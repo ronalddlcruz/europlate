@@ -28,7 +28,7 @@ const definitions = {
 } as const
 const dims = (value: string) => { const [ancho, largo] = value.replace(/,/g, '.').split(/\s*[Xx×]\s*/); return { Ancho: ancho.trim(), Largo: largo?.trim() ?? '' } }
 const format = (value: string, unit: 'cm' | 'mm') => ({ Formato: `${value.replace(/\s*[Xx×]\s*/g, ' × ')} ${unit}` })
-const productName = (subcategory: string, attributeNames: string[], values: Record<string, string>, definitionMap: Map<string, { type: AttributeDataType; suffix: string }>) => {
+const productName = (category: string, subcategory: string, attributeNames: string[], values: Record<string, string>, definitionMap: Map<string, { type: AttributeDataType; suffix: string }>) => {
   const groups: { numeric: boolean; suffix: string; values: string[] }[] = []
   for (const name of attributeNames) {
     const value = values[name]?.trim()
@@ -41,7 +41,7 @@ const productName = (subcategory: string, attributeNames: string[], values: Reco
     else groups.push({ numeric, suffix, values: [value] })
   }
   const specifications = groups.map(group => group.values.map(value => `${value}${group.suffix ? ` ${group.suffix}` : ''}`).join(' x '))
-  return [subcategory, ...specifications].join(' · ')
+  return [category, subcategory, ...specifications].join(' ')
 }
 const rows: Row[] = []
 const add = (category: string, subcategory: string, unit: string, values: Record<string, string>, stock = 1, factor = 1) => rows.push({ category, subcategory, unit, values, stock, factor })
@@ -115,7 +115,11 @@ async function main() {
     }
     categories.set(blueprint.name, { id: categoryId, code: blueprint.code, attributes: attributeNames, subcategories })
   }
-  const warehouseId = randomUUID()
+  // El almacén pertenece a la operación existente: el seed lo reutiliza y
+  // nunca lo elimina ni altera.
+  const warehouse = await prisma.warehouse.findFirst({ where: { companyId: firstUser.companyId, status: ProductStatus.ACTIVE }, orderBy: { name: 'asc' }, select: { id: true } })
+  if (!warehouse) throw new Error('No existe un almacén activo. Se cancela la carga para no crear ni modificar almacenes.')
+  const warehouseId = warehouse.id
   const counters = new Map<string, number>()
   const products: Prisma.ProductCreateManyInput[] = []
   const productAttributes: Prisma.ProductAttributeCreateManyInput[] = []
@@ -131,19 +135,19 @@ async function main() {
     counters.set(counterKey, number)
     const code = `${counterKey}-${String(number).padStart(3, '0')}`
     const attributeNames = [...category.attributes, ...subcategory.attributes]
-    const name = productName(row.subcategory, attributeNames, row.values, definitionMap)
-    const roles = row.category === 'Cajas' ? [ProductRoleType.FINISHED_PRODUCT] : row.category === 'Vasos' ? [ProductRoleType.MERCHANDISE] : [ProductRoleType.SUPPLY]
+    const name = productName(row.category, row.subcategory, attributeNames, row.values, definitionMap)
+    const roles = row.category === 'Cajas' || row.category === 'Vasos' ? [ProductRoleType.MERCHANDISE] : [ProductRoleType.SUPPLY]
     const factor = new Prisma.Decimal(row.factor ?? 1)
     const currentStock = new Prisma.Decimal(row.stock ?? 0)
     const productId = randomUUID()
     const presentationId = randomUUID()
     const values: Record<string, string> = {}
-    products.push({ id: productId, code, name, categoryId: category.id, subcategoryId: subcategory.id, roles, status: ProductStatus.ACTIVE, variantType: ProductVariantType.BASIC, immediateConsumption: false })
+    products.push({ id: productId, code, name, sortOrder: products.length + 1, categoryId: category.id, subcategoryId: subcategory.id, roles, status: ProductStatus.ACTIVE, variantType: ProductVariantType.BASIC, immediateConsumption: false })
     for (const [position, attributeName] of attributeNames.entries()) {
       const attribute = definitionMap.get(attributeName)!
       const id = randomUUID()
       values[id] = row.values[attributeName] ?? ''
-      productAttributes.push({ id, productId, name: attributeName, dataType: attribute.type, suffix: attribute.suffix, required: Boolean(row.values[attributeName]), status: ProductStatus.ACTIVE, position })
+      productAttributes.push({ id, productId, attributeDefinitionId: attribute.id, name: attributeName, dataType: attribute.type, suffix: attribute.suffix, required: Boolean(row.values[attributeName]), status: ProductStatus.ACTIVE, position })
     }
     presentations.push({ id: presentationId, productId, code: `${code}-01`, name, unitId: unitMap.get(row.unit)!.id, attributeValues: values as Prisma.InputJsonValue, factor, minimumStock: new Prisma.Decimal(0), currentStock, status: ProductStatus.ACTIVE })
     const physicalQuantity = currentStock.mul(factor)
@@ -151,7 +155,8 @@ async function main() {
     movements.push({ productId, presentationId, warehouseId, createdByUserId: firstUser.id, type: 'INITIAL_STOCK', quantity: physicalQuantity, reference: code, note: 'Stock inicial cargado desde el inventario entregado por la empresa.' })
   }
   await prisma.$transaction(async db => {
-    // Se preservan exclusivamente empresa, usuarios, sesiones, roles y permisos.
+    // Se preservan exclusivamente empresa, usuarios, sesiones, roles,
+    // permisos y almacenes. Todo el catálogo y operación se reconstruye.
     await db.auditLog.deleteMany()
     await db.exchangeRate.deleteMany()
     await db.productionMaterial.deleteMany()
@@ -168,7 +173,6 @@ async function main() {
     await db.purchase.deleteMany()
     await db.productIdentifier.deleteMany()
     await db.product.deleteMany()
-    await db.warehouse.deleteMany()
     await db.supplier.deleteMany()
     await db.customer.deleteMany()
     await db.customsAgent.deleteMany()
@@ -181,7 +185,6 @@ async function main() {
     await db.category.createMany({ data: categoryRows })
     await db.categoryAttribute.createMany({ data: categoryAttributes })
     await db.subcategory.createMany({ data: subcategoryRows })
-    await db.warehouse.create({ data: { id: warehouseId, companyId: firstUser.companyId, name: 'Almacén Principal', description: 'Existencias iniciales entregadas por la empresa.', status: ProductStatus.ACTIVE } })
     await db.product.createMany({ data: products })
     await db.productAttribute.createMany({ data: productAttributes })
     await db.productPresentation.createMany({ data: presentations })
