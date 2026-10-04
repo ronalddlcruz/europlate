@@ -155,9 +155,6 @@ export function CategoryConfiguration({
                 Subcategoría / Tipo
               </th>
               <th className="border-b border-blue-100 px-4 py-3.5 font-semibold">
-                Atributos particulares
-              </th>
-              <th className="border-b border-blue-100 px-4 py-3.5 font-semibold">
                 Estado
               </th>
             </tr>
@@ -242,12 +239,6 @@ export function CategoryConfiguration({
                         )}
                       </div>
                     </td>
-                    <td className="max-w-[240px] px-4 py-3.5">
-                      <CompactAttributes
-                        attributes={subcategory?.attributes ?? []}
-                        empty={subcategory ? "Hereda atributos comunes" : "—"}
-                      />
-                    </td>
                     <td className="px-4 py-3.5">
                       {subcategory ? (
                         <span
@@ -268,7 +259,7 @@ export function CategoryConfiguration({
               })
             ) : (
               <tr>
-                <td colSpan={5} className="p-10 text-center text-sm text-muted">
+                <td colSpan={4} className="p-10 text-center text-sm text-muted">
                   No hay categorías o subcategorías que coincidan.
                 </td>
               </tr>
@@ -309,42 +300,6 @@ export function CategoryConfiguration({
         </div>
       )}
     </section>
-  );
-}
-
-function CompactAttributes({
-  attributes,
-  empty,
-}: {
-  attributes: ConfiguredAttribute[];
-  empty: string;
-}) {
-  return attributes.length ? (
-    <div
-      className="flex items-center gap-2 text-xs"
-      title={attributes
-        .map(
-          (attribute) =>
-            `${attribute.name}${attribute.required ? " (obligatorio)" : ""}`,
-        )
-        .join(", ")}
-    >
-      <span className="truncate font-medium text-slate-700">
-        {attributes
-          .slice(0, 2)
-          .map(
-            (attribute) => `${attribute.name}${attribute.required ? " *" : ""}`,
-          )
-          .join(" · ")}
-      </span>
-      {attributes.length > 2 && (
-        <span className="shrink-0 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-600">
-          +{attributes.length - 2}
-        </span>
-      )}
-    </div>
-  ) : (
-    <span className="text-xs text-muted">{empty}</span>
   );
 }
 
