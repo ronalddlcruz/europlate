@@ -5,7 +5,8 @@ export const inventoryRepository = {
   stock: (companyId: string) => prisma.stock.findMany({ where: { warehouse: { companyId } }, include: { product: { include: { presentations: { where: { status: 'ACTIVE' }, include: { unit: true }, orderBy: { name: 'asc' } } } }, warehouse: true } }),
   // Activos es la vista inicial; el filtro permite consultar historial sin
   // combinarlo con la operación diaria.
-  stockProducts: (status?: ProductStatus) => prisma.product.findMany({ where: { ...(status && { status }), presentations: { some: {} } }, orderBy: { name: 'asc' }, include: { category: { select: { name: true } }, subcategory: { select: { name: true } }, presentations: { include: { unit: true }, orderBy: { name: 'asc' } } } }),
+  // Productos, stock y kardex comparten el mismo orden estable del catálogo.
+  stockProducts: (status?: ProductStatus) => prisma.product.findMany({ where: { ...(status && { status }), presentations: { some: {} } }, orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }], include: { category: { select: { name: true } }, subcategory: { select: { name: true } }, presentations: { include: { unit: true }, orderBy: { name: 'asc' } } } }),
   costSources: (companyId: string) => Promise.all([
     prisma.purchaseItem.findMany({
       where: { purchase: { companyId, status: PurchaseStatus.RECEIVED } },
@@ -22,7 +23,7 @@ export const inventoryRepository = {
   ]),
   currentExchangeRate: (companyId: string) => prisma.exchangeRate.findFirst({ where: { companyId }, select: { value: true }, orderBy: [{ effectiveDate: 'desc' }, { createdAt: 'desc' }] }),
   reserved: (companyId: string) => prisma.productionMaterial.findMany({ where: { status: 'RESERVED', shareReservation: false, warehouse: { companyId } }, include: { product: { include: { presentations: { where: { status: 'ACTIVE' }, select: { factor: true }, orderBy: { name: 'asc' }, take: 1 } } } } }),
-  movements: (companyId: string) => prisma.inventoryMovement.findMany({ where: { warehouse: { companyId } }, include: { product: { include: { presentations: { where: { status: 'ACTIVE' }, include: { unit: true }, take: 1 } } }, warehouse: true, presentation: { include: { unit: true } }, createdBy: true }, orderBy: { createdAt: 'desc' } }),
+  movements: (companyId: string) => prisma.inventoryMovement.findMany({ where: { warehouse: { companyId } }, include: { product: { include: { presentations: { where: { status: 'ACTIVE' }, include: { unit: true }, take: 1 } } }, warehouse: true, presentation: { include: { unit: true } }, createdBy: true }, orderBy: [{ product: { sortOrder: 'asc' } }, { createdAt: 'desc' }] }),
   transfers: (companyId: string) => prisma.stockTransfer.findMany({ where: { companyId }, include: { product: true, presentation: { include: { unit: true } }, fromWarehouse: true, toWarehouse: true, createdBy: true }, orderBy: { createdAt: 'desc' } }),
   adjustments: (companyId: string) => prisma.inventoryAdjustment.findMany({ where: { companyId }, include: { product: true, presentation: { include: { unit: true } }, warehouse: true, customer: true, createdBy: true }, orderBy: { createdAt: 'desc' } }),
   warehouses: (companyId: string) => prisma.warehouse.findMany({ where: { companyId }, orderBy: { name: 'asc' } }),

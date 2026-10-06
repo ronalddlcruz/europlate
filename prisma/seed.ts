@@ -136,7 +136,12 @@ async function main() {
     const code = `${counterKey}-${String(number).padStart(3, '0')}`
     const attributeNames = [...category.attributes, ...subcategory.attributes]
     const name = productName(row.category, row.subcategory, attributeNames, row.values, definitionMap)
-    const roles = row.category === 'Cajas' || row.category === 'Vasos' ? [ProductRoleType.MERCHANDISE] : [ProductRoleType.SUPPLY]
+    // Todo el catálogo es comercializable. Las cajas de pizza, además, son
+    // productos terminados; el resto conserva Insumo para no romper órdenes
+    // de producción que ya se apoyan en esa clasificación.
+    const roles = row.category === 'Cajas' && row.subcategory === 'Pizza'
+      ? [ProductRoleType.MERCHANDISE, ProductRoleType.FINISHED_PRODUCT]
+      : [ProductRoleType.MERCHANDISE, ProductRoleType.SUPPLY]
     const factor = new Prisma.Decimal(row.factor ?? 1)
     const currentStock = new Prisma.Decimal(row.stock ?? 0)
     const productId = randomUUID()

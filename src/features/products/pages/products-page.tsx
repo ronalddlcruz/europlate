@@ -1171,7 +1171,7 @@ function GroupedProductsTable({
               "",
             ].map((header) => (
               <th
-                className="border-b border-slate-200 px-4 py-3.5 font-semibold"
+                className={`border-b border-slate-200 px-4 py-3.5 font-semibold ${header === "Código" ? "w-[94px] min-w-[94px] whitespace-nowrap px-3" : ""}`}
                 key={header}
               >
                 {header}
@@ -1191,7 +1191,7 @@ function GroupedProductsTable({
                   key={base.id}
                   className={`group border-b border-slate-100 text-[13px] transition-colors last:border-0 hover:bg-blue-50/40 ${status === "Inactivo" ? "bg-slate-50/70 text-slate-400" : "text-slate-700"}`}
                 >
-                  <td className="px-4 py-3 font-mono text-[11px] font-bold text-brand">
+                  <td className="w-[94px] min-w-[94px] whitespace-nowrap px-3 py-3 font-mono text-[10px] font-bold tracking-tight text-brand">
                     {base.code}
                   </td>
                   <td className="px-4 py-3">

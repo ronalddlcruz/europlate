@@ -20,7 +20,8 @@
     "db:deploy": "prisma migrate deploy",
     "db:check": "prisma db execute --stdin < prisma/healthcheck.sql",
     "db:seed": "tsx prisma/seed.ts",
-    "db:seed-users": "tsx prisma/seed-users.ts"
+    "db:seed-users": "tsx prisma/seed-users.ts",
+    "db:normalize-product-roles": "tsx scripts/normalize-product-roles.ts"
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.2.4",
