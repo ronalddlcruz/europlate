@@ -4,6 +4,7 @@ import { AppError } from '../../../shared/errors/app-error.js'
 import { inventoryRepository } from '../repositories/inventory.repository.js'
 import { exchangeRateService } from '../../exchange-rates/services/exchange-rate.service.js'
 import type { InventoryAdjustmentInput, StockTransferInput, WarehouseInput } from '../schemas/inventory.schema.js'
+import { assertWarehouseScope, resolveOperationScope } from '../../../shared/security/operation-scope.js'
 
 const decimal = (value: number) => new Prisma.Decimal(value)
 const transaction = <T>(callback: (db: Prisma.TransactionClient) => Promise<T>) => prisma.$transaction(callback, { maxWait: 10_000, timeout: 30_000 })
@@ -56,39 +57,35 @@ function receivedCosts(
   return byProduct
 }
 
-async function validateProductLine(companyId: string, input: { productId: string; presentationId: string; warehouseId: string }) {
-  const [product, presentation, warehouse] = await Promise.all([
-    prisma.product.findFirst({ where: { id: input.productId, status: ProductStatus.ACTIVE } }),
-    prisma.productPresentation.findFirst({ where: { id: input.presentationId, status: ProductStatus.ACTIVE } }),
-    prisma.warehouse.findFirst({ where: { id: input.warehouseId, companyId, status: ProductStatus.ACTIVE } }),
-  ])
-  if (!product || !presentation || !warehouse || presentation.productId !== product.id) throw new AppError('INVENTORY_REFERENCE_INVALID', 'El producto, presentación o almacén no está disponible.', 422)
-  return { product, presentation, warehouse }
-}
 async function validateAdjustmentLine(companyId: string, input: { productId: string; warehouseId: string }) {
   const [product, warehouse] = await Promise.all([
-    prisma.product.findFirst({ where: { id: input.productId, status: ProductStatus.ACTIVE }, include: { presentations: { where: { status: ProductStatus.ACTIVE }, orderBy: { name: 'asc' }, take: 1 } } }),
-    prisma.warehouse.findFirst({ where: { id: input.warehouseId, companyId, status: ProductStatus.ACTIVE } }),
+    prisma.product.findFirst({ where: { id: input.productId, status: ProductStatus.ACTIVE }, select: { id: true, presentations: { where: { status: ProductStatus.ACTIVE }, orderBy: { name: 'asc' }, take: 1, select: { id: true, factor: true } } } }),
+    prisma.warehouse.findFirst({ where: { id: input.warehouseId, companyId, status: ProductStatus.ACTIVE }, select: { id: true } }),
   ])
   const presentation = product?.presentations[0]
   if (!product || !presentation || !warehouse) throw new AppError('INVENTORY_REFERENCE_INVALID', 'El producto o almacén no está disponible.', 422)
   return { product, presentation, warehouse }
 }
+async function validateWarehouseResponsible(companyId: string, userId: string) {
+  const user = await prisma.user.findFirst({ where: { id: userId, companyId, status: 'ACTIVE' }, select: { id: true } })
+  if (!user) throw new AppError('WAREHOUSE_RESPONSIBLE_INVALID', 'Selecciona un usuario activo de esta empresa.', 422)
+}
 const account = (userId: string, companyId: string) => ({ createdBy: { connect: { id: userId } }, company: { connect: { id: companyId } } })
 const reservationFactor = (material: { product: { presentations: { factor: Prisma.Decimal }[] } }) => material.product.presentations[0]?.factor ?? new Prisma.Decimal(1)
 
 export const inventoryService = {
-  async stock(companyId: string, filters: { search?: string; warehouseId?: string; status?: 'ACTIVE' | 'INACTIVE' | 'ALL' }) {
+  async stock(companyId: string, filters: { search?: string; warehouseId?: string; status?: 'ACTIVE' | 'INACTIVE' | 'ALL'; includeValuation?: boolean }) {
     const requestedStatus = filters.status ?? 'ACTIVE'
-    const [stocks, reserved, products, [purchases, imports, openingMovements], currentExchangeRate] = await Promise.all([
+    const includeValuation = filters.includeValuation !== false
+    const [stocks, reserved, products, costSources, currentExchangeRate] = await Promise.all([
       inventoryRepository.stock(companyId),
       inventoryRepository.reserved(companyId),
       inventoryRepository.stockProducts(requestedStatus === 'ALL' ? undefined : requestedStatus),
-      inventoryRepository.costSources(companyId),
-      inventoryRepository.currentExchangeRate(companyId),
+      includeValuation ? inventoryRepository.costSources(companyId) : Promise.resolve(null),
+      includeValuation ? inventoryRepository.currentExchangeRate(companyId) : Promise.resolve(null),
     ])
-    const costsByProduct = receivedCosts(purchases, imports, openingMovements)
-    const hasUsdCosts = purchases.some(item => item.purchase.currency === 'USD') || imports.some(item => item.import.currency === 'USD')
+    const costsByProduct = costSources ? receivedCosts(...costSources) : new Map<string, ProductCost>()
+    const hasUsdCosts = costSources ? costSources[0].some(item => item.purchase.currency === 'USD') || costSources[1].some(item => item.import.currency === 'USD') : false
     // Reparación transparente para importaciones históricas: si existen costos
     // en USD y aún no hay tasa, se registra una sola tasa vigente. Después de
     // ello las siguientes lecturas quedan locales y la valorización no vuelve
@@ -130,25 +127,34 @@ export const inventoryService = {
       return { productId: product.id, code: product.code, product: product.name, category: product.category?.name ?? 'Sin categoría', subcategory: product.subcategory?.name ?? '—', roles: product.roles, presentationId: presentation?.id ?? null, unit: presentation?.unit.code ?? '—', unitName: presentation?.unit.description ?? presentation?.unit.code ?? '—', factor: Number(factor), minimum: Number(presentation?.minimumStock ?? 0), total: totalQuantity, available: Number(Prisma.Decimal.max(total.minus(reservedValue), 0)), inProduction: Number(reservedValue), costUsd: fallbackValuedQuantity * averageUsd, costPen: fallbackValuedQuantity * (averagePen + averageUsd * exchangeValue), status: product.status, warehouses: entries.map(entry => ({ id: entry.warehouseId, name: entry.warehouse.name, quantity: Number(entry.quantity) })) }
     }).filter(item => !filters.search || `${item.code} ${item.product}`.toLowerCase().includes(filters.search.toLowerCase()))
   },
-  movements: (companyId: string) => inventoryRepository.movements(companyId),
-  transfers: (companyId: string) => inventoryRepository.transfers(companyId),
-  adjustments: (companyId: string) => inventoryRepository.adjustments(companyId),
+  async movements(companyId: string, actorId: string) { return inventoryRepository.movements(companyId, await resolveOperationScope(companyId, actorId) ?? undefined) },
+  async transfers(companyId: string, actorId: string) { return inventoryRepository.transfers(companyId, await resolveOperationScope(companyId, actorId) ?? undefined) },
+  async adjustments(companyId: string, actorId: string) { return inventoryRepository.adjustments(companyId, await resolveOperationScope(companyId, actorId) ?? undefined) },
   warehouses: (companyId: string) => inventoryRepository.warehouses(companyId),
-  catalog: (companyId: string) => inventoryRepository.catalog(companyId),
+  warehouseResponsibles: (companyId: string) => inventoryRepository.warehouseResponsibles(companyId),
+  async catalog(companyId: string, actorId: string) { const scope = await resolveOperationScope(companyId, actorId); return inventoryRepository.catalog(companyId, scope?.warehouseIds) },
   async createTransfer(companyId: string, userId: string, input: StockTransferInput) {
-    const [{ presentation }] = await Promise.all([validateProductLine(companyId, { productId: input.productId, presentationId: input.presentationId, warehouseId: input.fromWarehouseId }), validateProductLine(companyId, { productId: input.productId, presentationId: input.presentationId, warehouseId: input.toWarehouseId })])
+    assertWarehouseScope(await resolveOperationScope(companyId, userId), [input.fromWarehouseId, input.toWarehouseId])
+    const [{ presentation }, destination] = await Promise.all([
+      validateAdjustmentLine(companyId, { productId: input.productId, warehouseId: input.fromWarehouseId }),
+      prisma.warehouse.findFirst({ where: { id: input.toWarehouseId, companyId, status: ProductStatus.ACTIVE }, select: { id: true } }),
+    ])
+    if (!destination) throw new AppError('INVENTORY_REFERENCE_INVALID', 'El almacén destino no está disponible.', 422)
     const baseQuantity = decimal(input.quantity).mul(presentation.factor)
     return transaction(async db => {
-      const source = await db.stock.findUnique({ where: { productId_warehouseId: { productId: input.productId, warehouseId: input.fromWarehouseId } } })
-      if (!source || source.quantity.lessThan(baseQuantity)) throw new AppError('INVENTORY_INSUFFICIENT_STOCK', 'El almacén origen no tiene stock suficiente para esta transferencia.', 422)
-      await db.stock.update({ where: { productId_warehouseId: { productId: input.productId, warehouseId: input.fromWarehouseId } }, data: { quantity: { decrement: baseQuantity } } })
+      const updatedSource = await db.stock.updateMany({
+        where: { productId: input.productId, warehouseId: input.fromWarehouseId, quantity: { gte: baseQuantity } },
+        data: { quantity: { decrement: baseQuantity } },
+      })
+      if (!updatedSource.count) throw new AppError('INVENTORY_INSUFFICIENT_STOCK', 'El almacén origen no tiene stock suficiente para esta transferencia.', 422)
       await db.stock.upsert({ where: { productId_warehouseId: { productId: input.productId, warehouseId: input.toWarehouseId } }, create: { productId: input.productId, warehouseId: input.toWarehouseId, quantity: baseQuantity }, update: { quantity: { increment: baseQuantity } } })
-      const transfer = await inventoryRepository.createTransfer(db, { ...account(userId, companyId), product: { connect: { id: input.productId } }, presentation: { connect: { id: input.presentationId } }, fromWarehouse: { connect: { id: input.fromWarehouseId } }, toWarehouse: { connect: { id: input.toWarehouseId } }, quantity: decimal(input.quantity), note: input.note || null })
-      await db.inventoryMovement.createMany({ data: [{ productId: input.productId, presentationId: input.presentationId, warehouseId: input.fromWarehouseId, createdByUserId: userId, type: 'TRANSFER_OUT', quantity: baseQuantity.negated(), reference: transfer.id, note: `→ ${transfer.toWarehouse.name}${input.note ? ` · ${input.note}` : ''}` }, { productId: input.productId, presentationId: input.presentationId, warehouseId: input.toWarehouseId, createdByUserId: userId, type: 'TRANSFER_IN', quantity: baseQuantity, reference: transfer.id, note: `← ${transfer.fromWarehouse.name}${input.note ? ` · ${input.note}` : ''}` }] })
+      const transfer = await inventoryRepository.createTransfer(db, { ...account(userId, companyId), product: { connect: { id: input.productId } }, presentation: { connect: { id: presentation.id } }, fromWarehouse: { connect: { id: input.fromWarehouseId } }, toWarehouse: { connect: { id: input.toWarehouseId } }, quantity: decimal(input.quantity), note: input.note || null })
+      await db.inventoryMovement.createMany({ data: [{ productId: input.productId, presentationId: presentation.id, warehouseId: input.fromWarehouseId, createdByUserId: userId, type: 'TRANSFER_OUT', quantity: baseQuantity.negated(), reference: transfer.id, note: `→ ${transfer.toWarehouse.name}${input.note ? ` · ${input.note}` : ''}` }, { productId: input.productId, presentationId: presentation.id, warehouseId: input.toWarehouseId, createdByUserId: userId, type: 'TRANSFER_IN', quantity: baseQuantity, reference: transfer.id, note: `← ${transfer.fromWarehouse.name}${input.note ? ` · ${input.note}` : ''}` }] })
       return transfer
     })
   },
   async createAdjustment(companyId: string, userId: string, input: InventoryAdjustmentInput) {
+    assertWarehouseScope(await resolveOperationScope(companyId, userId), [input.warehouseId])
     const { presentation } = await validateAdjustmentLine(companyId, input)
     const baseDelta = decimal(input.delta).mul(presentation.factor)
     return transaction(async db => {
@@ -170,8 +176,10 @@ export const inventoryService = {
   async createWarehouse(companyId: string, input: WarehouseInput) {
     const duplicate = await prisma.warehouse.findFirst({ where: { companyId, name: { equals: input.name, mode: 'insensitive' } } })
     if (duplicate) throw new AppError('WAREHOUSE_EXISTS', 'Ya existe un almacén con ese nombre.', 409)
+    if (input.responsibleUserId) await validateWarehouseResponsible(companyId, input.responsibleUserId)
     return inventoryRepository.createWarehouse({
       company: { connect: { id: companyId } }, name: input.name, location: input.location || null,
+      ...(input.responsibleUserId && { responsible: { connect: { id: input.responsibleUserId } } }),
       department: input.department || null, province: input.province || null,
       district: input.district || null, address: input.address || input.location || null,
       description: input.description || null, status: input.status,
@@ -183,8 +191,11 @@ export const inventoryService = {
       const duplicate = await prisma.warehouse.findFirst({ where: { companyId, name: { equals: input.name, mode: 'insensitive' }, NOT: { id } } })
       if (duplicate) throw new AppError('WAREHOUSE_EXISTS', 'Ya existe un almacén con ese nombre.', 409)
     }
+    if (input.responsibleUserId) await validateWarehouseResponsible(companyId, input.responsibleUserId)
+    const { responsibleUserId, ...changes } = input
     return inventoryRepository.updateWarehouse(id, {
-      ...input,
+      ...changes,
+      ...(responsibleUserId !== undefined && { responsible: responsibleUserId ? { connect: { id: responsibleUserId } } : { disconnect: true } }),
       ...(input.location !== undefined && { location: input.location || null }),
       ...(input.department !== undefined && { department: input.department || null }),
       ...(input.province !== undefined && { province: input.province || null }),

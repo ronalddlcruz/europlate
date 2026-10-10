@@ -4,11 +4,12 @@ import { inventoryService } from '../services/inventory.service.js'
 const idFrom = (request: Request) => Array.isArray(request.params.id) ? request.params.id[0] : request.params.id
 export const inventoryController = {
   async stock(request: Request, response: Response) { response.json({ data: await inventoryService.stock(request.auth!.companyId, inventoryQuerySchema.parse(request.query)) }) },
-  async movements(request: Request, response: Response) { response.json({ data: await inventoryService.movements(request.auth!.companyId) }) },
-  async transfers(request: Request, response: Response) { response.json({ data: await inventoryService.transfers(request.auth!.companyId) }) },
-  async adjustments(request: Request, response: Response) { response.json({ data: await inventoryService.adjustments(request.auth!.companyId) }) },
+  async movements(request: Request, response: Response) { response.json({ data: await inventoryService.movements(request.auth!.companyId, request.auth!.id) }) },
+  async transfers(request: Request, response: Response) { response.json({ data: await inventoryService.transfers(request.auth!.companyId, request.auth!.id) }) },
+  async adjustments(request: Request, response: Response) { response.json({ data: await inventoryService.adjustments(request.auth!.companyId, request.auth!.id) }) },
   async warehouses(request: Request, response: Response) { response.json({ data: await inventoryService.warehouses(request.auth!.companyId) }) },
-  async catalog(request: Request, response: Response) { const [products, warehouses, customers] = await inventoryService.catalog(request.auth!.companyId); response.json({ data: { products, warehouses, customers } }) },
+  async warehouseResponsibles(request: Request, response: Response) { response.json({ data: await inventoryService.warehouseResponsibles(request.auth!.companyId) }) },
+  async catalog(request: Request, response: Response) { const [products, warehouses, customers] = await inventoryService.catalog(request.auth!.companyId, request.auth!.id); response.json({ data: { products, warehouses, customers } }) },
   async createTransfer(request: Request, response: Response) { response.status(201).json({ data: await inventoryService.createTransfer(request.auth!.companyId, request.auth!.id, stockTransferSchema.parse(request.body)) }) },
   async createAdjustment(request: Request, response: Response) { response.status(201).json({ data: await inventoryService.createAdjustment(request.auth!.companyId, request.auth!.id, inventoryAdjustmentSchema.parse(request.body)) }) },
   async createWarehouse(request: Request, response: Response) { response.status(201).json({ data: await inventoryService.createWarehouse(request.auth!.companyId, warehouseSchema.parse(request.body)) }) },

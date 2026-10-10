@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { ArrowDownToLine, Boxes, ChevronLeft, ChevronRight, Factory, FileSpreadsheet, RefreshCw, SlidersHorizontal } from 'lucide-react'
 import { Button } from '../../../components/ui/button'
 import { Input } from '../../../components/ui/input'
-import { loadReportsDashboard, type ReportMovement, type ReportPurchase, type ReportStock, type ReportsDashboard } from '../services/report-api.service'
+import { loadMovementsReport, loadProductionReport, loadPurchasesReport, loadStockReport, type ReportMovement, type ReportPurchase, type ReportStock, type ReportsDashboard } from '../services/report-api.service'
 
 type Report = 'stock' | 'movements' | 'purchases' | 'production'
 const PAGE_SIZE = 10
@@ -43,18 +43,17 @@ function ExcelButton({ onClick }: { onClick: () => void }) { return <Button size
 
 export function ReportsPage() {
   const [report, setReport] = useState<Report>('stock')
-  const dashboard = useQuery({ queryKey: ['reports', 'dashboard'], queryFn: loadReportsDashboard, staleTime: 0 })
+  // Cada sección carga únicamente sus propios datos; Compras ya no espera
+  // la valorización del inventario ni el historial de movimientos.
+  const stock = useQuery({ queryKey: ['reports', 'stock'], queryFn: ({ signal }) => loadStockReport(signal), enabled: report === 'stock', staleTime: 30_000 })
+  const movements = useQuery({ queryKey: ['reports', 'movements'], queryFn: ({ signal }) => loadMovementsReport(signal), enabled: report === 'movements', staleTime: 30_000 })
+  const purchases = useQuery({ queryKey: ['reports', 'purchases'], queryFn: ({ signal }) => loadPurchasesReport(signal), enabled: report === 'purchases', staleTime: 30_000 })
+  const production = useQuery({ queryKey: ['reports', 'production'], queryFn: ({ signal }) => loadProductionReport(signal), enabled: report === 'production', staleTime: 30_000 })
+  const activeQuery = report === 'stock' ? stock : report === 'movements' ? movements : report === 'purchases' ? purchases : production
   return <div className="mx-auto w-full max-w-[1540px]">
     <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">{cards.map(card => { const Icon = card.icon; return <button key={card.id} onClick={() => setReport(card.id)} className={`rounded-[10px] border bg-white p-5 text-left shadow-card transition hover:shadow-panel ${report === card.id ? 'border-brand ring-1 ring-brand' : 'border-border'}`}><span className={`mb-3 flex h-10 w-10 items-center justify-center rounded-lg ${card.colors}`}><Icon className="h-5 w-5" /></span><strong className="block text-sm">{card.title}</strong><span className="mt-1 block text-xs text-muted">{card.description}</span></button> })}</section>
-    <section className="mt-5 rounded-[10px] border border-border bg-white p-5 shadow-card"><header className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-sm font-semibold">{cards.find(card => card.id === report)?.title}</h2><p className="mt-1 text-xs text-muted">Información consultada desde los registros actuales de la base de datos.</p></div><Button size="sm" variant="outline" disabled={dashboard.isFetching} onClick={() => void dashboard.refetch()}><RefreshCw className={`h-4 w-4 ${dashboard.isFetching ? 'animate-spin' : ''}`} />Actualizar</Button></header>{dashboard.isLoading ? <div className="p-12 text-center text-sm text-muted">Cargando reporte desde la base de datos…</div> : dashboard.isError ? <div className="p-12 text-center text-sm text-red-600">No se pudo cargar el reporte. Inténtalo nuevamente.</div> : dashboard.data && <ReportResult type={report} data={dashboard.data} />}</section>
+    <section className="mt-5 rounded-[10px] border border-border bg-white p-5 shadow-card"><header className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-sm font-semibold">{cards.find(card => card.id === report)?.title}</h2><p className="mt-1 text-xs text-muted">Información consultada desde los registros actuales de la base de datos.</p></div><Button size="sm" variant="outline" disabled={activeQuery.isFetching} onClick={() => void activeQuery.refetch()}><RefreshCw className={`h-4 w-4 ${activeQuery.isFetching ? 'animate-spin' : ''}`} />Actualizar</Button></header>{activeQuery.isLoading ? <div className="p-12 text-center text-sm text-muted">Cargando reporte desde la base de datos…</div> : activeQuery.isError ? <div className="p-12 text-center text-sm text-red-600">No se pudo cargar el reporte. Inténtalo nuevamente.</div> : report === 'stock' && stock.data ? <StockReport rows={stock.data} /> : report === 'movements' && movements.data ? <MovementsReport rows={movements.data} warehouses={[...new Set(movements.data.map(row => row.warehouse))].sort()} /> : report === 'purchases' && purchases.data ? <PurchasesReport rows={[...purchases.data.purchases, ...purchases.data.imports]} /> : report === 'production' && production.data ? <ProductionReport rows={production.data} /> : null}</section>
   </div>
-}
-
-function ReportResult({ type, data }: { type: Report; data: ReportsDashboard }) {
-  if (type === 'stock') return <StockReport rows={data.stock} />
-  if (type === 'movements') return <MovementsReport rows={data.movements} warehouses={[...new Set(data.stock.flatMap(row => row.warehouses.map(warehouse => warehouse.name)))].sort()} />
-  if (type === 'purchases') return <PurchasesReport rows={[...data.purchases, ...data.imports]} />
-  return <ProductionReport rows={data.production} />
 }
 
 function StockReport({ rows }: { rows: ReportStock[] }) {

@@ -3,12 +3,12 @@ import { completeProductionOrderSchema, productionOrderSchema, productionQuerySc
 import { productionService } from '../services/production.service.js'
 const idFrom = (request: Request) => Array.isArray(request.params.id) ? request.params.id[0] : request.params.id
 export const productionController = {
-  async list(request: Request, response: Response) { response.json({ data: await productionService.list(request.auth!.companyId, productionQuerySchema.parse(request.query)) }) },
-  async catalog(request: Request, response: Response) { response.json({ data: await productionService.catalog(request.auth!.companyId) }) },
-  async get(request: Request, response: Response) { response.json({ data: await productionService.getById(request.auth!.companyId, idFrom(request)) }) },
+  async list(request: Request, response: Response) { response.json({ data: await productionService.list(request.auth!.companyId, request.auth!.id, productionQuerySchema.parse(request.query)) }) },
+  async catalog(request: Request, response: Response) { response.json({ data: await productionService.catalog(request.auth!.companyId, request.auth!.id) }) },
+  async get(request: Request, response: Response) { response.json({ data: await productionService.getById(request.auth!.companyId, request.auth!.id, idFrom(request)) }) },
   async create(request: Request, response: Response) { response.status(201).json({ data: await productionService.create(request.auth!.companyId, productionOrderSchema.parse(request.body), request.auth!.id) }) },
-  async update(request: Request, response: Response) { response.json({ data: await productionService.update(request.auth!.companyId, idFrom(request), updateProductionOrderSchema.parse(request.body)) }) },
+  async update(request: Request, response: Response) { response.json({ data: await productionService.update(request.auth!.companyId, request.auth!.id, idFrom(request), updateProductionOrderSchema.parse(request.body)) }) },
   async complete(request: Request, response: Response) { response.json({ data: await productionService.complete(request.auth!.companyId, idFrom(request), completeProductionOrderSchema.parse(request.body), request.auth!.id) }) },
   async consumeMaterial(request: Request, response: Response) { response.json({ data: await productionService.consumeMaterial(request.auth!.companyId, idFrom(request), Array.isArray(request.params.materialId) ? request.params.materialId[0] : request.params.materialId, request.auth!.id) }) },
-  async remove(request: Request, response: Response) { await productionService.remove(request.auth!.companyId, idFrom(request)); response.status(204).send() },
+  async remove(request: Request, response: Response) { await productionService.remove(request.auth!.companyId, request.auth!.id, idFrom(request)); response.status(204).send() },
 }

@@ -7,10 +7,10 @@ const idFrom = (request: Request) => Array.isArray(request.params.id) ? request.
 
 export const purchaseController = {
   async list(request: Request, response: Response) {
-    response.json({ data: await purchaseService.list(request.auth!.companyId, purchaseQuerySchema.parse(request.query)) })
+    response.json({ data: await purchaseService.list(request.auth!.companyId, request.auth!.id, purchaseQuerySchema.parse(request.query)) })
   },
   async catalog(request: Request, response: Response) {
-    const [suppliers, products, warehouses, variableSubcategories] = await purchaseService.catalog(request.auth!.companyId)
+    const [suppliers, products, warehouses, variableSubcategories] = await purchaseService.catalog(request.auth!.companyId, request.auth!.id)
     response.json({ data: { suppliers, products, warehouses, variableSubcategories } })
   },
   async uploadDocument(request: Request, response: Response) {
@@ -25,19 +25,19 @@ export const purchaseController = {
     response.status(204).send()
   },
   async get(request: Request, response: Response) {
-    response.json({ data: await purchaseService.getById(request.auth!.companyId, idFrom(request)) })
+    response.json({ data: await purchaseService.getById(request.auth!.companyId, request.auth!.id, idFrom(request)) })
   },
   async create(request: Request, response: Response) {
     response.status(201).json({ data: await purchaseService.create(request.auth!.companyId, purchaseInputSchema.parse(request.body), request.auth!.id) })
   },
   async update(request: Request, response: Response) {
-    response.json({ data: await purchaseService.update(request.auth!.companyId, idFrom(request), updatePurchaseSchema.parse(request.body)) })
+    response.json({ data: await purchaseService.update(request.auth!.companyId, request.auth!.id, idFrom(request), updatePurchaseSchema.parse(request.body)) })
   },
   async receive(request: Request, response: Response) {
     response.json({ data: await purchaseService.receive(request.auth!.companyId, idFrom(request), request.auth!.id) })
   },
   async remove(request: Request, response: Response) {
-    await purchaseService.remove(request.auth!.companyId, idFrom(request))
+    await purchaseService.remove(request.auth!.companyId, request.auth!.id, idFrom(request))
     response.status(204).send()
   },
 }

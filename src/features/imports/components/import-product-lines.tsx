@@ -89,7 +89,7 @@ export function ImportProductLines({ catalog, units, currency, lines, onChange, 
     <h3 className="mb-2 text-[15px] font-semibold text-ink">Productos</h3>
     <div className="relative overflow-x-auto rounded-md border border-border">
       <table className="w-full min-w-[820px] text-left">
-        <thead><tr className="bg-[#f7f9fc] text-[11px] font-semibold uppercase tracking-[.35px] text-muted">{['Producto', 'Almacén', 'UM', 'Cant.', 'Costo unit.', 'Subtotal', ''].map(header => <th className="border-b border-border px-3 py-2" key={header}>{header}</th>)}</tr></thead>
+        <thead><tr className="bg-[#f7f9fc] text-[11px] font-semibold uppercase tracking-[.35px] text-muted">{['Producto', 'Almacén destino', 'UM', 'Cant.', 'Costo unit.', 'Subtotal', ''].map(header => <th className="border-b border-border px-3 py-2" key={header}>{header}</th>)}</tr></thead>
         <tbody>{lines.map((line, index) => {
           const weight = lineWeight(line)
           const subtotal = lineSubtotal(line)

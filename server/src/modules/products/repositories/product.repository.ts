@@ -6,7 +6,7 @@ const productInclude = { category: { include: categoryInclude }, subcategory: { 
 type Database = PrismaClient | Prisma.TransactionClient
 
 export const productRepository = {
-  findMany: (where: Prisma.ProductWhereInput) => prisma.product.findMany({ where, include: productInclude, orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }] }),
+  findMany: (where: Prisma.ProductWhereInput) => prisma.product.findMany({ where, include: productInclude, orderBy: [{ code: 'asc' }, { id: 'asc' }] }),
   findById: (id: string) => prisma.product.findUnique({ where: { id }, include: productInclude }),
   findByCode: (code: string) => prisma.product.findUnique({ where: { code } }),
   listCodes: () => prisma.product.findMany({ select: { code: true } }),

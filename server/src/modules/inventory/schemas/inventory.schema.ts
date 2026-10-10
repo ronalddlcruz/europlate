@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { databaseIdSchema } from '../../../shared/schemas/database-id.schema.js'
 
 const productLine = z.object({ productId: databaseIdSchema, presentationId: databaseIdSchema, warehouseId: databaseIdSchema })
-export const stockTransferSchema = z.object({ productId: databaseIdSchema, presentationId: databaseIdSchema, fromWarehouseId: databaseIdSchema, toWarehouseId: databaseIdSchema, quantity: z.coerce.number().positive(), note: z.string().trim().max(1_000).optional().nullable() }).superRefine((input, context) => { if (input.fromWarehouseId === input.toWarehouseId) context.addIssue({ code: z.ZodIssueCode.custom, path: ['toWarehouseId'], message: 'El almacén destino debe ser distinto al origen.' }) })
+export const stockTransferSchema = z.object({ productId: databaseIdSchema, fromWarehouseId: databaseIdSchema, toWarehouseId: databaseIdSchema, quantity: z.coerce.number().positive(), note: z.string().trim().max(1_000).optional().nullable() }).superRefine((input, context) => { if (input.fromWarehouseId === input.toWarehouseId) context.addIssue({ code: z.ZodIssueCode.custom, path: ['toWarehouseId'], message: 'El almacén destino debe ser distinto al origen.' }) })
 export const inventoryAdjustmentSchema = z.object({
   productId: databaseIdSchema,
   warehouseId: databaseIdSchema,
@@ -21,6 +21,7 @@ export const warehouseSchema = z.object({
   district: optionalLocationField,
   address: z.string().trim().max(255).optional().nullable(),
   description: z.string().trim().max(1_000).optional().nullable(),
+  responsibleUserId: databaseIdSchema.optional().nullable(),
   status: z.enum(['ACTIVE', 'INACTIVE']).default('ACTIVE'),
 })
 export const updateWarehouseSchema = warehouseSchema.partial()

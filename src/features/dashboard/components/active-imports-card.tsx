@@ -1,6 +1,0 @@
-import { Ship } from 'lucide-react'
-import { DashboardPanel } from '../../../components/dashboard/dashboard-components'
-
-export function ActiveImportsCard({ imports }: { imports: { number: string; supplier: string; status: string }[] }) {
-  return <DashboardPanel title="Importaciones activas" icon={Ship} titleClassName="text-brand"><div className="mb-3 flex items-center justify-between rounded-md border border-blue-100 bg-blue-50/60 px-2.5 py-1.5 text-[10px] text-brand"><span>Seguimiento logístico</span><span className="flex items-center gap-1.5 font-semibold"><i className="h-1.5 w-1.5 animate-pulse rounded-full bg-blue-500" />En curso</span></div>{imports.length ? <div className="space-y-3">{imports.map(item => <div key={item.number} className="flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><p className="font-mono text-sm font-semibold text-ink">{item.number}</p><p className="mt-1 truncate text-xs text-muted">{item.supplier}</p></div><span className="shrink-0 whitespace-nowrap rounded-full bg-blue-100 px-3 py-1.5 text-[10px] font-semibold text-brand">{item.status === 'IN_TRANSIT' ? 'En tránsito' : item.status}</span></div>)}</div> : <p className="py-6 text-center text-xs text-muted">No hay importaciones activas.</p>}</DashboardPanel>
-}

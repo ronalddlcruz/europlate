@@ -5,6 +5,7 @@ import { Button } from '../../../components/ui/button'
 import { Dialog } from '../../../components/ui/dialog'
 import { Input } from '../../../components/ui/input'
 import type { CatalogProduct, ProductionCatalog, ProductionPayload } from '../services/production-api.service'
+import { matchesProductSearch } from '../../../lib/product-search'
 
 type DraftMaterial = { productId: string; warehouseId: string; quantity: number; immediateConsumption: boolean; shareReservation?: boolean }
 type PickerItem = { id: string; title: string; detail: string }
@@ -20,7 +21,7 @@ function CatalogPicker({ items, value, onChange, label }: { items: PickerItem[];
   const ref = useRef<HTMLDivElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const selected = items.find(item => item.id === value)
-  const filtered = items.filter(item => `${item.title} ${item.detail}`.toLowerCase().includes(query.toLowerCase()))
+  const filtered = items.filter(item => matchesProductSearch(item.title + ' ' + item.detail, query))
   const updatePosition = () => { const box = ref.current?.getBoundingClientRect(); if (box) setPosition({ left: box.left, top: box.bottom + 6, width: box.width }) }
 
   useEffect(() => { setQuery(selected?.title ?? '') }, [selected?.title])

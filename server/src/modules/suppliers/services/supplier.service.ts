@@ -26,14 +26,13 @@ export const supplierService = {
     return supplier
   },
   async create(companyId: string, input: CreateSupplierInput) {
-    if (await supplierRepository.findByTaxId(companyId, input.taxId)) throw duplicateError()
+    if (input.taxId && await supplierRepository.findByTaxId(companyId, input.taxId)) throw duplicateError()
     return supplierRepository.create(prisma, { ...input, company: { connect: { id: companyId } } })
   },
   async update(companyId: string, id: string, input: UpdateSupplierInput) {
     const existing = await this.getById(companyId, id)
-    const taxId = input.taxId ?? existing.taxId
-    if (!taxId) throw new AppError('SUPPLIER_TAX_ID_REQUIRED', 'El RUC / Tax ID es obligatorio.', 422)
-    validateTaxId(input.type ?? existing.type, taxId)
+    const taxId = input.taxId === undefined ? existing.taxId : input.taxId
+    if (taxId) validateTaxId(input.type ?? existing.type, taxId)
     if (input.taxId) {
       const duplicate = await supplierRepository.findByTaxId(companyId, input.taxId)
       if (duplicate && duplicate.id !== id) throw duplicateError()

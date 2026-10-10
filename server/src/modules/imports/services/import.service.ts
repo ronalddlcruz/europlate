@@ -3,6 +3,7 @@ import { prisma } from '../../../infrastructure/database/prisma.client.js'
 import { AppError } from '../../../shared/errors/app-error.js'
 import { getImportDocumentUrl, removeImportDocument, uploadImportDocument } from '../../../infrastructure/storage/purchase-document.storage.js'
 import { importRepository } from '../repositories/import.repository.js'
+import { assertWarehouseScope, importScopeWhere, resolveOperationScope } from '../../../shared/security/operation-scope.js'
 import type { ImportInput, UpdateImportInput } from '../schemas/import.schema.js'
 import { productService } from '../../products/services/product.service.js'
 import { exchangeRateService } from '../../exchange-rates/services/exchange-rate.service.js'
@@ -130,15 +131,18 @@ const withDocumentLinks = async <T extends { documents: { storageKey: string | n
 const itemCreateData = (line: ResolvedItem) => ({ product: { connect: { id: line.productId } }, presentation: { connect: { id: line.presentationId } }, warehouse: { connect: { id: line.warehouseId } }, quantity: decimal(line.quantity), unitCostUsd: decimal(line.unitCostUsd), calculationType: line.calculationType, weightAttributeId: line.weightAttributeId ?? null, weightValue: line.weightValue === undefined ? null : decimal(line.weightValue), weightUnit: line.weightUnit ?? null, subtotalUsd: line.subtotalUsd })
 
 export const importService = {
-  list(companyId: string, filters: { status?: ImportStatus; supplierId?: string; search?: string }) {
-    const where: Prisma.ImportWhereInput = { companyId, ...(filters.status && { status: filters.status }), ...(filters.supplierId && { supplierId: filters.supplierId }), ...(filters.search && { OR: [{ number: { contains: filters.search, mode: 'insensitive' } }, { duaNumber: { contains: filters.search, mode: 'insensitive' } }, { containerNumber: { contains: filters.search, mode: 'insensitive' } }, { supplier: { name: { contains: filters.search, mode: 'insensitive' } } }] }) }
+  async list(companyId: string, actorId: string, filters: { status?: ImportStatus; supplierId?: string; search?: string }) {
+    const scope = await resolveOperationScope(companyId, actorId)
+    const where: Prisma.ImportWhereInput = { companyId, ...importScopeWhere(scope), ...(filters.status && { status: filters.status }), ...(filters.supplierId && { supplierId: filters.supplierId }), ...(filters.search && { OR: [{ number: { contains: filters.search, mode: 'insensitive' } }, { duaNumber: { contains: filters.search, mode: 'insensitive' } }, { containerNumber: { contains: filters.search, mode: 'insensitive' } }, { supplier: { name: { contains: filters.search, mode: 'insensitive' } } }] }) }
     return importRepository.findMany(where)
   },
-  async getById(companyId: string, id: string) { const record = await importRepository.findById(id, companyId); if (!record) throw new AppError('IMPORT_NOT_FOUND', 'Importación no encontrada.', 404); return withDocumentLinks(record) },
-  catalog: (companyId: string) => importRepository.catalog(companyId),
+  async getById(companyId: string, actorId: string, id: string) { const scope = await resolveOperationScope(companyId, actorId); const record = await importRepository.findById(id, companyId, importScopeWhere(scope)); if (!record) throw new AppError('IMPORT_NOT_FOUND', 'Importación no encontrada.', 404); return withDocumentLinks(record) },
+  async catalog(companyId: string, actorId: string) { const scope = await resolveOperationScope(companyId, actorId); return importRepository.catalog(companyId, scope?.warehouseIds) },
   async uploadDocument(companyId: string, fileName: string, content: Buffer) { return uploadImportDocument(companyId, fileName, content) },
   async removeDocument(companyId: string, storageKey: string) { if (!storageKey.startsWith(`imports/${companyId}/`)) throw new AppError('IMPORT_DOCUMENT_INVALID', 'El archivo no pertenece a esta empresa.', 403); await removeImportDocument(storageKey) },
   async create(companyId: string, input: ImportInput, userId: string) {
+    const scope = await resolveOperationScope(companyId, userId)
+    assertWarehouseScope(scope, input.items.map(item => item.warehouseId))
     if (await importRepository.findDuplicateDua(companyId, input.duaNumber)) throw new AppError('IMPORT_DUA_EXISTS', 'Ese número de DUA ya fue registrado.', 409)
     if (input.documents.some(document => document.storageKey && !document.storageKey.startsWith(`imports/${companyId}/`))) throw new AppError('IMPORT_DOCUMENT_INVALID', 'El documento adjunto no pertenece a esta empresa.', 422)
     // Sin una tasa USD → PEN el valor recibido se registraba correctamente,
@@ -149,13 +153,13 @@ export const importService = {
       const unresolvedItems = await resolveItems(db, input)
       await validateSupplierAndWarehouses(db, companyId, { supplierId: input.supplierId, customsAgentId: input.customsAgentId, warehouseIds: unresolvedItems.map(item => item.warehouseId) })
       const items = await applyCalculationStrategy(db, unresolvedItems)
-      const created = await importRepository.create(db, { company: { connect: { id: companyId } }, supplier: { connect: { id: input.supplierId } }, ...(input.customsAgentId && { customsAgent: { connect: { id: input.customsAgentId } } }), number: nextNumber(), containerNumber: input.containerNumber, duaNumber: input.duaNumber, purchaseOrderNumber: input.purchaseOrderNumber, countryOfOrigin: input.countryOfOrigin, status: input.status, currency: input.currency, arrivalDate: input.arrivalDate, customsCostUsd: decimal(input.customsCostUsd), customsCostPen: decimal(input.customsCostPen), totalUsd: totalOf(items), items: { create: items.map(itemCreateData) }, documents: { create: input.documents } })
+      const created = await importRepository.create(db, { company: { connect: { id: companyId } }, createdBy: { connect: { id: userId } }, supplier: { connect: { id: input.supplierId } }, ...(input.customsAgentId && { customsAgent: { connect: { id: input.customsAgentId } } }), number: nextNumber(), containerNumber: input.containerNumber, duaNumber: input.duaNumber, purchaseOrderNumber: input.purchaseOrderNumber, countryOfOrigin: input.countryOfOrigin, status: input.status, currency: input.currency, arrivalDate: input.arrivalDate, customsCostUsd: decimal(input.customsCostUsd), customsCostPen: decimal(input.customsCostPen), totalUsd: totalOf(items), items: { create: items.map(itemCreateData) }, documents: { create: input.documents } })
       if (created.status === ImportStatus.RECEIVED) { const receipt = await db.import.findUniqueOrThrow({ where: { id: created.id }, include: receiptInclude }); await applyReceipt(db, receipt, userId) }
       return created
     })
   },
   async update(companyId: string, id: string, input: UpdateImportInput, userId: string) {
-    const current = await this.getById(companyId, id)
+    const current = await this.getById(companyId, userId, id)
     if (current.status === ImportStatus.RECEIVED) throw new AppError('IMPORT_LOCKED', 'Una importación recibida no se puede editar.', 409)
     if (input.status === ImportStatus.RECEIVED && current.status === ImportStatus.CANCELLED) throw new AppError('IMPORT_NOT_RECEIVABLE', 'Una importación cancelada no se puede recibir.', 409)
     if (input.items?.some(isVariableItem)) throw new AppError('VARIABLE_IMPORT_UPDATE_UNSUPPORTED', 'Los productos variables se definen al registrar una nueva importación.', 422)
@@ -163,6 +167,7 @@ export const importService = {
       if (isVariableItem(item)) throw new AppError('VARIABLE_IMPORT_UPDATE_UNSUPPORTED', 'Los productos variables se definen al registrar una nueva importación.', 422)
       return { productId: item.productId, presentationId: item.presentationId, warehouseId: item.warehouseId, quantity: item.quantity, unitCostUsd: item.unitCostUsd, requestedWeightAttributeId: item.weightAttributeId, requestedWeightValue: item.weightValue, calculationType: ImportCalculationType.STANDARD, subtotalUsd: calculateImportLineSubtotal({ calculationType: 'STANDARD', quantity: item.quantity, unitCostUsd: item.unitCostUsd }) }
     })
+    assertWarehouseScope(await resolveOperationScope(companyId, userId), (inputItems ?? current.items).map(item => item.warehouseId))
     const supplierId = input.supplierId ?? current.supplierId
     const customsAgentId = input.customsAgentId === undefined ? current.customsAgentId : input.customsAgentId
     if (input.duaNumber && input.duaNumber !== current.duaNumber) { const duplicate = await importRepository.findDuplicateDua(companyId, input.duaNumber); if (duplicate) throw new AppError('IMPORT_DUA_EXISTS', 'Ese número de DUA ya fue registrado.', 409) }
@@ -180,10 +185,10 @@ export const importService = {
     })
   },
   async receive(companyId: string, id: string, userId: string) {
-    const current = await this.getById(companyId, id)
+    const current = await this.getById(companyId, userId, id)
     if (current.status !== ImportStatus.IN_TRANSIT) throw new AppError('IMPORT_NOT_RECEIVABLE', 'Solo se pueden recibir importaciones en tránsito.', 409)
     if (current.currency === 'USD') await exchangeRateService.ensureCurrent(companyId, userId)
     return transaction(async db => { const receipt = await db.import.findUniqueOrThrow({ where: { id }, include: receiptInclude }); await applyReceipt(db, receipt, userId); return importRepository.update(db, id, { status: ImportStatus.RECEIVED }) })
   },
-  async remove(companyId: string, id: string) { const current = await this.getById(companyId, id); if (current.status === ImportStatus.RECEIVED) throw new AppError('IMPORT_LOCKED', 'No se puede eliminar una importación recibida.', 409); await importRepository.remove(prisma, id) },
+  async remove(companyId: string, actorId: string, id: string) { const current = await this.getById(companyId, actorId, id); if (current.status === ImportStatus.RECEIVED) throw new AppError('IMPORT_LOCKED', 'No se puede eliminar una importación recibida.', 409); await importRepository.remove(prisma, id) },
 }

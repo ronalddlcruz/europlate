@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Button } from '../../../components/ui/button'
 import { Dialog } from '../../../components/ui/dialog'
 import { Input } from '../../../components/ui/input'
-import { createAdjustment, createTransfer, listAdjustments, listMovements, listStock, listTransfers, listWarehouses, loadInventoryCatalog, type Adjustment, type CatalogCustomer, type CatalogProduct, type StockRecord, type StockStatusFilter, type Warehouse } from '../services/inventory-api.service'
+import { createAdjustment, createTransfer, listAdjustments, listMovements, listStock, listTransfers, listWarehouses, loadInventoryCatalog, movementFromAdjustment, movementsFromTransfer, transferFromCreated, type Adjustment, type CatalogCustomer, type CatalogProduct, type Movement, type StockRecord, type StockStatusFilter, type Transfer, type Warehouse } from '../services/inventory-api.service'
 
 type Tab = 'stock' | 'movements' | 'transfers' | 'adjustments'
 const Select = ({ children, ...props }: React.SelectHTMLAttributes<HTMLSelectElement>) => <select className="h-10 w-full rounded-md border border-border bg-[#f4f7fb] px-3 text-sm outline-none focus:border-brand focus:bg-white focus:ring-1 focus:ring-brand" {...props}>{children}</select>
@@ -12,28 +12,67 @@ const Field = ({ label, children }: { label: string; children: React.ReactNode }
 
 export function InventoryPage() {
   const client = useQueryClient(); const [tab, setTab] = useState<Tab>('stock'); const [modal, setModal] = useState<'transfer' | 'adjustment' | null>(null); const [stockStatus, setStockStatus] = useState<StockStatusFilter>('ACTIVE'); const [notice, setNotice] = useState('')
+  const [transferDraft, setTransferDraft] = useState<Parameters<typeof createTransfer>[0] | null>(null)
+  const noticeTimer = useRef<number | undefined>(undefined)
   // La referencia evita dos solicitudes antes de que React alcance a repintar
   // el botón deshabilitado tras el primer clic.
   const transferInFlight = useRef(false)
   const adjustmentInFlight = useRef(false)
-  const stock = useQuery({ queryKey: ['inventory', 'stock', stockStatus], queryFn: () => listStock(stockStatus), staleTime: 0, refetchOnMount: 'always' }); const catalog = useQuery({ queryKey: ['inventory', 'catalog'], queryFn: loadInventoryCatalog }); const movements = useQuery({ queryKey: ['inventory', 'movements'], queryFn: listMovements }); const transfers = useQuery({ queryKey: ['inventory', 'transfers'], queryFn: listTransfers }); const adjustments = useQuery({ queryKey: ['inventory', 'adjustments'], queryFn: listAdjustments }); const warehouses = useQuery({ queryKey: ['inventory', 'warehouses'], queryFn: listWarehouses })
-  const notify = (message: string) => { setNotice(message); window.setTimeout(() => setNotice(''), 3200) }; const sync = () => Promise.all([client.invalidateQueries({ queryKey: ['inventory'], refetchType: 'all' }), client.invalidateQueries({ queryKey: ['reports'], refetchType: 'all' }), client.invalidateQueries({ queryKey: ['dashboard'], refetchType: 'all' })])
+  const stock = useQuery({ queryKey: ['inventory', 'stock', stockStatus], queryFn: () => listStock(stockStatus), staleTime: 0, refetchOnMount: 'always' }); const catalog = useQuery({ queryKey: ['inventory', 'catalog'], queryFn: loadInventoryCatalog }); const movements = useQuery({ queryKey: ['inventory', 'movements'], queryFn: listMovements, enabled: tab === 'movements', staleTime: 0 }); const transfers = useQuery({ queryKey: ['inventory', 'transfers'], queryFn: listTransfers }); const adjustments = useQuery({ queryKey: ['inventory', 'adjustments'], queryFn: listAdjustments }); const warehouses = useQuery({ queryKey: ['inventory', 'warehouses'], queryFn: listWarehouses })
+  const transferStock = useQuery({ queryKey: ['inventory', 'stock', 'ACTIVE'], queryFn: () => listStock('ACTIVE'), enabled: modal === 'transfer', staleTime: 0, refetchOnMount: 'always' })
+  const notify = (message: string, duration: number | null = 3200) => {
+    window.clearTimeout(noticeTimer.current)
+    setNotice(message)
+    if (duration !== null) noticeTimer.current = window.setTimeout(() => setNotice(''), duration)
+  }
+  useEffect(() => () => window.clearTimeout(noticeTimer.current), [])
+  const showNewMovements = (incoming: Movement[]) => {
+    client.setQueryData<Movement[]>(['inventory', 'movements'], current => {
+      if (current?.some(item => item.reference === incoming[0]?.reference)) return current
+      return [...incoming, ...(current ?? [])]
+    })
+  }
   const transfer = useMutation({
     mutationFn: createTransfer,
-    onSuccess: () => { setModal(null); notify('Transferencia registrada y stock actualizado.'); },
-    onError: e => notify(e instanceof Error ? e.message : 'No se pudo transferir.'),
-    onSettled: () => { transferInFlight.current = false; void sync() },
+    onSuccess: created => {
+      showNewMovements(movementsFromTransfer(created))
+      client.setQueryData<Transfer[]>(['inventory', 'transfers'], current => [transferFromCreated(created), ...(current ?? []).filter(item => item.id !== created.id)])
+      const baseQuantity = Number(created.quantity) * Number(created.presentation?.factor ?? 1)
+      for (const [queryKey] of client.getQueriesData<StockRecord[]>({ queryKey: ['inventory', 'stock'] })) {
+        client.setQueryData<StockRecord[]>(queryKey, current => current?.map(record => {
+          if (record.productId !== created.product.id) return record
+          const warehouses = record.warehouses.map(entry => entry.id === created.fromWarehouse.id
+            ? { ...entry, quantity: Math.max(0, entry.quantity - baseQuantity) }
+            : entry.id === created.toWarehouse.id
+              ? { ...entry, quantity: entry.quantity + baseQuantity }
+              : entry)
+          if (!warehouses.some(entry => entry.id === created.toWarehouse.id)) warehouses.push({ id: created.toWarehouse.id, name: created.toWarehouse.name, quantity: baseQuantity })
+          return { ...record, warehouses }
+        }))
+      }
+      setTransferDraft(null)
+      notify('Transferencia registrada y stock actualizado.')
+    },
+    onError: e => {
+      void client.invalidateQueries({ queryKey: ['inventory', 'stock', 'ACTIVE'] })
+      setModal('transfer')
+      notify(e instanceof Error ? e.message : 'No se pudo transferir.')
+    },
+    onSettled: () => { transferInFlight.current = false },
   })
   const adjustment = useMutation({
     mutationFn: createAdjustment,
     // Cerramos de inmediato; la actualización de consultas queda en segundo plano.
-    onSuccess: () => { setModal(null); notify('Ajuste aplicado y registrado en auditoría.') },
+    onSuccess: created => { showNewMovements([movementFromAdjustment(created)]); setModal(null); notify('Ajuste aplicado y registrado en auditoría.') },
     onError: e => notify(e instanceof Error ? e.message : 'No se pudo aplicar el ajuste.'),
-    onSettled: () => { adjustmentInFlight.current = false; void sync() },
+    onSettled: () => { adjustmentInFlight.current = false },
   })
   const submitTransfer = (payload: Parameters<typeof createTransfer>[0]) => {
     if (transferInFlight.current || transfer.isPending) return
     transferInFlight.current = true
+    setTransferDraft(payload)
+    setModal(null)
+    notify('Registrando transferencia…', null)
     transfer.mutate(payload)
   }
   const submitAdjustment = (payload: Parameters<typeof createAdjustment>[0]) => {
@@ -41,14 +80,28 @@ export function InventoryPage() {
     adjustmentInFlight.current = true
     adjustment.mutate(payload)
   }
-  const tabs: [Tab, string][] = [['stock', 'Stock Actual'], ['adjustments', 'Ajuste de Inventario'], ['movements', 'Movimientos'], ['transfers', 'Transferencias']]
-  return <div className="inventory-module mx-auto w-full max-w-[1540px]"><nav className="mb-6 flex gap-1 overflow-x-auto border-b border-border bg-white px-2">{tabs.map(([key, label]) => <button key={key} onClick={() => setTab(key)} className={`whitespace-nowrap border-b-2 px-5 py-3 text-[13px] font-medium ${tab === key ? 'border-brand text-brand' : 'border-transparent text-muted hover:text-ink'}`}>{label}</button>)}</nav>{tab === 'stock' && <section className="card"><header className="flex flex-wrap items-center justify-between gap-3"><h1 className="text-sm font-semibold">Stock Actual</h1></header><StockTable records={stock.data ?? []} warehouses={warehouses.data ?? []} loading={stock.isLoading} status={stockStatus} onStatusChange={setStockStatus} /></section>}{tab === 'movements' && <MovementTable rows={movements.data ?? []} loading={movements.isLoading} />}{tab === 'transfers' && <section className="card"><Header title="Transferencia entre Almacenes" action="Nueva Transferencia" onAction={() => setModal('transfer')} /><SimpleTable headers={['Fecha', 'Producto', 'Presentación', 'Origen', 'Destino', 'Cantidad', 'Usuario']} rows={(transfers.data ?? []).map(row => [row.date, row.product, row.presentation, row.origin, row.destination, String(row.quantity), row.user])} loading={transfers.isLoading} empty="Sin transferencias registradas." /></section>}{tab === 'adjustments' && <section className="card"><Header title="Ajustes de Inventario" action="Registrar Ajuste" onAction={() => setModal('adjustment')} /><AdjustmentTable rows={adjustments.data ?? []} loading={adjustments.isLoading} /></section>}{modal === 'transfer' && catalog.data && <TransferDialog catalog={catalog.data} stock={stock.data ?? []} saving={transfer.isPending} onClose={() => setModal(null)} onSave={submitTransfer} />}{modal === 'adjustment' && catalog.data && <AdjustmentDialog catalog={catalog.data} stock={stock.data ?? []} saving={adjustment.isPending} onClose={() => setModal(null)} onSave={submitAdjustment} />}{notice && <div className="fixed bottom-6 right-6 z-[60] rounded-md border border-border border-l-4 border-l-emerald-600 bg-white px-4 py-3 text-sm shadow-panel">{notice}</div>}</div>
+  const tabs: [Tab, string][] = [['stock', 'Stock Actual'], ['adjustments', 'Ajuste de Inventario'], ['transfers', 'Transferencias'], ['movements', 'Movimientos']]
+  return <div className="inventory-module mx-auto w-full max-w-[1540px]">
+    <nav className="mb-6 flex gap-1 overflow-x-auto border-b border-border bg-white px-2">
+      {tabs.map(([key, label]) => <button key={key} onClick={() => setTab(key)} className={`whitespace-nowrap border-b-2 px-5 py-3 text-[13px] font-medium ${tab === key ? 'border-brand text-brand' : 'border-transparent text-muted hover:text-ink'}`}>{label}</button>)}
+    </nav>
+    {tab === 'stock' && <section className="card"><header className="flex flex-wrap items-center justify-between gap-3"><h1 className="text-sm font-semibold">Stock Actual</h1></header><StockTable records={stock.data ?? []} warehouses={warehouses.data ?? []} loading={stock.isLoading} status={stockStatus} onStatusChange={setStockStatus} /></section>}
+    {tab === 'adjustments' && <section className="card"><Header title="Ajustes de Inventario" action="Registrar Ajuste" onAction={() => setModal('adjustment')} /><AdjustmentTable rows={adjustments.data ?? []} loading={adjustments.isLoading} /></section>}
+    {tab === 'transfers' && <section className="card">
+      <Header title="Transferencia entre Almacenes" action="Nueva Transferencia" actionDisabled={transfer.isPending} onAction={() => { setTransferDraft(null); setModal('transfer') }} />
+      <SimpleTable headers={['Fecha', 'Producto', 'Origen', 'Destino', 'Cantidad', 'Usuario']} rows={(transfers.data ?? []).map(row => [row.date, row.product, row.origin, row.destination, `${row.quantity} ${row.unitName}`, row.user])} loading={transfers.isLoading} empty="Sin transferencias registradas." />
+    </section>}
+    {tab === 'movements' && <MovementTable rows={movements.data ?? []} loading={movements.isLoading} />}
+    {modal === 'transfer' && catalog.data && <TransferDialog catalog={catalog.data} stock={transferStock.data ?? []} saving={transfer.isPending} initialValues={transferDraft} onClose={() => setModal(null)} onSave={submitTransfer} />}
+    {modal === 'adjustment' && catalog.data && <AdjustmentDialog catalog={catalog.data} stock={stock.data ?? []} saving={adjustment.isPending} onClose={() => setModal(null)} onSave={submitAdjustment} />}
+    {notice && <div className="fixed bottom-6 right-6 z-[60] rounded-md border border-border border-l-4 border-l-emerald-600 bg-white px-4 py-3 text-sm shadow-panel">{notice}</div>}
+  </div>
 }
 
-function Header({ title, action, onAction }: { title: string; action?: string; onAction?: () => void }) { return <header className="flex flex-wrap items-center justify-between gap-3"><div><h1 className="text-sm font-semibold">{title}</h1>{title === 'Transferencia entre Almacenes' && <p className="mt-1 text-xs text-muted">Mueve existencias entre almacenes manteniendo su trazabilidad.</p>}</div>{action && <Button size="sm" onClick={onAction}><Plus className="h-4 w-4" />{action}</Button>}</header> }
+function Header({ title, action, onAction, actionDisabled = false }: { title: string; action?: string; onAction?: () => void; actionDisabled?: boolean }) { return <header className="flex flex-wrap items-center justify-between gap-3"><div><h1 className="text-sm font-semibold">{title}</h1>{title === 'Transferencia entre Almacenes' && <p className="mt-1 text-xs text-muted">Mueve existencias entre almacenes manteniendo su trazabilidad.</p>}</div>{action && <Button size="sm" onClick={onAction} disabled={actionDisabled}><Plus className="h-4 w-4" />{action}</Button>}</header> }
 function StockAmount({ quantity, unitName, factor }: { quantity: number; unitName: string; factor: number }) {
   const display = new Intl.NumberFormat('es-PE', { maximumFractionDigits: 3 })
-  if (factor <= 1) return <>{display.format(quantity)} {unitName}</>
+  if (factor === 1) return <>{display.format(quantity)} {unitName}</>
   return <span className="inline-flex w-max flex-col items-center whitespace-nowrap leading-tight"><span className="whitespace-nowrap">{display.format(quantity / factor)} {unitName}</span><span className="mt-0.5 whitespace-nowrap text-[11px] font-normal text-slate-500">({display.format(quantity)} und.)</span></span>
 }
 type SearchPickerItem = { id: string; title: string; detail?: string }
@@ -59,7 +112,7 @@ function SearchPicker({ items, value, onChange, placeholder, empty }: { items: S
   const selected = items.find(item => item.id === value)
   const filtered = items.filter(item => `${item.title} ${item.detail ?? ''}`.toLocaleLowerCase().includes(query.toLocaleLowerCase()))
 
-  useEffect(() => { setQuery(selected?.title ?? '') }, [selected?.title])
+  useEffect(() => { if (selected?.title) setQuery(selected.title) }, [selected?.title])
   useEffect(() => {
     const close = (event: MouseEvent) => {
       if (!ref.current?.contains(event.target as Node)) {
@@ -71,29 +124,32 @@ function SearchPicker({ items, value, onChange, placeholder, empty }: { items: S
     return () => document.removeEventListener('mousedown', close)
   }, [selected?.title])
 
-  return <div ref={ref} className="relative"><div className={`flex h-10 items-center rounded-md border bg-[#f4f7fb] px-3 transition ${open ? 'border-brand bg-white ring-1 ring-brand' : 'border-border'}`}><Search className="mr-2 h-4 w-4 shrink-0 text-slate-400" /><input value={query} onFocus={() => { setQuery(''); setOpen(true) }} onChange={event => { setQuery(event.target.value); setOpen(true) }} placeholder={placeholder} className="min-w-0 flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-slate-400" /><button type="button" onClick={() => { setQuery(open ? (selected?.title ?? '') : ''); setOpen(current => !current) }} aria-label={`Mostrar ${placeholder}`} className="ml-2 text-slate-400">⌄</button></div>{open && <div className="absolute z-[60] mt-1 w-full overflow-hidden rounded-md border border-border bg-white shadow-panel"><p className="border-b border-border px-3 py-2 text-[11px] font-semibold uppercase tracking-[.4px] text-muted">Resultados · {filtered.length}</p><div className="max-h-56 overflow-y-auto">{filtered.map(item => <button type="button" key={item.id} onClick={() => { onChange(item.id); setOpen(false) }} className="flex w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-blue-50">{item.detail && <span className="rounded bg-blue-50 px-2 py-1 font-mono text-[11px] font-semibold text-brand">{item.detail}</span>}<span className="min-w-0 flex-1 truncate text-sm font-medium text-ink">{item.title}</span></button>)}{!filtered.length && <p className="p-4 text-center text-sm text-muted">{empty}</p>}</div></div>}</div>
+  return <div ref={ref} className="relative"><div className={`flex h-10 items-center rounded-md border bg-[#f4f7fb] px-3 transition ${open ? 'border-brand bg-white ring-1 ring-brand' : 'border-border'}`}><Search className="mr-2 h-4 w-4 shrink-0 text-slate-400" /><input value={query} onFocus={() => { setQuery(''); setOpen(true) }} onChange={event => { setQuery(event.target.value); if (value) onChange(''); setOpen(true) }} placeholder={placeholder} className="min-w-0 flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-slate-400" /><button type="button" onClick={() => { setQuery(open ? (selected?.title ?? '') : ''); setOpen(current => !current) }} aria-label={`Mostrar ${placeholder}`} className="ml-2 text-slate-400">⌄</button></div>{open && <div className="absolute z-[60] mt-1 w-full overflow-hidden rounded-md border border-border bg-white shadow-panel"><p className="border-b border-border px-3 py-2 text-[11px] font-semibold uppercase tracking-[.4px] text-muted">Resultados · {filtered.length}</p><div className="max-h-56 overflow-y-auto">{filtered.map(item => <button type="button" key={item.id} onClick={() => { onChange(item.id); setOpen(false) }} className="flex w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-blue-50">{item.detail && <span className="rounded bg-blue-50 px-2 py-1 font-mono text-[11px] font-semibold text-brand">{item.detail}</span>}<span className="min-w-0 flex-1 truncate text-sm font-medium text-ink">{item.title}</span></button>)}{!filtered.length && <p className="p-4 text-center text-sm text-muted">{empty}</p>}</div></div>}</div>
 }
 function ProductPicker({ products, value, onChange }: { products: CatalogProduct[]; value: string; onChange: (id: string) => void }) { return <SearchPicker items={products.map(product => ({ id: product.id, title: product.name, detail: product.code }))} value={value} onChange={onChange} placeholder="Buscar producto..." empty="No se encontraron productos." /> }
+function WarehousePicker({ warehouses, value, onChange, placeholder }: { warehouses: Warehouse[]; value: string; onChange: (id: string) => void; placeholder: string }) { return <SearchPicker items={warehouses.map(warehouse => ({ id: warehouse.id, title: warehouse.name }))} value={value} onChange={onChange} placeholder={placeholder} empty="No se encontraron almacenes." /> }
 function CustomerPicker({ customers, value, onChange }: { customers: CatalogCustomer[]; value: string; onChange: (id: string) => void }) { return <SearchPicker items={customers.map(customer => ({ id: customer.id, title: customer.name }))} value={value} onChange={onChange} placeholder="Buscar cliente..." empty="No se encontraron clientes." /> }
 function StockTable({ records, warehouses, loading, status, onStatusChange }: { records: StockRecord[]; warehouses: Warehouse[]; loading: boolean; status: StockStatusFilter; onStatusChange: (status: StockStatusFilter) => void }) {
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   const activeWarehouses = warehouses.filter(item => item.status === 'ACTIVE')
-  const visibleRecords = records.filter(item => `${item.code} ${item.category} ${item.subcategory} ${item.product}`.toLowerCase().includes(search.toLowerCase()))
-  const pageSize = 25
+  const visibleRecords = records
+    .filter(item => `${item.code} ${item.category} ${item.subcategory} ${item.product}`.toLowerCase().includes(search.toLowerCase()))
+    .sort((left, right) => left.code.localeCompare(right.code, 'es', { numeric: true, sensitivity: 'base' }))
+  const pageSize = 10
   const totalPages = Math.max(1, Math.ceil(visibleRecords.length / pageSize))
   const currentPage = Math.min(page, totalPages)
   const paginatedRecords = visibleRecords.slice((currentPage - 1) * pageSize, currentPage * pageSize)
-  const columns = 10 + activeWarehouses.length
+  const columns = 12 + activeWarehouses.length
   const totalStock = records.reduce((sum, item) => sum + item.total, 0)
-  const productsWithStock = records.filter(item => item.total > 0).length
+  const totalInventoryUnits = records.reduce((sum, item) => sum + item.total / (item.factor > 0 ? item.factor : 1), 0)
+  const formatQuantity = (value: number) => value.toLocaleString('es-PE', { maximumFractionDigits: 2 })
   const inventoryValuation = records.reduce((sum, item) => sum + item.costPen, 0)
   const reservedStock = records.reduce((sum, item) => sum + item.inProduction, 0)
   const lowStock = records.filter(item => item.total < item.minimum * item.factor).length
   return <>
-    <div className="mb-5 grid divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-100 bg-slate-50/60 sm:grid-cols-2 sm:divide-x sm:divide-y-0 xl:grid-cols-5">
-      <InventoryMetric label="Total existencias" value={totalStock.toLocaleString('es-PE')} detail="Unidades físicas registradas" tone="blue" />
-      <InventoryMetric label="Productos con stock" value={productsWithStock} detail="Disponibles en almacén" tone="slate" />
+    <div className="mb-5 grid divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-100 bg-slate-50/60 sm:grid-cols-2 sm:divide-x sm:divide-y-0 xl:grid-cols-4">
+      <InventoryMetric label="Total existencias" value={`${formatQuantity(totalInventoryUnits)} UM`} detail={`${formatQuantity(totalStock)} unidades físicas registradas`} tone="blue" highlightDetail />
       <InventoryMetric label="Valorización del inventario (S/)" value={`S/ ${inventoryValuation.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} detail="Valor del stock recibido" tone="green" />
       <InventoryMetric label="En producción" value={reservedStock.toLocaleString('es-PE')} detail="Unidades comprometidas" tone="green" />
       <InventoryMetric label="Alertas de stock" value={lowStock} detail="Por debajo del mínimo" tone="amber" />
@@ -111,13 +167,40 @@ function StockTable({ records, warehouses, loading, status, onStatusChange }: { 
         </div>
       </div>
     </div>
-    <div className="mt-3 overflow-x-auto"><table className="w-full min-w-[1440px] text-left"><thead><tr className="bg-[#f7f9fc] text-[11px] uppercase tracking-[.45px] text-muted">{['Código', 'Categoría', 'Subcategoría', 'Producto', 'Estado', 'Unidad de inventario', 'Stock mín.', 'Stock total', 'Disponible (no en prod.)', 'En producción (UM inv.)', 'Costo total (USD)', 'Costo total (S/)'].map(value => <th key={value} className={`border-y border-border px-4 py-3 font-semibold ${value === 'Código' ? 'w-[94px] min-w-[94px] whitespace-nowrap px-3' : value === 'Stock mín.' ? 'min-w-[150px] whitespace-nowrap text-center' : ''}`}>{value}</th>)}{activeWarehouses.map(item => <th key={item.id} className="border-y border-l-2 border-border px-4 py-3 text-right font-semibold text-brand">{item.name}</th>)}</tr></thead><tbody>{loading ? <tr><td colSpan={columns + 2} className="p-10 text-center text-sm text-muted">Cargando stock desde la base de datos…</td></tr> : paginatedRecords.length ? paginatedRecords.map(item => { const low = item.total < item.minimum * item.factor; const unitName = item.unitName ?? item.unit; return <tr key={item.productId} className="border-b border-border text-[13px] hover:bg-slate-50/70"><td className="w-[94px] min-w-[94px] whitespace-nowrap px-3 py-3.5 font-mono text-[10px] font-bold tracking-tight text-brand">{item.code}</td><td className="max-w-[190px] px-4 py-3.5"><span className="inline-block max-w-full truncate rounded-md border border-blue-100 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-brand" title={item.category}>{item.category}</span></td><td className="max-w-[190px] px-4 py-3.5 text-slate-700"><span className="block truncate" title={item.subcategory}>{item.subcategory}</span></td><td className="max-w-[360px] px-4 py-3.5 font-medium text-ink"><span className="block truncate" title={item.product}>{item.product}</span></td><td className="px-4 py-3.5"><span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${item.status === 'ACTIVE' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>{item.status === 'ACTIVE' ? 'Activo' : 'Inactivo'}</span></td><td className="px-4 py-3.5 text-muted">{unitName}</td><td className="min-w-[150px] whitespace-nowrap px-4 py-3.5 text-center font-mono">{item.minimum} {unitName}</td><td className={`px-4 py-3.5 text-right font-mono font-bold ${low ? 'text-red-600' : 'text-emerald-600'}`}><StockAmount quantity={item.total} unitName={unitName} factor={item.factor} />{low && ' ⚠'}</td><td className="px-4 py-3.5 text-right font-mono font-bold text-emerald-600"><StockAmount quantity={item.available} unitName={unitName} factor={item.factor} /></td><td className="px-4 py-3.5 text-right font-mono font-bold text-brand">{item.inProduction ? <StockAmount quantity={item.inProduction} unitName={unitName} factor={item.factor} /> : '—'}</td><td className="px-4 py-3.5 text-right font-mono text-amber-600">USD {item.costUsd.toFixed(2)}</td><td className="px-4 py-3.5 text-right font-mono text-emerald-600">S/ {item.costPen.toFixed(2)}</td>{activeWarehouses.map(warehouse => { const entry = item.warehouses.find(candidate => candidate.id === warehouse.id); return <td key={warehouse.id} className="border-l-2 border-border px-4 py-3.5 text-right font-mono">{entry ? <StockAmount quantity={entry.quantity} unitName={unitName} factor={item.factor} /> : '—'}</td> })}</tr> }) : <tr><td colSpan={columns + 2} className="p-10 text-center text-sm text-muted">No hay productos que coincidan con la búsqueda.</td></tr>}</tbody></table></div>
+    <div className="mt-3 overflow-x-auto"><table className="w-full min-w-[1440px] text-left">
+      <thead><tr className="bg-[#f7f9fc] text-[11px] uppercase tracking-[.45px] text-muted">
+        {['Código', 'Categoría', 'Subcategoría', 'Producto', 'Estado', 'Unidad de inventario', 'Stock total'].map(value =>
+          <th key={value} className={`border-y border-border px-4 py-3 font-semibold ${value === 'Código' ? 'w-[94px] min-w-[94px] whitespace-nowrap px-3' : ''}`}>{value}</th>)}
+        {activeWarehouses.map(item => <th key={item.id} className="border-y border-l-2 border-border px-4 py-3 text-right font-semibold text-brand">{item.name}</th>)}
+        {['Disponible (no en prod.)', 'En producción (UM inv.)', 'Stock mín.', 'Costo total (USD)', 'Costo total (S/)'].map(value =>
+          <th key={value} className={`border-y border-border px-4 py-3 font-semibold ${value === 'Stock mín.' ? 'min-w-[150px] whitespace-nowrap text-center' : ''}`}>{value}</th>)}
+      </tr></thead>
+      <tbody>{loading ? <tr><td colSpan={columns} className="p-10 text-center text-sm text-muted">Cargando stock desde la base de datos…</td></tr> : paginatedRecords.length ? paginatedRecords.map(item => {
+        const low = item.total < item.minimum * item.factor
+        const unitName = item.unitName ?? item.unit
+        return <tr key={item.productId} className="border-b border-border text-[13px] hover:bg-slate-50/70">
+          <td className="w-[94px] min-w-[94px] whitespace-nowrap px-3 py-3.5 font-mono text-[10px] font-bold tracking-tight text-brand">{item.code}</td>
+          <td className="max-w-[190px] px-4 py-3.5"><span className="inline-block max-w-full truncate rounded-md border border-blue-100 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-brand" title={item.category}>{item.category}</span></td>
+          <td className="max-w-[190px] px-4 py-3.5 text-slate-700"><span className="block truncate" title={item.subcategory}>{item.subcategory}</span></td>
+          <td className="max-w-[360px] px-4 py-3.5 font-medium text-ink"><span className="block truncate" title={item.product}>{item.product}</span></td>
+          <td className="px-4 py-3.5"><span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${item.status === 'ACTIVE' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>{item.status === 'ACTIVE' ? 'Activo' : 'Inactivo'}</span></td>
+          <td className="px-4 py-3.5 text-muted">{unitName}</td>
+          <td className={`px-4 py-3.5 text-right font-mono font-bold ${low ? 'text-red-600' : 'text-emerald-600'}`}><StockAmount quantity={item.total} unitName={unitName} factor={item.factor} />{low && ' ⚠'}</td>
+          {activeWarehouses.map(warehouse => { const entry = item.warehouses.find(candidate => candidate.id === warehouse.id); return <td key={warehouse.id} className="border-l-2 border-border px-4 py-3.5 text-right font-mono">{entry ? <StockAmount quantity={entry.quantity} unitName={unitName} factor={item.factor} /> : '—'}</td> })}
+          <td className="px-4 py-3.5 text-right font-mono font-bold text-emerald-600"><StockAmount quantity={item.available} unitName={unitName} factor={item.factor} /></td>
+          <td className="px-4 py-3.5 text-right font-mono font-bold text-brand">{item.inProduction ? <StockAmount quantity={item.inProduction} unitName={unitName} factor={item.factor} /> : '—'}</td>
+          <td className="min-w-[150px] whitespace-nowrap px-4 py-3.5 text-center font-mono">{item.minimum} {unitName}</td>
+          <td className="px-4 py-3.5 text-right font-mono text-amber-600">USD {item.costUsd.toFixed(2)}</td>
+          <td className="px-4 py-3.5 text-right font-mono text-emerald-600">S/ {item.costPen.toFixed(2)}</td>
+        </tr>
+      }) : <tr><td colSpan={columns} className="p-10 text-center text-sm text-muted">No hay productos que coincidan con la búsqueda.</td></tr>}</tbody>
+    </table></div>
     {visibleRecords.length > pageSize && <div className="flex flex-wrap items-center justify-between gap-3 px-1 pt-4 text-xs text-muted"><span>Mostrando {(currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, visibleRecords.length)} de {visibleRecords.length} productos</span><div className="flex items-center gap-2"><button type="button" disabled={currentPage === 1} onClick={() => setPage(value => Math.max(1, value - 1))} className="disabled:text-slate-300">‹ Anterior</button><span className="font-medium text-slate-700">Página {currentPage} de {totalPages}</span><button type="button" disabled={currentPage === totalPages} onClick={() => setPage(value => Math.min(totalPages, value + 1))} className="disabled:text-slate-300">Siguiente ›</button></div></div>}
   </>
 }
-function InventoryMetric({ label, value, detail, tone }: { label: string; value: string | number; detail: string; tone: 'blue' | 'slate' | 'green' | 'amber' }) {
+function InventoryMetric({ label, value, detail, tone, highlightDetail = false }: { label: string; value: string | number; detail: string; tone: 'blue' | 'slate' | 'green' | 'amber'; highlightDetail?: boolean }) {
   const colors = { blue: 'border-blue-100 bg-blue-50 text-blue-700', slate: 'border-slate-200 bg-slate-50 text-slate-700', green: 'border-emerald-100 bg-emerald-50 text-emerald-700', amber: 'border-amber-100 bg-amber-50 text-amber-700' }
-  return <div className={`inventory-metric min-w-0 px-4 py-3.5 ${colors[tone]}`}><p className="text-[10px] font-semibold uppercase tracking-[.55px]">{label}</p><p className="mt-1 text-xl font-bold text-ink">{value}</p><p className="mt-1 text-[11px] opacity-80">{detail}</p></div>
+  return <div className={`inventory-metric min-w-0 px-4 py-3.5 ${colors[tone]}`}><p className="text-[10px] font-semibold uppercase tracking-[.55px]">{label}</p><p className="mt-1 text-xl font-bold text-ink">{value}</p><p className={`mt-1 ${highlightDetail ? 'text-sm font-semibold text-ink' : 'text-[11px] opacity-80'}`}>{detail}</p></div>
 }
 function MovementTable({ rows, loading }: { rows: Awaited<ReturnType<typeof listMovements>>; loading: boolean }) { const labels: Record<string, string> = { PURCHASE_RECEIPT: 'Ingreso por compra', IMPORT_RECEIPT: 'Ingreso por importación', TRANSFER_IN: 'Transferencia entre almacenes', TRANSFER_OUT: 'Transferencia entre almacenes', ADJUSTMENT_IN: 'Ajuste de ingreso', ADJUSTMENT_OUT: 'Salida de producto', ADJUSTMENT_WASTE: 'Merma', PRODUCTION_CONSUMPTION: 'Consumo en producción', PRODUCTION_OUTPUT: 'Ingreso por producción', INITIAL_STOCK: 'Inventario inicial' }; return <section className="card"><Header title="Movimientos de Almacén" /><div className="mt-4 overflow-x-auto"><table className="w-full min-w-[1100px] text-left"><thead><tr className="bg-[#f7f9fc] text-[11px] uppercase tracking-[.45px] text-muted">{['Fecha', 'Tipo', 'Producto', 'Presentación', 'Almacén', 'Cantidad', 'Motivo / Ref.', 'Usuario'].map(value => <th key={value} className="border-y border-border px-4 py-3">{value}</th>)}</tr></thead><tbody>{loading ? <tr><td colSpan={8} className="p-10 text-center text-sm text-muted">Cargando movimientos…</td></tr> : rows.length ? rows.map(row => <tr className="border-b border-border text-[13px]" key={row.id}><td className="px-4 py-3">{row.date}</td><td className="px-4 py-3"><span className="rounded-full bg-violet-100 px-2.5 py-1 text-[11px] font-semibold text-violet-700">{labels[row.type] ?? row.type}</span></td><td className="px-4 py-3 font-medium">{row.product}</td><td className="px-4 py-3">{row.presentation}</td><td className="px-4 py-3">{row.warehouse}</td><td className={`px-4 py-3 font-mono ${row.quantity < 0 ? 'text-red-600' : 'text-emerald-600'}`}>{row.quantity}</td><td className="px-4 py-3">{row.note}</td><td className="px-4 py-3 text-xs text-muted">{row.user}</td></tr>) : <tr><td colSpan={8} className="p-10 text-center text-sm text-muted">Sin movimientos registrados.</td></tr>}</tbody></table></div></section> }
 function AdjustmentTable({ rows, loading }: { rows: Adjustment[]; loading: boolean }) {
@@ -130,7 +213,54 @@ function SimpleTable({ headers, rows, loading, empty }: { headers: string[]; row
 }
 function WarehouseTable({ rows, loading, onEdit, onDelete }: { rows: Warehouse[]; loading: boolean; onEdit: (item: Warehouse) => void; onDelete: (id: string) => void }) { return <div className="mt-4 overflow-x-auto"><table className="w-full min-w-[700px] text-left"><thead><tr className="bg-[#f7f9fc] text-[11px] uppercase tracking-[.45px] text-muted">{['Nombre', 'Ubicación', 'Descripción', 'Estado', ''].map(value => <th key={value} className="border-y border-border px-4 py-3">{value}</th>)}</tr></thead><tbody>{loading ? <tr><td colSpan={5} className="p-10 text-center text-sm text-muted">Cargando almacenes…</td></tr> : rows.map(item => <tr className="border-b border-border text-[13px]" key={item.id}><td className="px-4 py-3 font-medium">{item.name}</td><td className="px-4 py-3">{item.location ?? '—'}</td><td className="px-4 py-3">{item.description ?? '—'}</td><td className="px-4 py-3"><span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${item.status === 'ACTIVE' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>{item.status === 'ACTIVE' ? 'Activo' : 'Inactivo'}</span></td><td className="px-4 py-3 text-right"><button className="inline-flex h-8 w-8 items-center justify-center rounded border border-border" onClick={() => onEdit(item)}><Pencil className="h-3.5 w-3.5" /></button><button className="ml-1 inline-flex h-8 w-8 items-center justify-center rounded border border-red-200 bg-red-50 text-red-600" onClick={() => onDelete(item.id)}><Trash2 className="h-3.5 w-3.5" /></button></td></tr>)}</tbody></table></div> }
 
-function TransferDialog({ catalog, stock, saving, onClose, onSave }: { catalog: { products: CatalogProduct[]; warehouses: Warehouse[] }; stock: StockRecord[]; saving: boolean; onClose: () => void; onSave: (payload: { productId: string; presentationId: string; fromWarehouseId: string; toWarehouseId: string; quantity: number; note?: string | null }) => void }) { const [productId, setProductId] = useState(''); const [presentationId, setPresentationId] = useState(''); const [fromWarehouseId, setFrom] = useState(catalog.warehouses[0]?.id ?? ''); const [toWarehouseId, setTo] = useState(catalog.warehouses[1]?.id ?? ''); const [quantity, setQuantity] = useState(1); const [note, setNote] = useState(''); const product = catalog.products.find(item => item.id === productId); const available = stock.find(item => item.productId === productId)?.warehouses.find(item => item.id === fromWarehouseId)?.quantity ?? 0; const valid = productId && presentationId && fromWarehouseId && toWarehouseId && fromWarehouseId !== toWarehouseId && quantity > 0; const submit = (event: FormEvent) => { event.preventDefault(); if (valid) onSave({ productId, presentationId, fromWarehouseId, toWarehouseId, quantity, note: note.trim() || null }) }; return <Dialog open title="Transferencia entre Almacenes" onClose={onClose} footer={<><Button variant="outline" onClick={onClose} disabled={saving}>Cancelar</Button><Button type="submit" form="transfer-form" disabled={!valid || saving}>{saving ? 'Transfiriendo…' : 'Transferir'}</Button></>}><form id="transfer-form" onSubmit={submit} className="space-y-4"><Field label="Producto *"><Select value={productId} onChange={event => { setProductId(event.target.value); setPresentationId('') }}><option value="">Buscar producto...</option>{catalog.products.map(item => <option key={item.id} value={item.id}>{item.code} · {item.name}</option>)}</Select></Field><Field label="Presentación *"><Select value={presentationId} disabled={!productId} onChange={event => setPresentationId(event.target.value)}><option value="">Selecciona producto</option>{product?.presentations.map(item => <option key={item.id} value={item.id}>{item.name} · {item.unit.code}</option>)}</Select></Field><Field label="Almacén origen *"><Select value={fromWarehouseId} onChange={event => setFrom(event.target.value)}>{catalog.warehouses.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</Select></Field><p className="-mt-2 text-xs text-muted">Stock disponible: <b className="font-mono text-emerald-600">{available}</b></p><Field label="Almacén destino *"><Select value={toWarehouseId} onChange={event => setTo(event.target.value)}>{catalog.warehouses.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</Select></Field><Field label="Cantidad *"><Input type="number" min="0.001" step="0.001" value={quantity || ''} onChange={event => setQuantity(Number(event.target.value))} /></Field><Field label="Comentario"><textarea value={note} onChange={event => setNote(event.target.value)} className="min-h-20 w-full rounded-md border border-border bg-[#f4f7fb] p-3 text-sm outline-none focus:border-brand" /></Field></form></Dialog> }
+function TransferDialog({ catalog, stock, saving, initialValues, onClose, onSave }: {
+  catalog: { products: CatalogProduct[]; warehouses: Warehouse[] }
+  stock: StockRecord[]
+  saving: boolean
+  initialValues?: Parameters<typeof createTransfer>[0] | null
+  onClose: () => void
+  onSave: (payload: Parameters<typeof createTransfer>[0]) => void
+}) {
+  const [productId, setProductId] = useState(initialValues?.productId ?? '')
+  const [fromWarehouseId, setFrom] = useState(initialValues?.fromWarehouseId ?? '')
+  const [toWarehouseId, setTo] = useState(initialValues?.toWarehouseId ?? '')
+  const [quantity, setQuantity] = useState(initialValues?.quantity ?? 1)
+  const [note, setNote] = useState(initialValues?.note ?? '')
+  const stockRecord = stock.find(item => item.productId === productId)
+  const available = stockRecord?.warehouses.find(item => item.id === fromWarehouseId)?.quantity ?? 0
+  const unitName = stockRecord?.unitName ?? stockRecord?.unit ?? 'und.'
+  const factor = stockRecord?.factor ?? 1
+  const formatQuantity = (value: number) => new Intl.NumberFormat('es-PE', { maximumFractionDigits: 3 }).format(value)
+  const exceedsStock = Boolean(stockRecord && fromWarehouseId && quantity > 0 && quantity * factor > available + 0.000001)
+  const valid = Boolean(productId && stockRecord && fromWarehouseId && toWarehouseId && fromWarehouseId !== toWarehouseId && quantity > 0 && !exceedsStock)
+  const submit = (event: FormEvent) => {
+    event.preventDefault()
+    if (valid) onSave({ productId, fromWarehouseId, toWarehouseId, quantity, note: note.trim() || null })
+  }
+
+  return <Dialog open title="Transferencia entre Almacenes" onClose={onClose} footer={<><Button variant="outline" onClick={onClose} disabled={saving}>Cancelar</Button><Button type="submit" form="transfer-form" disabled={!valid || saving}>{saving ? 'Transfiriendo…' : 'Transferir'}</Button></>}>
+    <form id="transfer-form" onSubmit={submit} className="space-y-5">
+      <Field label="Producto *"><ProductPicker products={catalog.products} value={productId} onChange={setProductId} /></Field>
+      <div className="space-y-4 rounded-xl border border-slate-200 bg-slate-50/60 p-4">
+        <p className="text-[11px] font-semibold uppercase tracking-[.4px] text-slate-500">Ruta de transferencia</p>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Almacén origen *"><WarehousePicker warehouses={catalog.warehouses} value={fromWarehouseId} onChange={setFrom} placeholder="Buscar almacén origen..." /></Field>
+          <Field label="Almacén destino *"><WarehousePicker warehouses={catalog.warehouses} value={toWarehouseId} onChange={setTo} placeholder="Buscar almacén destino..." /></Field>
+        </div>
+        {productId && fromWarehouseId && stockRecord && (
+          <p className="text-xs text-slate-500">
+            Disponible en origen: <span className="font-mono font-semibold text-slate-700">{formatQuantity(available / factor)} {unitName}</span>
+            <span className="ml-1 font-mono">({formatQuantity(available)} und.)</span>
+          </p>
+        )}
+      </div>
+      {fromWarehouseId && toWarehouseId && fromWarehouseId === toWarehouseId && <p className="text-xs text-red-600">Selecciona un almacén destino diferente al de origen.</p>}
+      <Field label={`Cantidad *${productId ? ` (${unitName})` : ''}`}><Input type="number" min="0.001" step="0.001" value={quantity || ''} onChange={event => setQuantity(Number(event.target.value))} /></Field>
+      {exceedsStock && <p className="text-xs text-red-600">La cantidad supera el stock del almacén origen.</p>}
+      <Field label="Comentario"><textarea value={note} onChange={event => setNote(event.target.value)} className="min-h-20 w-full rounded-md border border-border bg-[#f4f7fb] p-3 text-sm outline-none focus:border-brand" /></Field>
+    </form>
+  </Dialog>
+}
 function AdjustmentDialog({ catalog, stock, saving, onClose, onSave }: {
   catalog: { products: CatalogProduct[]; warehouses: Warehouse[]; customers: CatalogCustomer[] }
   stock: StockRecord[]

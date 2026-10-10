@@ -23,3 +23,7 @@ export type ReportProduction = { id: string; number: string; product: string; wa
 export type ReportsDashboard = { stock: ReportStock[]; movements: ReportMovement[]; purchases: ReportPurchase[]; imports: ReportPurchase[]; production: ReportProduction[] }
 
 export const loadReportsDashboard = () => api<ReportsDashboard>('/api/reports/dashboard')
+export const loadStockReport = (signal?: AbortSignal) => api<ReportStock[]>('/api/reports/stock', { signal })
+export const loadMovementsReport = (signal?: AbortSignal) => api<ReportMovement[]>('/api/reports/movements', { signal })
+export const loadPurchasesReport = (signal?: AbortSignal) => api<Pick<ReportsDashboard, 'purchases' | 'imports'>>('/api/reports/purchases', { signal })
+export const loadProductionReport = (signal?: AbortSignal) => api<ReportProduction[]>('/api/reports/production', { signal })

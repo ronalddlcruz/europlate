@@ -11,16 +11,16 @@ type Database = PrismaClient | Prisma.TransactionClient
 
 export const importRepository = {
   findMany: (where: Prisma.ImportWhereInput) => prisma.import.findMany({ where, include, orderBy: { createdAt: 'desc' } }),
-  findById: (id: string, companyId: string) => prisma.import.findFirst({ where: { id, companyId }, include }),
+  findById: (id: string, companyId: string, scopeWhere: Prisma.ImportWhereInput = {}) => prisma.import.findFirst({ where: { id, companyId, ...scopeWhere }, include }),
   findDuplicateDua: (companyId: string, duaNumber: string) => prisma.import.findFirst({ where: { companyId, duaNumber } }),
   create: (db: Database, data: Prisma.ImportCreateInput) => db.import.create({ data, include }),
   update: (db: Database, id: string, data: Prisma.ImportUpdateInput) => db.import.update({ where: { id }, data, include }),
   remove: (db: Database, id: string) => db.import.delete({ where: { id } }),
-  catalog: (companyId: string) => Promise.all([
+  catalog: (companyId: string, warehouseIds?: string[]) => Promise.all([
     prisma.supplier.findMany({ where: { companyId, type: 'FOREIGN', status: 'ACTIVE' }, orderBy: { name: 'asc' } }),
     prisma.customsAgent.findMany({ where: { companyId, status: 'ACTIVE' }, orderBy: { name: 'asc' } }),
-    prisma.product.findMany({ where: { status: 'ACTIVE', presentations: { some: { status: 'ACTIVE' } } }, orderBy: { name: 'asc' }, include: { attributes: { where: { status: 'ACTIVE', OR: [{ attributeDefinitionId: null }, { attributeDefinition: { status: 'ACTIVE' } }] }, orderBy: { position: 'asc' } }, presentations: { where: { status: 'ACTIVE' }, include: { unit: true }, orderBy: { name: 'asc' } } } }),
-    prisma.warehouse.findMany({ where: { companyId, status: 'ACTIVE' }, orderBy: { name: 'asc' } }),
+    prisma.product.findMany({ where: { status: 'ACTIVE', presentations: { some: { status: 'ACTIVE' } } }, orderBy: { code: 'asc' }, include: { attributes: { where: { status: 'ACTIVE', OR: [{ attributeDefinitionId: null }, { attributeDefinition: { status: 'ACTIVE' } }] }, orderBy: { position: 'asc' } }, presentations: { where: { status: 'ACTIVE' }, include: { unit: true }, orderBy: { name: 'asc' } } } }),
+    prisma.warehouse.findMany({ where: { companyId, status: 'ACTIVE', ...(warehouseIds && { id: { in: warehouseIds } }) }, orderBy: { name: 'asc' } }),
     prisma.subcategory.findMany({ where: { status: 'ACTIVE', isVariable: true, category: { status: 'ACTIVE' } }, select: { id: true, name: true, code: true, category: { select: { id: true, name: true } } }, orderBy: [{ category: { name: 'asc' } }, { name: 'asc' }] }),
   ]),
 }

@@ -1,6 +1,7 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useNavigate } from "react-router-dom";
+import { matchesProductSearch, normalizeProductSearch } from "../../../lib/product-search";
 import {
   ChevronDown,
   ChevronRight,
@@ -16,6 +17,7 @@ import { Button } from "../../../components/ui/button";
 import { Dialog } from "../../../components/ui/dialog";
 import { Input } from "../../../components/ui/input";
 import { ProductWizard } from "../components/product-wizard";
+import { ProductsNavigation, type ConfigurationTab } from "../components/products-navigation";
 import {
   CategoryConfiguration,
   CategoryConfigurationDialog,
@@ -55,12 +57,11 @@ type Modal =
   | { type: "base"; item?: ProductBase; readOnly?: boolean }
   | { type: "variant"; item?: ProductVariant; baseId?: string }
   | { type: "unit"; item?: Unit }
-  | { type: "category"; item?: ProductCategory }
+  | { type: "category"; item?: ProductCategory; editing?: boolean }
   | { type: "subcategory"; category: ProductCategory; item: ProductSubcategory }
   | { type: "attribute"; item?: AttributeDefinition; editing?: boolean }
   | null;
 type CatalogData = Awaited<ReturnType<typeof loadCatalog>>;
-type ConfigurationTab = "categories" | "attributes" | "units";
 const roles: ProductRole[] = ["Mercadería", "Insumo", "Producto terminado"];
 const badge: Record<ProductRole, string> = {
   Mercadería: "bg-emerald-100 text-emerald-700",
@@ -81,19 +82,7 @@ const unitCode = (value: string) =>
     .join("")
     .slice(0, 4)
     .toUpperCase();
-const normalizeSearch = (value: string) => value
-  .normalize("NFD")
-  .replace(/\p{Diacritic}/gu, "")
-  .toLocaleLowerCase()
-  .trim();
-const searchTokens = (value: string) =>
-  normalizeSearch(value)
-    .replace(/(\d)\s*x\s*(\d)/g, "$1 $2")
-    .match(/[\p{L}\p{N}]+/gu) ?? [];
-const matchesProductSearch = (haystack: string, query: string) => {
-  const normalizedHaystack = normalizeSearch(haystack);
-  return searchTokens(query).every((term) => normalizedHaystack.includes(term));
-};
+const normalizeSearch = normalizeProductSearch;
 const productNameWithCategory = (base: ProductBase) => {
   const category = base.categoryName?.trim();
   if (!category) return base.name;
@@ -182,6 +171,21 @@ export function ProductsPage() {
   };
   const refreshCatalog = async () => {
     await queryClient.invalidateQueries({ queryKey: ["products", "catalog"] });
+  };
+  const createAttributeForCategory = async (
+    attribute: Omit<AttributeDefinition, "id">,
+  ) => {
+    const saved = await createAttributeDefinition(attribute);
+    queryClient.setQueryData<CatalogData>(["products", "catalog"], (current) =>
+      current
+        ? {
+            ...current,
+            attributes: [...current.attributes.filter((item) => item.id !== saved.id), saved]
+              .sort((left, right) => left.name.localeCompare(right.name)),
+          }
+        : current,
+    );
+    return saved;
   };
   const refreshProductConsumers = () =>
     Promise.all([
@@ -557,9 +561,10 @@ export function ProductsPage() {
       );
       notify("Categoría guardada y verificada en la base de datos");
     },
-    onError: (reason, _variables, context) => {
+    onError: (reason, variables, context) => {
       if (context?.previous)
         queryClient.setQueryData(["products", "catalog"], context.previous);
+      setModal({ type: "category", item: variables.item, editing: variables.editing });
       notify(
         reason instanceof Error
           ? `No se guardó la categoría: ${reason.message}`
@@ -675,26 +680,13 @@ export function ProductsPage() {
   );
   const orderedBases = useMemo(
     () =>
-      [...filteredBases].sort((left, right) => {
-        const leftVariants = variants.filter(
-          (variant) => variant.baseId === left.id,
-        );
-        const rightVariants = variants.filter(
-          (variant) => variant.baseId === right.id,
-        );
-        const leftInactive =
-          leftVariants.length > 0 &&
-          leftVariants.every((variant) => variant.status === "Inactivo");
-        const rightInactive =
-          rightVariants.length > 0 &&
-          rightVariants.every((variant) => variant.status === "Inactivo");
-        return (
-          Number(leftInactive) - Number(rightInactive) ||
-          (left.sortOrder ?? Number.MAX_SAFE_INTEGER) -
-            (right.sortOrder ?? Number.MAX_SAFE_INTEGER)
-        );
-      }),
-    [filteredBases, variants],
+      [...filteredBases].sort((left, right) =>
+        left.code.localeCompare(right.code, "es", {
+          numeric: true,
+          sensitivity: "base",
+        }),
+      ),
+    [filteredBases],
   );
   const pageSize = 10;
   const totalProductPages = Math.max(
@@ -743,24 +735,13 @@ export function ProductsPage() {
     statusMutation.mutate({ base: nextBase, nextVariants });
   };
   return (
-    <div className="-mx-2 max-w-none sm:-mx-4">
-      <nav
-        className="mb-6 flex min-h-14 gap-1 overflow-x-auto border-b border-slate-200 bg-white px-3 shadow-[0_1px_2px_rgba(15,23,42,0.02)] sm:px-5"
-        aria-label="Secciones de productos"
-      >
-        <button
-          onClick={openCatalog}
-          className={`shrink-0 border-b-2 px-6 py-4 text-sm font-medium transition-colors ${!isConfiguration ? "border-brand text-brand" : "border-transparent text-slate-400 hover:text-ink"}`}
-        >
-          Maestro de Productos
-        </button>
-        <button
-          onClick={() => openConfiguration()}
-          className={`shrink-0 border-b-2 px-6 py-4 text-sm font-medium transition-colors ${isConfiguration ? "border-brand text-brand" : "border-transparent text-slate-400 hover:text-ink"}`}
-        >
-          Configuración de Productos
-        </button>
-      </nav>
+    <div className="-mx-2 max-w-none sm:-mx-4 lg:-mx-[3%]">
+      <ProductsNavigation
+        isConfiguration={isConfiguration}
+        configurationTab={configurationTab}
+        onOpenCatalog={openCatalog}
+        onOpenConfiguration={openConfiguration}
+      />
       {!isConfiguration ? (
         <section className="rounded-xl border border-border bg-white p-6 shadow-card">
           <header className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 pb-5">
@@ -921,38 +902,6 @@ export function ProductsPage() {
         </section>
       ) : (
         <section>
-          <header className="mb-4 rounded-[10px] border border-border bg-white px-5 py-4 shadow-card">
-            <h1 className="text-sm font-semibold">
-              Configuración de Productos
-            </h1>
-            <p className="mt-1 text-xs text-muted">
-              Administra la estructura utilizada para crear, clasificar y
-              configurar los productos.
-            </p>
-          </header>
-          <nav
-            className="mb-4 flex gap-1 overflow-x-auto border-b border-border"
-            aria-label="Configuración de productos"
-          >
-            <button
-              onClick={() => openConfiguration("categories")}
-              className={`shrink-0 border-b-2 px-4 py-2.5 text-[13px] font-medium ${configurationTab === "categories" ? "border-brand text-brand" : "border-transparent text-muted hover:text-ink"}`}
-            >
-              Categorías y Subcategorías
-            </button>
-            <button
-              onClick={() => openConfiguration("attributes")}
-              className={`shrink-0 border-b-2 px-4 py-2.5 text-[13px] font-medium ${configurationTab === "attributes" ? "border-brand text-brand" : "border-transparent text-muted hover:text-ink"}`}
-            >
-              Atributos
-            </button>
-            <button
-              onClick={() => openConfiguration("units")}
-              className={`shrink-0 border-b-2 px-4 py-2.5 text-[13px] font-medium ${configurationTab === "units" ? "border-brand text-brand" : "border-transparent text-muted hover:text-ink"}`}
-            >
-              Unidades de Medida
-            </button>
-          </nav>
           {configurationTab === "categories" ? (
             <CategoryConfiguration
               categories={categories}
@@ -1033,9 +982,10 @@ export function ProductsPage() {
           item={modal.item}
           definitions={attributes}
           products={bases}
+          onCreateAttribute={createAttributeForCategory}
           onClose={() => setModal(null)}
           onSave={(item) =>
-            categoryMutation.mutate({ item, editing: Boolean(modal.item) })
+            categoryMutation.mutate({ item, editing: modal.editing ?? Boolean(modal.item) })
           }
         />
       )}
@@ -1155,9 +1105,21 @@ function GroupedProductsTable({
   onToggleVariant: (variant: ProductVariant) => void;
   onDeleteProduct: (base: ProductBase) => void;
 }) {
+  const stockFormatter = new Intl.NumberFormat("es-PE", { maximumFractionDigits: 3 });
   return (
     <div className="mt-5 overflow-x-auto rounded-xl border border-slate-200">
-      <table className="w-full min-w-[1080px] border-collapse text-left">
+      <table className="w-full min-w-[1100px] table-fixed border-collapse text-center">
+        <colgroup>
+          <col className="w-[118px]" />
+          <col className="w-[120px]" />
+          <col className="w-[135px]" />
+          <col className="w-[118px]" />
+          <col />
+          <col className="w-[125px]" />
+          <col className="w-[100px]" />
+          <col className="w-[85px]" />
+          <col className="w-[120px]" />
+        </colgroup>
         <thead>
           <tr className="bg-[#f5f8fc] text-[11px] uppercase tracking-[.55px] text-slate-500">
             {[
@@ -1167,11 +1129,12 @@ function GroupedProductsTable({
               "Tipo de producto",
               "Producto",
               "Unidad de medida",
+              "Stock actual",
               "Estado",
               "",
             ].map((header) => (
               <th
-                className={`border-b border-slate-200 px-4 py-3.5 font-semibold ${header === "Código" ? "w-[94px] min-w-[94px] whitespace-nowrap px-3" : ""}`}
+                className="border-b border-slate-200 px-2 py-3.5 text-center font-semibold"
                 key={header}
               >
                 {header}
@@ -1191,22 +1154,22 @@ function GroupedProductsTable({
                   key={base.id}
                   className={`group border-b border-slate-100 text-[13px] transition-colors last:border-0 hover:bg-blue-50/40 ${status === "Inactivo" ? "bg-slate-50/70 text-slate-400" : "text-slate-700"}`}
                 >
-                  <td className="w-[94px] min-w-[94px] whitespace-nowrap px-3 py-3 font-mono text-[10px] font-bold tracking-tight text-brand">
+                  <td className="whitespace-nowrap px-2 py-3 text-center font-mono text-[10px] font-bold tracking-tight text-brand">
                     {base.code}
                   </td>
-                  <td className="px-4 py-3">
-                    <span className="inline-flex rounded-md border border-blue-100 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
+                  <td className="px-2 py-3">
+                    <span className="inline-flex max-w-full truncate rounded-md border border-blue-100 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
                       {base.categoryName ?? "Sin categoría"}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-sm font-medium text-slate-600">
-                    {base.subcategoryName ?? "General"}
+                  <td className="px-2 py-3 text-sm font-medium text-slate-600" title={base.subcategoryName ?? "General"}>
+                    <span className="block truncate">{base.subcategoryName ?? "General"}</span>
                   </td>
-                  <td className="w-[130px] min-w-[130px] max-w-[130px] pl-4 pr-1 py-3">
-                    <span className="flex flex-wrap gap-1">
+                  <td className="px-1 py-3">
+                    <span className="flex flex-nowrap items-center justify-center gap-0.5 whitespace-nowrap">
                       {base.roles.map((role) => (
                         <span
-                          className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${badge[role]}`}
+                          className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${badge[role]}`}
                           key={role}
                           title={role}
                         >
@@ -1219,10 +1182,10 @@ function GroupedProductsTable({
                       ))}
                     </span>
                   </td>
-                  <td className="w-[270px] max-w-[270px] px-2 py-3">
+                  <td className="px-2 py-3">
                     <button
                       onClick={() => onViewBase(base)}
-                      className="w-full text-left"
+                      className="w-full text-center"
                       title={productNameWithCategory(base)}
                     >
                       <span className="block truncate font-semibold text-ink group-hover:text-brand">
@@ -1230,7 +1193,7 @@ function GroupedProductsTable({
                       </span>
                     </button>
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-2 py-3">
                     <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-700">
                       {units.find((unit) => unit.code === inventory?.unit)
                         ?.description ?? inventory?.unit ?? "—"}
@@ -1241,10 +1204,13 @@ function GroupedProductsTable({
                       </span>
                     )}
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-2 py-3 font-mono text-xs font-semibold tabular-nums text-ink">
+                    {inventory ? stockFormatter.format(inventory.stock) : "—"}
+                  </td>
+                  <td className="px-2 py-3">
                     <StatusBadge status={status} />
                   </td>
-                  <td className="whitespace-nowrap px-4 py-3 text-right">
+                  <td className="whitespace-nowrap px-1 py-3 text-center">
                     <ActionGroup>
                       <IconButton
                         label="Editar producto"
@@ -1278,7 +1244,7 @@ function GroupedProductsTable({
             })
           ) : (
             <tr>
-              <td colSpan={8} className="p-10 text-center text-sm text-muted">
+              <td colSpan={9} className="p-10 text-center text-sm text-muted">
                 No se encontraron productos con los filtros seleccionados.
               </td>
             </tr>

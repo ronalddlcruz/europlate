@@ -23,14 +23,14 @@ type Database = PrismaClient | Prisma.TransactionClient
 export const productionRepository = {
   findMany: (where: Prisma.ProductionOrderWhereInput) =>
     prisma.productionOrder.findMany({ where, include, orderBy: { createdAt: 'desc' } }),
-  findById: (id: string, companyId: string, db: Database = prisma) =>
-    db.productionOrder.findFirst({ where: { id, companyId }, include }),
+  findById: (id: string, companyId: string, db: Database = prisma, scopeWhere: Prisma.ProductionOrderWhereInput = {}) =>
+    db.productionOrder.findFirst({ where: { id, companyId, ...scopeWhere }, include }),
   create: (db: Database, data: Prisma.ProductionOrderCreateInput) =>
     db.productionOrder.create({ data, include }),
   update: (db: Database, id: string, data: Prisma.ProductionOrderUpdateInput) =>
     db.productionOrder.update({ where: { id }, data, include }),
   remove: (db: Database, id: string) => db.productionOrder.delete({ where: { id } }),
-  catalog: (companyId: string) =>
+  catalog: (companyId: string, warehouseIds?: string[]) =>
     Promise.all([
       prisma.product.findMany({
         where: { status: 'ACTIVE', roles: { has: 'FINISHED_PRODUCT' }, presentations: { some: { status: 'ACTIVE' } } },
@@ -43,14 +43,14 @@ export const productionRepository = {
         include: productInclude,
       }),
       prisma.warehouse.findMany({
-        where: { companyId, status: 'ACTIVE' },
+        where: { companyId, status: 'ACTIVE', ...(warehouseIds && { id: { in: warehouseIds } }) },
         orderBy: { name: 'asc' },
       }),
       prisma.stock.findMany({
-        where: { warehouse: { companyId } },
+        where: { warehouse: { companyId }, ...(warehouseIds && { warehouseId: { in: warehouseIds } }) },
         select: { productId: true, warehouseId: true, quantity: true },
       }),
       prisma.customer.findMany({ where: { companyId, status: 'ACTIVE' }, orderBy: { name: 'asc' }, select: { id: true, name: true } }),
-      prisma.productionMaterial.findMany({ where: { status: 'RESERVED', shareReservation: false, order: { companyId } }, select: { productId: true, warehouseId: true } }),
+      prisma.productionMaterial.findMany({ where: { status: 'RESERVED', shareReservation: false, order: { companyId }, ...(warehouseIds && { warehouseId: { in: warehouseIds } }) }, select: { productId: true, warehouseId: true } }),
     ]),
 }

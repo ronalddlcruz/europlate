@@ -169,7 +169,7 @@ function PurchaseDialog({ catalog, productsCatalog, saving, onClose, onSave }: {
 <div className="relative rounded-md border border-border">
 <table className="w-full min-w-[820px] text-left">
 <thead>
-<tr className="bg-[#f7f9fc] text-[11px] uppercase tracking-[.4px] text-muted">{['Producto', 'Almacén', 'UM', 'Cant.', 'Costo unit.', 'Subtotal', ''].map(header => <th key={header} className="border-b border-border px-3 py-3 font-semibold">{header}</th>)}</tr>
+<tr className="bg-[#f7f9fc] text-[11px] uppercase tracking-[.4px] text-muted">{['Producto', 'Almacén destino', 'UM', 'Cant.', 'Costo unit.', 'Subtotal', ''].map(header => <th key={header} className="border-b border-border px-3 py-3 font-semibold">{header}</th>)}</tr>
 </thead>
 <tbody>{lines.map((line, index) => <Fragment key={index}><tr className="border-b border-border last:border-0">
 <td className="min-w-[280px] p-2">

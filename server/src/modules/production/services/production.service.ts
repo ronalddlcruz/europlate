@@ -2,6 +2,7 @@ import { Prisma, ProductionMaterialStatus, ProductionStatus, ProductStatus } fro
 import { prisma } from '../../../infrastructure/database/prisma.client.js'
 import { AppError } from '../../../shared/errors/app-error.js'
 import { productionRepository } from '../repositories/production.repository.js'
+import { assertWarehouseScope, productionScopeWhere, resolveOperationScope } from '../../../shared/security/operation-scope.js'
 import type { CompleteProductionOrderInput, ProductionOrderInput, UpdateProductionOrderInput } from '../schemas/production.schema.js'
 
 const decimal = (value: number) => new Prisma.Decimal(value)
@@ -165,17 +166,20 @@ const materialData = (line: MaterialInput) => ({
 })
 
 export const productionService = {
-  list(companyId: string, filters: { status?: ProductionStatus; search?: string }) {
-    const where: Prisma.ProductionOrderWhereInput = { companyId, ...(filters.status && { status: filters.status }), ...(filters.search && { OR: [{ number: { contains: filters.search, mode: 'insensitive' } }, { product: { name: { contains: filters.search, mode: 'insensitive' } } }] }) }
+  async list(companyId: string, actorId: string, filters: { status?: ProductionStatus; search?: string }) {
+    const scope = await resolveOperationScope(companyId, actorId)
+    const where: Prisma.ProductionOrderWhereInput = { companyId, ...productionScopeWhere(scope), ...(filters.status && { status: filters.status }), ...(filters.search && { OR: [{ number: { contains: filters.search, mode: 'insensitive' } }, { product: { name: { contains: filters.search, mode: 'insensitive' } } }] }) }
     return productionRepository.findMany(where)
   },
-  async getById(companyId: string, id: string) {
-    const order = await productionRepository.findById(id, companyId)
+  async getById(companyId: string, actorId: string, id: string) {
+    const scope = await resolveOperationScope(companyId, actorId)
+    const order = await productionRepository.findById(id, companyId, prisma, productionScopeWhere(scope))
     if (!order) throw new AppError('PRODUCTION_ORDER_NOT_FOUND', 'La orden de producción no existe.', 404)
     return order
   },
-  async catalog(companyId: string) {
-    const [products, materials, warehouses, stocks, customers, sharedReservations] = await productionRepository.catalog(companyId)
+  async catalog(companyId: string, actorId: string) {
+    const scope = await resolveOperationScope(companyId, actorId)
+    const [products, materials, warehouses, stocks, customers, sharedReservations] = await productionRepository.catalog(companyId, scope?.warehouseIds)
     const stockTotals = new Map<string, number>()
     for (const stock of stocks) {
       stockTotals.set(stock.productId, (stockTotals.get(stock.productId) ?? 0) + Number(stock.quantity))
@@ -189,6 +193,8 @@ export const productionService = {
     return { products: products.map(mapProduct), materials: materials.map(mapProduct), warehouses, stocks, customers, sharedReservations }
   },
   async create(companyId: string, input: ProductionOrderInput, userId: string) {
+    const scope = await resolveOperationScope(companyId, userId)
+    assertWarehouseScope(scope, [input.warehouseId, ...input.materials.map(item => item.warehouseId)])
     const materials = await sharePendingReservations(companyId, input.materials)
     const resolvedInput = { ...input, materials }
     await validateReferences(companyId, resolvedInput)
@@ -199,6 +205,7 @@ export const productionService = {
     return transaction(async db => {
       const created = await productionRepository.create(db, {
         company: { connect: { id: companyId } },
+        createdBy: { connect: { id: userId } },
         number: nextNumber(),
         product: { connect: { id: input.productId } },
         warehouse: { connect: { id: input.warehouseId } },
@@ -230,8 +237,8 @@ export const productionService = {
       return productionRepository.findById(created.id, companyId, db).then(result => result!)
     })
   },
-  async update(companyId: string, id: string, input: UpdateProductionOrderInput) {
-    const current = await this.getById(companyId, id)
+  async update(companyId: string, actorId: string, id: string, input: UpdateProductionOrderInput) {
+    const current = await this.getById(companyId, actorId, id)
     if (current.status !== ProductionStatus.PLANNED) throw new AppError('PRODUCTION_ORDER_LOCKED', 'Solo se pueden editar órdenes planificadas.', 409)
     const full: ProductionOrderInput = {
       productId: input.productId ?? current.productId,
@@ -244,6 +251,7 @@ export const productionService = {
       outputCustomerId: input.outputCustomerId === undefined ? current.outputCustomerId : input.outputCustomerId,
       materials: input.materials ?? current.materials.map(line => ({ productId: line.productId, warehouseId: line.warehouseId, quantity: Number(line.quantity), immediateConsumption: line.immediateConsumption, shareReservation: line.shareReservation })),
     }
+    assertWarehouseScope(await resolveOperationScope(companyId, actorId), [full.warehouseId, ...full.materials.map(item => item.warehouseId)])
     await validateReferences(companyId, full)
     await validateStock(companyId, full.materials, current.id)
     await validateSharedReservations(companyId, full.materials)
@@ -257,7 +265,7 @@ export const productionService = {
     })
   },
   async complete(companyId: string, id: string, input: CompleteProductionOrderInput, userId: string) {
-    const current = await this.getById(companyId, id)
+    const current = await this.getById(companyId, userId, id)
     if (current.status !== ProductionStatus.PLANNED && current.status !== ProductionStatus.IN_PROGRESS) throw new AppError('PRODUCTION_NOT_COMPLETABLE', 'La orden no está disponible para completar.', 409)
     return transaction(async db => {
       const order = await db.productionOrder.findUniqueOrThrow({ where: { id }, include: { materials: true } })
@@ -277,7 +285,7 @@ export const productionService = {
     })
   },
   async consumeMaterial(companyId: string, orderId: string, materialId: string, userId: string) {
-    const current = await this.getById(companyId, orderId)
+    const current = await this.getById(companyId, userId, orderId)
     const material = current.materials.find(item => item.id === materialId)
     if (!material) throw new AppError('PRODUCTION_MATERIAL_NOT_FOUND', 'El insumo no pertenece a esta orden.', 404)
     if (material.status === ProductionMaterialStatus.CONSUMED) return current
@@ -287,8 +295,8 @@ export const productionService = {
       return productionRepository.findById(orderId, companyId, db).then(result => result!)
     })
   },
-  async remove(companyId: string, id: string) {
-    const current = await this.getById(companyId, id)
+  async remove(companyId: string, actorId: string, id: string) {
+    const current = await this.getById(companyId, actorId, id)
     if (current.status !== ProductionStatus.PLANNED && current.status !== ProductionStatus.CANCELLED) throw new AppError('PRODUCTION_ORDER_LOCKED', 'Solo se pueden eliminar órdenes planificadas o canceladas.', 409)
     await productionRepository.remove(prisma, id)
   },

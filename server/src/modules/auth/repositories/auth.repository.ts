@@ -25,4 +25,12 @@ const userWithPermissions = {
 export const authRepository = {
   findUserByEmail: (email: string) => prisma.user.findUnique({ where: { email }, select: userWithPermissions }),
   findUserById: (id: string) => prisma.user.findUnique({ where: { id }, select: userWithPermissions }),
+  findAuthorizationById: (id: string) => prisma.user.findUnique({
+    where: { id },
+    select: {
+      id: true, companyId: true, status: true,
+      roles: { select: { role: { select: { key: true, permissions: { select: { permission: { select: { key: true } } } } } } } },
+      permissions: { select: { permission: { select: { key: true } } } },
+    },
+  }),
 }

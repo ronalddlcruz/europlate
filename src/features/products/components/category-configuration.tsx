@@ -21,7 +21,9 @@ import type {
   ProductSubcategory,
 } from "../types/product.types";
 
-const uid = () => crypto.randomUUID();
+// Los ID del borrador no deben confundirse con los UUID persistidos: al
+// guardar, el backend crea estas asociaciones en vez de intentar actualizarlas.
+const uid = () => `draft-${crypto.randomUUID()}`;
 const freshSubcategory = (): ProductSubcategory => ({
   id: uid(),
   name: "",
@@ -510,12 +512,14 @@ export function CategoryConfigurationDialog({
   item,
   definitions,
   products = [],
+  onCreateAttribute,
   onClose,
   onSave,
 }: {
   item?: ProductCategory;
   definitions: AttributeDefinition[];
   products?: ProductBase[];
+  onCreateAttribute: (attribute: Omit<AttributeDefinition, "id">) => Promise<AttributeDefinition>;
   onClose: () => void;
   onSave: (category: ProductCategory) => void;
 }) {
@@ -533,6 +537,14 @@ export function CategoryConfigurationDialog({
   const [subcategory, setSubcategory] = useState(freshSubcategory());
   const [editingSubcategory, setEditingSubcategory] =
     useState<ProductSubcategory | null>(null);
+  const [quickOpen, setQuickOpen] = useState(false);
+  const [quickName, setQuickName] = useState("");
+  const [quickType, setQuickType] = useState<AttributeDefinition["type"]>("Texto");
+  const [quickSuffix, setQuickSuffix] = useState("");
+  const [quickWeight, setQuickWeight] = useState(false);
+  const [quickError, setQuickError] = useState("");
+  const [quickSaving, setQuickSaving] = useState(false);
+  const quickSavingRef = useRef(false);
   const addCommon = (definition: AttributeDefinition) =>
     setCategory((current) =>
       current.attributes.some(
@@ -555,6 +567,55 @@ export function CategoryConfigurationDialog({
             attributes: [...current.attributes, toConfigured(definition)],
           },
     );
+  const createQuickAttribute = async () => {
+    if (quickSavingRef.current) return;
+    const name = quickName.trim();
+    if (!name) {
+      setQuickError("Escribe el nombre del atributo.");
+      return;
+    }
+    const existing = definitions.find((definition) =>
+      definition.name.trim().localeCompare(name, undefined, { sensitivity: "accent" }) === 0,
+    );
+    if (existing) {
+      if (existing.status === "Inactivo") {
+        setQuickError("Este atributo ya existe, pero está inactivo. Reactívalo desde Atributos.");
+        return;
+      }
+      addCommon(existing);
+      setQuickOpen(false);
+      setQuickName("");
+      setQuickType("Texto");
+      setQuickSuffix("");
+      setQuickWeight(false);
+      setQuickError("");
+      return;
+    }
+    quickSavingRef.current = true;
+    setQuickSaving(true);
+    setQuickError("");
+    try {
+      const saved = await onCreateAttribute({
+        code: "",
+        name,
+        type: quickType,
+        suffix: quickSuffix.trim(),
+        status: "Activo",
+        isWeight: quickType === "Numérico" && quickWeight,
+      });
+      addCommon(saved);
+      setQuickOpen(false);
+      setQuickName("");
+      setQuickType("Texto");
+      setQuickSuffix("");
+      setQuickWeight(false);
+    } catch (reason) {
+      setQuickError(reason instanceof Error ? reason.message : "No se pudo crear el atributo. Inténtalo nuevamente.");
+    } finally {
+      quickSavingRef.current = false;
+      setQuickSaving(false);
+    }
+  };
   const toggleRequired = (scope: "category" | "subcategory", id: string) =>
     scope === "category"
       ? setCategory((current) => ({
@@ -607,14 +668,16 @@ export function CategoryConfigurationDialog({
       <Dialog
         open
         wide
-        title={item ? `Editar categoría · ${item.name}` : "Nueva categoría"}
-        onClose={onClose}
+        title={item && !item.id.startsWith("draft-") ? `Editar categoría · ${item.name}` : "Nueva categoría"}
+        onClose={() => {
+          if (!quickSavingRef.current) onClose();
+        }}
         footer={
           <>
-            <Button variant="outline" onClick={onClose}>
+            <Button variant="outline" onClick={onClose} disabled={quickSaving}>
               Cancelar
             </Button>
-            <Button form="category-config" type="submit">
+            <Button form="category-config" type="submit" disabled={quickSaving}>
               Guardar categoría
             </Button>
           </>
@@ -656,11 +719,22 @@ export function CategoryConfigurationDialog({
             </Field>
           </section>
           <section className="rounded-lg border border-border">
-            <header className="border-b border-border bg-[#f8fbff] px-4 py-3">
-              <h3 className="text-sm font-semibold">Atributos comunes</h3>
-              <p className="mt-1 text-xs text-muted">
-                Los heredan todos los tipos de esta categoría.
-              </p>
+            <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-slate-50/70 px-4 py-3">
+              <div><h3 className="text-sm font-semibold">Atributos comunes</h3><p className="mt-1 text-xs text-muted">Los heredan todos los tipos de esta categoría.</p></div>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={quickSaving}
+                aria-expanded={quickOpen}
+                onClick={() => {
+                  setQuickOpen((value) => !value);
+                  setQuickError("");
+                }}
+              >
+                <Plus className="h-4 w-4" />
+                Crear atributo
+              </Button>
             </header>
             <div className="p-4">
               <AttributePicker
@@ -671,6 +745,44 @@ export function CategoryConfigurationDialog({
                 placeholder="Buscar atributo para asociar…"
                 onSelect={addCommon}
               />
+              {quickOpen && (
+                <div
+                  className="mt-3 rounded-lg border border-blue-200 bg-blue-50/40 p-4"
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" && event.target instanceof HTMLInputElement && event.target.type !== "checkbox") {
+                      event.preventDefault();
+                      void createQuickAttribute();
+                    }
+                  }}
+                >
+                  <div className="mb-3">
+                    <p className="text-sm font-semibold text-ink">Nuevo atributo</p>
+                    <p className="mt-0.5 text-xs text-muted">El atributo queda en el catálogo de inmediato. Su asociación se confirma al guardar la categoría.</p>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <Field label="Nombre *">
+                      <Input autoFocus value={quickName} maxLength={80} onChange={(event) => { setQuickName(event.target.value); setQuickError(""); }} placeholder="Ej. Gramaje" disabled={quickSaving} />
+                    </Field>
+                    <Field label="Tipo de dato">
+                      <select value={quickType} onChange={(event) => { const type = event.target.value as AttributeDefinition["type"]; setQuickType(type); if (type !== "Numérico") setQuickWeight(false); }} disabled={quickSaving} className="h-10 w-full rounded-md border border-border bg-white px-3 text-sm outline-none focus:border-brand">
+                        <option>Texto</option><option>Numérico</option>
+                      </select>
+                    </Field>
+                    <Field label="Unidad / sufijo">
+                      <Input value={quickSuffix} maxLength={20} onChange={(event) => setQuickSuffix(event.target.value)} placeholder="Ej. kg, g, lb" disabled={quickSaving} />
+                    </Field>
+                    <label className="flex items-center gap-2 self-end rounded-md border border-border bg-white px-3 py-2.5 text-xs text-slate-700">
+                      <input type="checkbox" checked={quickWeight} disabled={quickSaving || quickType !== "Numérico"} onChange={(event) => setQuickWeight(event.target.checked)} className="h-4 w-4 accent-brand" />
+                      Usar como peso en fórmula
+                    </label>
+                  </div>
+                  {quickError && <p role="alert" className="mt-3 text-xs text-red-700">{quickError}</p>}
+                  <div className="mt-3 flex justify-end gap-2">
+                    <Button type="button" size="sm" variant="ghost" disabled={quickSaving} onClick={() => setQuickOpen(false)}>Cancelar</Button>
+                    <Button type="button" size="sm" disabled={quickSaving} onClick={() => void createQuickAttribute()}>{quickSaving ? "Guardando…" : "Guardar y asociar"}</Button>
+                  </div>
+                </div>
+              )}
               <AssociationList
                 attributes={category.attributes}
                 scope="category"
