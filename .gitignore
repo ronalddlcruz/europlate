@@ -8,3 +8,4 @@ prisma/.env
 .pnpm-fresh-store/
 dist/
 server/dist/
+server-nest/dist/
