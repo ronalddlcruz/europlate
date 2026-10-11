@@ -1,6 +1,6 @@
 import { Eye,Trash2 } from 'lucide-react'
-import { usePurchasesController } from '../../hooks/usePurchasesController'
-import { money,Status } from '../shared'
+import { usePurchasesController } from '@/features/purchases/hooks/usePurchasesController'
+import { money,Status } from '@/features/purchases/components/shared'
 
 export function PurchasesTable({ model }: { model: ReturnType<typeof usePurchasesController> }) {
   const { queryClient, purchasesQuery, catalogQuery, productsCatalogQuery, modal, setModal, selected, setSelected, detailQuery, notice, setNotice, notify, refreshPurchaseConsumers, createMutation, deleteMutation, purchases } = model

@@ -5,12 +5,12 @@ Search,
 Trash2
 } from "lucide-react";
 import { useMemo,useState } from "react";
-import { Button } from "../../../../components/ui/button";
-import { Input } from "../../../../components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import type {
 Unit
-} from "../../types/product.types";
-import { IconButton,StatusBadge } from '../shared';
+} from "@/features/products/types/product.types";
+import { IconButton,StatusBadge } from '@/features/products/components/shared';
 
 export function UnitsSection({
   units,

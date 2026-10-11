@@ -1,8 +1,8 @@
 import { useMutation,useQuery,useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
-import { addPurchaseToDashboard,type DashboardSummary } from '../../dashboard/services/dashboard-api.service'
-import { loadCatalog } from '../../products/services/product-api.service'
-import { createPurchase,deletePurchase,getPurchase,listPurchases,loadPurchaseCatalog,type Purchase } from '../services/purchase-api.service'
+import { addPurchaseToDashboard,type DashboardSummary } from '@/features/dashboard/services/dashboard-api.service'
+import { loadCatalog } from '@/features/products/services/product-api.service'
+import { createPurchase,deletePurchase,getPurchase,listPurchases,loadPurchaseCatalog,type Purchase } from '@/features/purchases/services/purchase-api.service'
 
 export function usePurchasesController() {
   const queryClient = useQueryClient(); const purchasesQuery = useQuery({ queryKey: ['purchases'], queryFn: listPurchases, staleTime: 0 }); const catalogQuery = useQuery({ queryKey: ['purchases', 'catalog'], queryFn: loadPurchaseCatalog, staleTime: 0, gcTime: 15 * 60_000, refetchOnMount: 'always' }); const productsCatalogQuery = useQuery({ queryKey: ['products', 'catalog'], queryFn: loadCatalog, staleTime: 0, gcTime: 15 * 60_000, refetchOnMount: 'always' }); const [modal, setModal] = useState<'new' | 'detail' | null>(null); const [selected, setSelected] = useState<Purchase>(); const detailQuery = useQuery({ queryKey: ['purchases', 'detail', selected?.id], queryFn: () => getPurchase(selected!.id), enabled: modal === 'detail' && Boolean(selected) }); const [notice, setNotice] = useState('')

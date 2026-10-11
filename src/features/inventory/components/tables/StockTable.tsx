@@ -1,9 +1,9 @@
 import { Search } from 'lucide-react'
 import { useState } from 'react'
-import { Button } from '../../../../components/ui/button'
-import { Input } from '../../../../components/ui/input'
-import { type StockRecord,type StockStatusFilter,type Warehouse } from '../../services/inventory-api.service'
-import { InventoryMetric,StockAmount } from '../inventory-shared'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { type StockRecord,type StockStatusFilter,type Warehouse } from '@/features/inventory/services/inventory-api.service'
+import { InventoryMetric,StockAmount } from '@/features/inventory/components/inventory-shared'
 
 export function StockTable({ records, warehouses, loading, status, onStatusChange }: { records: StockRecord[]; warehouses: Warehouse[]; loading: boolean; status: StockStatusFilter; onStatusChange: (status: StockStatusFilter) => void }) {
   const [search, setSearch] = useState('')

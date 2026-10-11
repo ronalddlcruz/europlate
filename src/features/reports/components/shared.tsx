@@ -1,6 +1,6 @@
 import { ArrowDownToLine,Boxes,ChevronLeft,ChevronRight,Factory,FileSpreadsheet,SlidersHorizontal } from 'lucide-react'
 import { useState } from 'react'
-import { Button } from '../../../components/ui/button'
+import { Button } from '@/components/ui/button'
 
 export type Report = 'stock' | 'movements' | 'purchases' | 'production'
 

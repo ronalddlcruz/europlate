@@ -1,9 +1,9 @@
 import { Plus,Search } from 'lucide-react'
-import { Button } from '../../../components/ui/button'
-import { Input } from '../../../components/ui/input'
-import { CustomerDialog } from '../components/dialogs/CustomerDialog'
-import { CustomersTable } from '../components/tables/CustomersTable'
-import { useCustomersController } from '../hooks/useCustomersController'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { CustomerDialog } from '@/features/customers/components/dialogs/CustomerDialog'
+import { CustomersTable } from '@/features/customers/components/tables/CustomersTable'
+import { useCustomersController } from '@/features/customers/hooks/useCustomersController'
 
 export function CustomersPage() {
   const model = useCustomersController()

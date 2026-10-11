@@ -1,6 +1,6 @@
-import { api } from '../../../lib/api-client'
+import { api } from '@/lib/api-client'
 
-import type { MonthlyPurchase, RotationProduct } from '../components/dashboard-data'
+import type { MonthlyPurchase, RotationProduct } from '@/features/dashboard/components/dashboard-data'
 
 export type DashboardSummary = { period: string; periods: { value: string; label: string }[]; metrics: { purchasesPen: number; nationalPurchasesPen: number; importsPen: number; nationalPurchaseCount: number; purchasesUnconvertedUsd?: number; purchasesUsdRate?: number | null; activeProducts: number; imports: number; totalStock: number }; purchasesByMonth: MonthlyPurchase[]; rotation: RotationProduct[] }
 export const loadDashboardSummary = (period?: string) => api<DashboardSummary>(`/api/dashboard/summary${period ? `?period=${encodeURIComponent(period)}` : ''}`)

@@ -1,17 +1,17 @@
 import {
 AttributeDefinitionDialog
-} from "../components/attribute-catalog";
+} from "@/features/products/components/attribute-catalog";
 import {
 CategoryConfigurationDialog,
 SubcategoryEditDialog
-} from "../components/category-configuration";
-import { UnitDialog } from '../components/dialogs/UnitDialog';
-import { VariantDialog } from '../components/dialogs/VariantDialog';
-import { ProductWizard } from "../components/product-wizard";
-import { ProductsNavigation } from "../components/products-navigation";
-import { useProductsController } from '../hooks/useProductsController';
-import { ProductsCatalogPage } from './products-catalog-page';
-import { ProductsConfigurationPage } from './products-configuration-page';
+} from "@/features/products/components/category-configuration";
+import { UnitDialog } from '@/features/products/components/dialogs/UnitDialog';
+import { VariantDialog } from '@/features/products/components/dialogs/VariantDialog';
+import { ProductWizard } from "@/features/products/components/product-wizard";
+import { ProductsNavigation } from "@/features/products/components/products-navigation";
+import { useProductsController } from '@/features/products/hooks/useProductsController';
+import { ProductsCatalogPage } from '@/features/products/pages/products-catalog-page';
+import { ProductsConfigurationPage } from '@/features/products/pages/products-configuration-page';
 
 export function ProductsPage() {
   const model = useProductsController()

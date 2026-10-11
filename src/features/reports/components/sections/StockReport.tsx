@@ -1,8 +1,8 @@
 import { useMemo,useState } from 'react'
-import { Input } from '../../../../components/ui/input'
-import { type ReportStock } from '../../services/report-api.service'
-import { ExcelButton,Pagination,Select,amount,exportCsv,roleLabels,usePagination } from '../shared'
-import { ReportTable } from '../tables/ReportTable'
+import { Input } from '@/components/ui/input'
+import { type ReportStock } from '@/features/reports/services/report-api.service'
+import { ExcelButton,Pagination,Select,amount,exportCsv,roleLabels,usePagination } from '@/features/reports/components/shared'
+import { ReportTable } from '@/features/reports/components/tables/ReportTable'
 
 export function StockReport({ rows }: { rows: ReportStock[] }) {
   const [search, setSearch] = useState(''); const [warehouse, setWarehouse] = useState(''); const [role, setRole] = useState('')

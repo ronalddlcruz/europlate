@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { MonthlyPurchase } from './dashboard-data'
+import type { MonthlyPurchase } from '@/features/dashboard/components/dashboard-data'
 
 const money = new Intl.NumberFormat('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const compactMoney = new Intl.NumberFormat('es-PE', { notation: 'compact', maximumFractionDigits: 1 })

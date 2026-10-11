@@ -1,12 +1,12 @@
 import { useState } from "react";
-import { Button } from "../../../../components/ui/button";
-import { Dialog } from "../../../../components/ui/dialog";
-import { Input } from "../../../../components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Dialog } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import type {
 ProductStatus,
 Unit
-} from "../../types/product.types";
-import { Field,newId,Select,unitCode } from '../shared';
+} from "@/features/products/types/product.types";
+import { Field,newId,Select,unitCode } from '@/features/products/components/shared';
 
 export function UnitDialog({
   item,

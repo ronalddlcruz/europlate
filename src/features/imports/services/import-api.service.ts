@@ -1,4 +1,4 @@
-import { accessToken, api, apiBaseUrl, ApiError } from '../../../lib/api-client'
+import { accessToken, api, apiBaseUrl, ApiError } from '@/lib/api-client'
 
 export type ImportStatus = 'En tránsito' | 'Recibido' | 'Cancelado'
 export type ImportCalculationType = 'STANDARD' | 'WEIGHT_BASED'

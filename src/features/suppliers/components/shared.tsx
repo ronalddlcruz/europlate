@@ -1,4 +1,4 @@
-import { type Supplier,type SupplierStatus,type SupplierType } from '../services/supplier-api.service';
+import { type Supplier,type SupplierStatus,type SupplierType } from '@/features/suppliers/services/supplier-api.service';
 
 export const Select = ({ children, ...props }: React.SelectHTMLAttributes<HTMLSelectElement>) => <select className="h-10 w-full rounded-md border border-border bg-[#f4f7fb] px-3 text-sm outline-none focus:border-brand" {...props}>{children}</select>
 

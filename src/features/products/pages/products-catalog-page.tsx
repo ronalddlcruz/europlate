@@ -2,11 +2,11 @@ import {
 Plus,
 Search
 } from "lucide-react";
-import { Button } from "../../../components/ui/button";
-import { Input } from "../../../components/ui/input";
-import { Filter,Metric,roles } from '../components/shared';
-import { GroupedProductsTable } from '../components/tables/GroupedProductsTable';
-import { useProductsController } from '../hooks/useProductsController';
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Filter,Metric,roles } from '@/features/products/components/shared';
+import { GroupedProductsTable } from '@/features/products/components/tables/GroupedProductsTable';
+import { useProductsController } from '@/features/products/hooks/useProductsController';
 
 export function ProductsCatalogPage({ model }: { model: ReturnType<typeof useProductsController> }) {
   const { queryClient, navigate, pathname, catalog, products, bases, variants, units, categories, attributes, modal, setModal, roleFilter, setRoleFilter, statusFilter, setStatusFilter, search, setSearch, notice, setNotice, productsPage, setProductsPage, isConfiguration, configurationTab, openCatalog, openConfiguration, notify, refreshCatalog, createAttributeForCategory, refreshProductConsumers, synchronizeAttributeDefinition, syncProductionCatalogProduct, removeProductFromProductionCatalog, warmProductionCatalog, productMutation, statusMutation, deleteProductMutation, unitMutation, deleteUnitMutation, categoryMutation, attributeMutation, filteredBases, orderedBases, pageSize, totalProductPages, currentProductsPage, visibleBases, saveVariant, toggleVariantStatus } = model

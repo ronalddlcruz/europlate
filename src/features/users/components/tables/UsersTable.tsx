@@ -1,7 +1,7 @@
 import { Pencil,Plus,Trash2 } from 'lucide-react';
-import { Button } from '../../../../components/ui/button';
-import { type SystemUser } from '../../services/user-api.service';
-import { Mini,moduleName,RoleBadge,StatusBadge } from '../shared';
+import { Button } from '@/components/ui/button';
+import { type SystemUser } from '@/features/users/services/user-api.service';
+import { Mini,moduleName,RoleBadge,StatusBadge } from '@/features/users/components/shared';
 
 export function UsersTable({ users, loading, error, onNew, onEdit, onDelete }: { users: SystemUser[]; loading: boolean; error?: string; onNew: () => void; onEdit: (user: SystemUser) => void; onDelete: (id: string) => void }) {
   return <section className="rounded-[10px] border border-border bg-white p-5 shadow-card">

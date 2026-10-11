@@ -1,4 +1,4 @@
-import { type AgentStatus,type CustomsAgent } from '../services/customs-agent-api.service';
+import { type AgentStatus,type CustomsAgent } from '@/features/customs-agents/services/customs-agent-api.service';
 
 export const Field = ({ label, children }: { label: string; children: React.ReactNode }) => <label className="block"><span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[.4px] text-slate-600">{label}</span>{children}</label>
 

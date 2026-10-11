@@ -1,9 +1,9 @@
 import { Plus,RefreshCw } from 'lucide-react'
-import { Button } from '../../../components/ui/button'
-import { RateDialog } from '../components/dialogs/RateDialog'
-import { amount } from '../components/shared'
-import { SettingsTable } from '../components/tables/SettingsTable'
-import { useSettingsController } from '../hooks/useSettingsController'
+import { Button } from '@/components/ui/button'
+import { RateDialog } from '@/features/settings/components/dialogs/RateDialog'
+import { amount } from '@/features/settings/components/shared'
+import { SettingsTable } from '@/features/settings/components/tables/SettingsTable'
+import { useSettingsController } from '@/features/settings/hooks/useSettingsController'
 
 export function SettingsPage() {
   const model = useSettingsController()

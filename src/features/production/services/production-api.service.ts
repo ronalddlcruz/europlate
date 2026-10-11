@@ -1,4 +1,4 @@
-import { api } from '../../../lib/api-client'
+import { api } from '@/lib/api-client'
 
 export type ProductionStatus = 'Planificada' | 'En producción' | 'Completada' | 'Cancelada'
 export type ProductionMaterial = { id: string; productId: string; warehouseId: string; product: string; code: string; warehouse: string; unit: string; unitName: string; quantity: number; status: 'Reservado' | 'Consumido'; immediateConsumption: boolean; shareReservation: boolean }

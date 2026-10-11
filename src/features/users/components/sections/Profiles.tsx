@@ -1,8 +1,8 @@
 import { RotateCcw,Save } from 'lucide-react'
 import { useState } from 'react'
-import { Button } from '../../../../components/ui/button'
-import { type Role } from '../../services/user-api.service'
-import { moduleName,permissionSections } from '../shared'
+import { Button } from '@/components/ui/button'
+import { type Role } from '@/features/users/services/user-api.service'
+import { moduleName,permissionSections } from '@/features/users/components/shared'
 
 export function Profiles({ roles, permissions, saving, onSave }: { roles: Role[]; permissions: { id: string; module: string; action: string }[]; saving: boolean; onSave: (updates: { id: string; ids: string[] }[]) => void }) {
   const [changed, setChanged] = useState<Record<string, Set<string>>>({})

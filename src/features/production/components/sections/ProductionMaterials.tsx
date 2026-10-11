@@ -1,5 +1,5 @@
-import { Button } from '../../../../components/ui/button';
-import { type ProductionOrder } from '../../services/production-api.service';
+import { Button } from '@/components/ui/button';
+import { type ProductionOrder } from '@/features/production/services/production-api.service';
 
 
 export function ProductionMaterials({ orders, loading, consuming, onConsume }: { orders: ProductionOrder[]; loading: boolean; consuming: boolean; onConsume: (orderId: string, materialId: string) => void }) {

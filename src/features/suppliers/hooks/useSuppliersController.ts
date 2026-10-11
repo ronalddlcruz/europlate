@@ -1,9 +1,9 @@
 import { useMutation,useQuery,useQueryClient } from '@tanstack/react-query'
 import { useMemo,useState } from 'react'
-import type { ImportCatalog } from '../../imports/services/import-api.service'
-import type { PurchaseCatalog } from '../../purchases/services/purchase-api.service'
-import { sortSuppliers,updateCatalogSuppliers } from '../components/shared'
-import { createSupplier,deleteSupplier,listSuppliers,updateSupplier,type Supplier } from '../services/supplier-api.service'
+import type { ImportCatalog } from '@/features/imports/services/import-api.service'
+import type { PurchaseCatalog } from '@/features/purchases/services/purchase-api.service'
+import { sortSuppliers,updateCatalogSuppliers } from '@/features/suppliers/components/shared'
+import { createSupplier,deleteSupplier,listSuppliers,updateSupplier,type Supplier } from '@/features/suppliers/services/supplier-api.service'
 
 export function useSuppliersController() {
   const queryClient = useQueryClient()

@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
-import { type Report } from '../components/shared'
-import { loadMovementsReport,loadProductionReport,loadPurchasesReport,loadStockReport } from '../services/report-api.service'
+import { type Report } from '@/features/reports/components/shared'
+import { loadMovementsReport,loadProductionReport,loadPurchasesReport,loadStockReport } from '@/features/reports/services/report-api.service'
 
 export function useReportsController() {
   const [report, setReport] = useState<Report>('stock')

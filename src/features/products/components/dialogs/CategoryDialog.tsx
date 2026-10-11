@@ -1,11 +1,11 @@
 import { useState } from "react";
-import { Button } from "../../../../components/ui/button";
-import { Dialog } from "../../../../components/ui/dialog";
-import { Input } from "../../../../components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Dialog } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import type {
 ProductCategory
-} from "../../types/product.types";
-import { Field,newId } from '../shared';
+} from "@/features/products/types/product.types";
+import { Field,newId } from '@/features/products/components/shared';
 
 export function CategoryDialog({
   item,

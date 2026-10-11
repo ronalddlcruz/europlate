@@ -1,9 +1,9 @@
 import { useState,type FormEvent } from 'react'
-import { Button } from '../../../../components/ui/button'
-import { Dialog } from '../../../../components/ui/dialog'
-import { Input } from '../../../../components/ui/input'
-import { type Supplier,type SupplierStatus,type SupplierType } from '../../services/supplier-api.service'
-import { Field,Select } from '../shared'
+import { Button } from '@/components/ui/button'
+import { Dialog } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { type Supplier,type SupplierStatus,type SupplierType } from '@/features/suppliers/services/supplier-api.service'
+import { Field,Select } from '@/features/suppliers/components/shared'
 
 export function SupplierDialog({ item, onClose, onSave }: { item?: Supplier; onClose: () => void; onSave: (supplier: Omit<Supplier, 'id'>) => Promise<void> }) {
   const [type, setType] = useState<SupplierType>(item?.type ?? 'Nacional'); const [name, setName] = useState(item?.name ?? ''); const [document, setDocument] = useState(item?.document ?? ''); const [phone, setPhone] = useState(item?.phone ?? ''); const [email, setEmail] = useState(item?.email ?? ''); const [status, setStatus] = useState<SupplierStatus>(item?.status ?? 'Activo'); const [saving, setSaving] = useState(false); const [formError, setFormError] = useState('')

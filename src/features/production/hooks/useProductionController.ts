@@ -1,7 +1,7 @@
 import { useMutation,useQuery,useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
-import { type Tab } from '../components/shared'
-import { consumeProductionMaterial,createProductionOrder,deleteProductionOrder,getProductionOrder,listProductionOrders,loadProductionCatalog,type ProductionCatalog,type ProductionOrder } from '../services/production-api.service'
+import { type Tab } from '@/features/production/components/shared'
+import { consumeProductionMaterial,createProductionOrder,deleteProductionOrder,getProductionOrder,listProductionOrders,loadProductionCatalog,type ProductionCatalog,type ProductionOrder } from '@/features/production/services/production-api.service'
 
 export function useProductionController() {
   const client = useQueryClient(); const [tab, setTab] = useState<Tab>('orders'); const [newOrder, setNewOrder] = useState(false); const [viewing, setViewing] = useState<ProductionOrder | null>(null); const [notice, setNotice] = useState('')

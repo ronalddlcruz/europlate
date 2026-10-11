@@ -1,9 +1,9 @@
 import { useState,type FormEvent } from 'react'
-import { Button } from '../../../../components/ui/button'
-import { Dialog } from '../../../../components/ui/dialog'
-import { Input } from '../../../../components/ui/input'
-import { type AgentStatus,type CustomsAgent } from '../../services/customs-agent-api.service'
-import { Field } from '../shared'
+import { Button } from '@/components/ui/button'
+import { Dialog } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { type AgentStatus,type CustomsAgent } from '@/features/customs-agents/services/customs-agent-api.service'
+import { Field } from '@/features/customs-agents/components/shared'
 
 export function AgentDialog({ item, onClose, onSave }: { item?: CustomsAgent; onClose: () => void; onSave: (agent: Omit<CustomsAgent, 'id'>) => Promise<void> }) {
   const [name, setName] = useState(item?.name ?? ''); const [ruc, setRuc] = useState(item?.ruc ?? ''); const [contact, setContact] = useState(item?.contact ?? ''); const [phone, setPhone] = useState(item?.phone ?? ''); const [email, setEmail] = useState(item?.email ?? ''); const [status, setStatus] = useState<AgentStatus>(item?.status ?? 'Activo'); const [saving, setSaving] = useState(false); const [error, setError] = useState('')

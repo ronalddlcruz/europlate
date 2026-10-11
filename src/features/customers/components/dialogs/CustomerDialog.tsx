@@ -1,10 +1,10 @@
 import { Mail,MapPin,StickyNote } from 'lucide-react'
 import { useState,type FormEvent } from 'react'
-import { Button } from '../../../../components/ui/button'
-import { Dialog } from '../../../../components/ui/dialog'
-import { Input } from '../../../../components/ui/input'
-import { type Customer,type CustomerStatus } from '../../services/customer-api.service'
-import { emptyCustomer,Field } from '../shared'
+import { Button } from '@/components/ui/button'
+import { Dialog } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { type Customer,type CustomerStatus } from '@/features/customers/services/customer-api.service'
+import { emptyCustomer,Field } from '@/features/customers/components/shared'
 
 export function CustomerDialog({ item, onClose, onSave }: { item?: Customer; onClose: () => void; onSave: (customer: Omit<Customer, 'id'>) => Promise<void> }) {
   const [draft, setDraft] = useState<Omit<Customer, 'id'>>(item ? { name: item.name, ruc: item.ruc, phone: item.phone, email: item.email, address: item.address, note: item.note, status: item.status } : emptyCustomer()); const [saving, setSaving] = useState(false); const [error, setError] = useState(''); const patch = (value: Partial<Omit<Customer, 'id'>>) => setDraft(current => ({ ...current, ...value }))

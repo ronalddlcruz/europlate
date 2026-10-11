@@ -1,4 +1,4 @@
-import { api } from '../../../lib/api-client'
+import { api } from '@/lib/api-client'
 
 export type SupplierType = 'Nacional' | 'Extranjero'
 export type SupplierStatus = 'Activo' | 'Inactivo'

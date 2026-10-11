@@ -1,10 +1,10 @@
 import { Plus } from 'lucide-react'
-import { Button } from '../../../components/ui/button'
-import { ProductionOrderDetail } from '../components/dialogs/ProductionOrderDetail'
-import { ProductionOrderDialog } from '../components/production-order-dialog'
-import { ProductionMaterials } from '../components/sections/ProductionMaterials'
-import { OrdersTable } from '../components/tables/OrdersTable'
-import { useProductionController } from '../hooks/useProductionController'
+import { Button } from '@/components/ui/button'
+import { ProductionOrderDetail } from '@/features/production/components/dialogs/ProductionOrderDetail'
+import { ProductionOrderDialog } from '@/features/production/components/production-order-dialog'
+import { ProductionMaterials } from '@/features/production/components/sections/ProductionMaterials'
+import { OrdersTable } from '@/features/production/components/tables/OrdersTable'
+import { useProductionController } from '@/features/production/hooks/useProductionController'
 
 export function ProductionPage() {
   const { client, tab, setTab, newOrder, setNewOrder, viewing, setViewing, notice, setNotice, ordersQuery, catalogQuery, detailQuery, notify, refreshInventoryViews, createMutation, consumeMutation, deleteMutation, orders } = useProductionController()

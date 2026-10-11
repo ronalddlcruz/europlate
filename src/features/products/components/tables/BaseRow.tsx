@@ -5,12 +5,12 @@ Pencil,
 Plus,
 Trash2
 } from "lucide-react";
-import { Button } from "../../../../components/ui/button";
+import { Button } from "@/components/ui/button";
 import type {
 ProductBase,
 ProductVariant
-} from "../../types/product.types";
-import { badge,ENABLE_PRODUCT_DELETION,IconButton,StatusBadge } from '../shared';
+} from "@/features/products/types/product.types";
+import { badge,ENABLE_PRODUCT_DELETION,IconButton,StatusBadge } from '@/features/products/components/shared';
 
 export function BaseRow({
   base,

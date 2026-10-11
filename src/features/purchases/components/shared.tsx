@@ -1,8 +1,8 @@
 import { CalendarDays,ChevronDown,Paperclip,Search,X } from 'lucide-react'
 import { useEffect,useRef,useState } from 'react'
-import { Input } from '../../../components/ui/input'
-import type { ProductBase } from '../../products/types/product.types'
-import { type Purchase,type PurchaseCatalog,type UploadedPurchaseDocument } from '../services/purchase-api.service'
+import { Input } from '@/components/ui/input'
+import type { ProductBase } from '@/features/products/types/product.types'
+import { type Purchase,type PurchaseCatalog,type UploadedPurchaseDocument } from '@/features/purchases/services/purchase-api.service'
 
 export type VariableDraft = { name: string; values: Record<string, string>; unit: string; factor: number; minimumStock: number; stock: number; roles: ProductBase['roles'] }
 

@@ -1,10 +1,10 @@
 import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
-import { DashboardHeader } from '../components/dashboard-header'
-import { DashboardMetrics } from '../components/dashboard-metrics'
-import { MonthlyImportsCard,MonthlyPurchasesCard } from '../components/monthly-purchases-card'
-import { RotationSection } from '../components/rotation-section'
-import { loadDashboardSummary } from '../services/dashboard-api.service'
+import { DashboardHeader } from '@/features/dashboard/components/dashboard-header'
+import { DashboardMetrics } from '@/features/dashboard/components/dashboard-metrics'
+import { MonthlyImportsCard,MonthlyPurchasesCard } from '@/features/dashboard/components/monthly-purchases-card'
+import { RotationSection } from '@/features/dashboard/components/rotation-section'
+import { loadDashboardSummary } from '@/features/dashboard/services/dashboard-api.service'
 
 export function DashboardPage() {
   const [period, setPeriod] = useState(() => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Lima', year: 'numeric', month: '2-digit' }).format(new Date()))

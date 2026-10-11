@@ -1,7 +1,7 @@
-import { Button } from '../../../../components/ui/button';
-import { Dialog } from '../../../../components/ui/dialog';
-import { type ProductionOrder } from '../../services/production-api.service';
-import { DetailField,Status } from '../shared';
+import { Button } from '@/components/ui/button';
+import { Dialog } from '@/components/ui/dialog';
+import { type ProductionOrder } from '@/features/production/services/production-api.service';
+import { DetailField,Status } from '@/features/production/components/shared';
 
 export function ProductionOrderDetail({ order, loading, failed, onClose }: { order: ProductionOrder; loading: boolean; failed: boolean; onClose: () => void }) {
   return <Dialog open wide title="Detalle de Orden de Producción" onClose={onClose} footer={<Button variant="outline" onClick={onClose}>Cerrar</Button>}>

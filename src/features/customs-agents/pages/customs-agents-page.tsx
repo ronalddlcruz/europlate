@@ -1,10 +1,10 @@
 import { Plus,Search } from 'lucide-react'
-import { Button } from '../../../components/ui/button'
-import { Input } from '../../../components/ui/input'
-import { AgentDialog } from '../components/dialogs/AgentDialog'
-import { Toast } from '../components/shared'
-import { CustomsAgentsTable } from '../components/tables/CustomsAgentsTable'
-import { useCustomsAgentsController } from '../hooks/useCustomsAgentsController'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { AgentDialog } from '@/features/customs-agents/components/dialogs/AgentDialog'
+import { Toast } from '@/features/customs-agents/components/shared'
+import { CustomsAgentsTable } from '@/features/customs-agents/components/tables/CustomsAgentsTable'
+import { useCustomsAgentsController } from '@/features/customs-agents/hooks/useCustomsAgentsController'
 
 export function CustomsAgentsPage() {
   const model = useCustomsAgentsController()

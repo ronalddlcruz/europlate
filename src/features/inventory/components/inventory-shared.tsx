@@ -1,7 +1,7 @@
 import { Plus,Search } from 'lucide-react'
 import { useEffect,useRef,useState } from 'react'
-import { Button } from '../../../components/ui/button'
-import { type CatalogCustomer,type CatalogProduct,type Warehouse } from '../services/inventory-api.service'
+import { Button } from '@/components/ui/button'
+import { type CatalogCustomer,type CatalogProduct,type Warehouse } from '@/features/inventory/services/inventory-api.service'
 
 export type Tab = 'stock' | 'movements' | 'transfers' | 'adjustments'
 

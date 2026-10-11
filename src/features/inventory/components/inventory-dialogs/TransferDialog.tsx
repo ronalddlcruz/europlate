@@ -1,9 +1,9 @@
 import { useState,type FormEvent } from 'react'
-import { Button } from '../../../../components/ui/button'
-import { Dialog } from '../../../../components/ui/dialog'
-import { Input } from '../../../../components/ui/input'
-import { createTransfer,type CatalogProduct,type StockRecord,type Warehouse } from '../../services/inventory-api.service'
-import { Field,ProductPicker,WarehousePicker } from '../inventory-shared'
+import { Button } from '@/components/ui/button'
+import { Dialog } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { createTransfer,type CatalogProduct,type StockRecord,type Warehouse } from '@/features/inventory/services/inventory-api.service'
+import { Field,ProductPicker,WarehousePicker } from '@/features/inventory/components/inventory-shared'
 
 export function TransferDialog({ catalog, stock, saving, initialValues, onClose, onSave }: {
   catalog: { products: CatalogProduct[]; warehouses: Warehouse[] }

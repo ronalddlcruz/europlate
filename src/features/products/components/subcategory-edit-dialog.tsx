@@ -1,14 +1,14 @@
 import { useState } from "react";
-import { Button } from "../../../components/ui/button";
-import { Dialog } from "../../../components/ui/dialog";
-import { Input } from "../../../components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Dialog } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import type {
 AttributeDefinition,
 ProductCategory,
 ProductStatus,
 ProductSubcategory
-} from "../types/product.types";
-import { AssociationList,AttributePicker,Field,toConfigured } from './category-dialog-fields';
+} from "@/features/products/types/product.types";
+import { AssociationList,AttributePicker,Field,toConfigured } from '@/features/products/components/category-dialog-fields';
 
 export function SubcategoryEditDialog({
   category,

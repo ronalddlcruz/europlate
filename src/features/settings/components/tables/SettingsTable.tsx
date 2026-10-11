@@ -1,6 +1,6 @@
 import { Pencil,Trash2 } from 'lucide-react'
-import { useSettingsController } from '../../hooks/useSettingsController'
-import { amount,date,Mini } from '../shared'
+import { useSettingsController } from '@/features/settings/hooks/useSettingsController'
+import { amount,date,Mini } from '@/features/settings/components/shared'
 
 export function SettingsTable({ model }: { model: ReturnType<typeof useSettingsController> }) {
   const { client, modal, setModal, editing, setEditing, notice, setNotice, query, rates, current, invalidate, say, save, automatic, remove } = model

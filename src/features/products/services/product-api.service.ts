@@ -1,4 +1,4 @@
-import { api } from "../../../lib/api-client";
+import { api } from "@/lib/api-client";
 import type {
   Attribute,
   AttributeDefinition,
@@ -8,7 +8,7 @@ import type {
   ProductStatus,
   ProductVariant,
   Unit,
-} from "../types/product.types";
+} from "@/features/products/types/product.types";
 
 type ApiAttribute = {
   id: string;

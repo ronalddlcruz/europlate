@@ -1,4 +1,4 @@
-import { type Role,type UserStatus } from '../services/user-api.service'
+import { type Role,type UserStatus } from '@/features/users/services/user-api.service'
 
 export type Tab = 'users' | 'profiles' | 'audit'
 

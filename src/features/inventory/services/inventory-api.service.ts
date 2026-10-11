@@ -1,4 +1,4 @@
-import { api } from '../../../lib/api-client'
+import { api } from '@/lib/api-client'
 
 export type WarehouseResponsible = { id: string; name: string; email: string; roles?: { role: { key: string; name: string } }[] }
 export type Warehouse = { id: string; name: string; location: string | null; department?: string | null; province?: string | null; district?: string | null; address?: string | null; description: string | null; status: 'ACTIVE' | 'INACTIVE'; responsibleUserId?: string | null; responsible?: WarehouseResponsible | null }

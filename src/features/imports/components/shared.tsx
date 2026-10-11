@@ -1,4 +1,4 @@
-import { type ImportRecord } from '../services/import-api.service';
+import { type ImportRecord } from '@/features/imports/services/import-api.service';
 
 export function StatusBadge({ status }: { status: ImportRecord['status'] }) { return <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${status === 'Recibido' ? 'bg-emerald-100 text-emerald-700' : status === 'En tránsito' ? 'bg-blue-100 text-blue-700' : 'bg-red-100 text-red-700'}`}>{status}</span> }
 

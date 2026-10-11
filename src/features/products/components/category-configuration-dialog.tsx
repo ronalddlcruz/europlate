@@ -3,17 +3,17 @@ Pencil,
 Plus
 } from "lucide-react";
 import { useRef,useState } from "react";
-import { Button } from "../../../components/ui/button";
-import { Dialog } from "../../../components/ui/dialog";
-import { Input } from "../../../components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Dialog } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import type {
 AttributeDefinition,
 ProductBase,
 ProductCategory,
 ProductSubcategory
-} from "../types/product.types";
-import { AssociationList,AttributePicker,Field,freshSubcategory,toConfigured,uid } from './category-dialog-fields';
-import { SubcategoryEditDialog } from './subcategory-edit-dialog';
+} from "@/features/products/types/product.types";
+import { AssociationList,AttributePicker,Field,freshSubcategory,toConfigured,uid } from '@/features/products/components/category-dialog-fields';
+import { SubcategoryEditDialog } from '@/features/products/components/subcategory-edit-dialog';
 
 export function CategoryConfigurationDialog({
   item,

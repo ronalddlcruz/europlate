@@ -1,10 +1,10 @@
 import { useMutation,useQuery,useQueryClient } from "@tanstack/react-query";
 import { useMemo,useState } from "react";
 import { useLocation,useNavigate } from "react-router-dom";
-import { matchesProductSearch } from "../../../lib/product-search";
-import { loadProductionCatalog,type ProductionCatalog } from "../../production/services/production-api.service";
-import { type ConfigurationTab } from "../components/products-navigation";
-import { type CatalogData,type Modal } from '../components/shared';
+import { matchesProductSearch } from "@/lib/product-search";
+import { loadProductionCatalog,type ProductionCatalog } from "@/features/production/services/production-api.service";
+import { type ConfigurationTab } from "@/features/products/components/products-navigation";
+import { type CatalogData,type Modal } from '@/features/products/components/shared';
 import {
 createAttributeDefinition,
 createCatalogCategory,
@@ -17,7 +17,7 @@ updateAttributeDefinition,
 updateCatalogCategory,
 updateCatalogProduct,
 updateCatalogUnit,
-} from "../services/product-api.service";
+} from "@/features/products/services/product-api.service";
 import type {
 Attribute,
 AttributeDefinition,
@@ -27,7 +27,7 @@ ProductRole,
 ProductStatus,
 ProductVariant,
 Unit
-} from "../types/product.types";
+} from "@/features/products/types/product.types";
 
 export function useProductsController() {
   const queryClient = useQueryClient();

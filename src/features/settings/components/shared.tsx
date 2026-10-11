@@ -1,4 +1,4 @@
-import { type ExchangeRate } from '../services/exchange-rate-api.service';
+import { type ExchangeRate } from '@/features/settings/services/exchange-rate-api.service';
 
 export const amount = (rate: ExchangeRate) => Number(rate.value)
 

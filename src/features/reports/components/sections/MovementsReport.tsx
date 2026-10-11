@@ -1,8 +1,8 @@
 import { useMemo,useState } from 'react'
-import { Input } from '../../../../components/ui/input'
-import { type ReportMovement } from '../../services/report-api.service'
-import { ExcelButton,Pagination,Select,amount,dateKey,exportCsv,localDate,movementLabels,usePagination } from '../shared'
-import { ReportTable } from '../tables/ReportTable'
+import { Input } from '@/components/ui/input'
+import { type ReportMovement } from '@/features/reports/services/report-api.service'
+import { ExcelButton,Pagination,Select,amount,dateKey,exportCsv,localDate,movementLabels,usePagination } from '@/features/reports/components/shared'
+import { ReportTable } from '@/features/reports/components/tables/ReportTable'
 
 export function MovementsReport({ rows, warehouses }: { rows: ReportMovement[]; warehouses: string[] }) {
   const [start, setStart] = useState(''); const [end, setEnd] = useState(''); const [warehouse, setWarehouse] = useState(''); const [type, setType] = useState(''); const [search, setSearch] = useState('')

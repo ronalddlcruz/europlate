@@ -6,14 +6,14 @@ Plus,
 Search
 } from "lucide-react";
 import { useMemo,useState } from "react";
-import { Button } from "../../../components/ui/button";
-import { Input } from "../../../components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import type {
 ConfiguredAttribute,
 ProductCategory,
 ProductStatus,
 ProductSubcategory
-} from "../types/product.types";
+} from "@/features/products/types/product.types";
 const statusStyle = (status: ProductStatus) =>
   status === "Activo"
     ? "bg-emerald-100 text-emerald-700"
@@ -335,5 +335,5 @@ function CompactAttributes({
   );
 }
 
-export { CategoryConfigurationDialog } from './category-configuration-dialog';
-export { SubcategoryEditDialog } from './subcategory-edit-dialog';
+export { CategoryConfigurationDialog } from '@/features/products/components/category-configuration-dialog';
+export { SubcategoryEditDialog } from '@/features/products/components/subcategory-edit-dialog';

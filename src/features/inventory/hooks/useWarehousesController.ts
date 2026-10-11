@@ -1,11 +1,11 @@
 import { useMutation,useQuery,useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
-import { useAuth } from '../../auth/hooks/use-auth'
-import { type WarehousePayload } from '../components/warehouses-shared'
+import { useAuth } from '@/features/auth/hooks/use-auth'
+import { type WarehousePayload } from '@/features/inventory/components/warehouses-shared'
 import {
 createWarehouse,deleteWarehouse,listWarehouseResponsibles,listWarehouses,
 updateWarehouse,type Warehouse
-} from '../services/inventory-api.service'
+} from '@/features/inventory/services/inventory-api.service'
 
 export function useWarehousesController() {
   const client = useQueryClient()

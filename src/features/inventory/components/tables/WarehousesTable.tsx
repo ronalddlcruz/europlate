@@ -1,5 +1,5 @@
 import { Pencil,Trash2 } from 'lucide-react';
-import { useWarehousesController } from '../../hooks/useWarehousesController';
+import { useWarehousesController } from '@/features/inventory/hooks/useWarehousesController';
 
 export function WarehousesTable({ model }: { model: ReturnType<typeof useWarehousesController> }) {
   const { client, session, canManage, warehouses, responsibles, editing, setEditing, modal, setModal, notice, setNotice, notify, sync, save, remove } = model

@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Boxes, ChevronDown, ClipboardList, Search, SlidersHorizontal, Sparkles, Tags, X } from 'lucide-react'
-import { Button } from '../../../components/ui/button'
-import { Dialog } from '../../../components/ui/dialog'
-import { Input } from '../../../components/ui/input'
-import type { Attribute, ProductBase, ProductCategory, ProductRole, ProductStatus, ProductVariant, Unit } from '../types/product.types'
+import { Button } from '@/components/ui/button'
+import { Dialog } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import type { Attribute, ProductBase, ProductCategory, ProductRole, ProductStatus, ProductVariant, Unit } from '@/features/products/types/product.types'
 
 type SaveValue = { base: ProductBase; variants: ProductVariant[] }
 type Props = { item?: ProductBase; variants?: ProductVariant[]; products: ProductBase[]; categories: ProductCategory[]; units: Unit[]; onClose: () => void; onSave: (value: SaveValue) => void | Promise<void>; presetSubcategoryId?: string; saveLabel?: string; floating?: boolean; inline?: boolean; readOnly?: boolean }

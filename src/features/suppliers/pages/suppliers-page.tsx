@@ -1,9 +1,9 @@
 import { Plus,Search } from 'lucide-react'
-import { Button } from '../../../components/ui/button'
-import { Input } from '../../../components/ui/input'
-import { SupplierDialog } from '../components/dialogs/SupplierDialog'
-import { SuppliersTable } from '../components/tables/SuppliersTable'
-import { useSuppliersController } from '../hooks/useSuppliersController'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { SupplierDialog } from '@/features/suppliers/components/dialogs/SupplierDialog'
+import { SuppliersTable } from '@/features/suppliers/components/tables/SuppliersTable'
+import { useSuppliersController } from '@/features/suppliers/hooks/useSuppliersController'
 
 export function SuppliersPage() {
   const model = useSuppliersController()

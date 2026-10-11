@@ -1,4 +1,4 @@
-import { type ProductionStatus } from '../services/production-api.service';
+import { type ProductionStatus } from '@/features/production/services/production-api.service';
 
 export type Tab = 'orders' | 'active'
 

@@ -1,7 +1,7 @@
 import { useMutation,useQuery,useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
-import { type Tab } from '../components/shared'
-import { createUser,deleteUser,listUserAudit,listUsers,loadUsersCatalog,updateRolePermissions,updateUser,type SystemUser,type UserPayload } from '../services/user-api.service'
+import { type Tab } from '@/features/users/components/shared'
+import { createUser,deleteUser,listUserAudit,listUsers,loadUsersCatalog,updateRolePermissions,updateUser,type SystemUser,type UserPayload } from '@/features/users/services/user-api.service'
 
 export function useUsersController() {
   const client = useQueryClient(); const [tab, setTab] = useState<Tab>('users'); const [editing, setEditing] = useState<SystemUser>(); const [open, setOpen] = useState(false); const [notice, setNotice] = useState('')

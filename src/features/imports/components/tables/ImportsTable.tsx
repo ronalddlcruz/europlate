@@ -1,7 +1,7 @@
 import { Eye,Pencil,Trash2 } from 'lucide-react'
-import { Button } from '../../../../components/ui/button'
-import { useImportsController } from '../../hooks/useImportsController'
-import { IconButton,StatusBadge } from '../shared'
+import { Button } from '@/components/ui/button'
+import { useImportsController } from '@/features/imports/hooks/useImportsController'
+import { IconButton,StatusBadge } from '@/features/imports/components/shared'
 
 export function ImportsTable({ model }: { model: ReturnType<typeof useImportsController> }) {
   const { queryClient, importsQuery, catalogQuery, productsCatalogQuery, modal, setModal, editing, setEditing, detailQuery, notice, setNotice, notify, refreshImportConsumers, saveMutation, deleteMutation, records } = model

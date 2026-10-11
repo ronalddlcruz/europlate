@@ -1,7 +1,7 @@
 import { useMutation,useQuery,useQueryClient } from '@tanstack/react-query'
 import { useMemo,useState } from 'react'
-import { sortCustomers } from '../components/shared'
-import { createCustomer,deleteCustomer,listCustomers,updateCustomer,type Customer } from '../services/customer-api.service'
+import { sortCustomers } from '@/features/customers/components/shared'
+import { createCustomer,deleteCustomer,listCustomers,updateCustomer,type Customer } from '@/features/customers/services/customer-api.service'
 
 export function useCustomersController() {
   const queryClient = useQueryClient(); const customersQuery = useQuery({ queryKey: ['customers'], queryFn: listCustomers }); const customers = customersQuery.data ?? []

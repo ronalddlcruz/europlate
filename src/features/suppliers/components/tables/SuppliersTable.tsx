@@ -1,6 +1,6 @@
 import { Pencil,Trash2 } from 'lucide-react'
-import { useSuppliersController } from '../../hooks/useSuppliersController'
-import { IconButton,StatusBadge,TypeBadge } from '../shared'
+import { useSuppliersController } from '@/features/suppliers/hooks/useSuppliersController'
+import { IconButton,StatusBadge,TypeBadge } from '@/features/suppliers/components/shared'
 
 export function SuppliersTable({ model }: { model: ReturnType<typeof useSuppliersController> }) {
   const { queryClient, suppliersQuery, suppliers, modalItem, setModalItem, search, setSearch, notice, setNotice, notify, saveMutation, removeMutation, filtered } = model

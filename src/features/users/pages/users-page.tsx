@@ -1,8 +1,8 @@
-import { UserDialog } from '../components/dialogs/UserDialog'
-import { Profiles } from '../components/sections/Profiles'
-import { AuditTable } from '../components/tables/AuditTable'
-import { UsersTable } from '../components/tables/UsersTable'
-import { useUsersController } from '../hooks/useUsersController'
+import { UserDialog } from '@/features/users/components/dialogs/UserDialog'
+import { Profiles } from '@/features/users/components/sections/Profiles'
+import { AuditTable } from '@/features/users/components/tables/AuditTable'
+import { UsersTable } from '@/features/users/components/tables/UsersTable'
+import { useUsersController } from '@/features/users/hooks/useUsersController'
 
 export function UsersPage() {
   const { client, tab, setTab, editing, setEditing, open, setOpen, notice, setNotice, users, catalog, audit, refresh, say, save, remove, permissionMutation, roleList, permissions } = useUsersController()

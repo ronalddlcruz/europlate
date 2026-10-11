@@ -3,16 +3,16 @@ Pencil,
 Trash2
 } from "lucide-react";
 import { useState,type FormEvent } from "react";
-import { Button } from "../../../../components/ui/button";
-import { Dialog } from "../../../../components/ui/dialog";
-import { Input } from "../../../../components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Dialog } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import type {
 Attribute,
 ProductBase,
 ProductRole,
 ProductStatus
-} from "../../types/product.types";
-import { Field,IconButton,newId,roles,Select } from '../shared';
+} from "@/features/products/types/product.types";
+import { Field,IconButton,newId,roles,Select } from '@/features/products/components/shared';
 
 export function BaseDialog({
   item,

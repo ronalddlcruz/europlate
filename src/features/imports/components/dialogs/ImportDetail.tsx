@@ -1,8 +1,8 @@
 import { ExternalLink,FileText,Package } from 'lucide-react'
-import { Button } from '../../../../components/ui/button'
-import { Dialog } from '../../../../components/ui/dialog'
-import { type ImportRecord } from '../../services/import-api.service'
-import { StatusBadge } from '../shared'
+import { Button } from '@/components/ui/button'
+import { Dialog } from '@/components/ui/dialog'
+import { type ImportRecord } from '@/features/imports/services/import-api.service'
+import { StatusBadge } from '@/features/imports/components/shared'
 
 export function ImportDetail({ record, onClose }: { record: ImportRecord; onClose: () => void }) {
   const formatDate = (value: string) => value ? new Date(`${value}T00:00:00`).toLocaleDateString('es-PE', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'

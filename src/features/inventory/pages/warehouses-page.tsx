@@ -1,8 +1,8 @@
 import { Plus } from 'lucide-react'
-import { Button } from '../../../components/ui/button'
-import { WarehousesTable } from '../components/tables/WarehousesTable'
-import { WarehouseDialog } from '../components/warehouse-dialogs/WarehouseDialog'
-import { useWarehousesController } from '../hooks/useWarehousesController'
+import { Button } from '@/components/ui/button'
+import { WarehousesTable } from '@/features/inventory/components/tables/WarehousesTable'
+import { WarehouseDialog } from '@/features/inventory/components/warehouse-dialogs/WarehouseDialog'
+import { useWarehousesController } from '@/features/inventory/hooks/useWarehousesController'
 
 export function WarehousesPage() {
   const model = useWarehousesController()

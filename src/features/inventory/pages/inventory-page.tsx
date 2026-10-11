@@ -1,11 +1,11 @@
-import { AdjustmentDialog } from '../components/inventory-dialogs/AdjustmentDialog'
-import { TransferDialog } from '../components/inventory-dialogs/TransferDialog'
-import { Header } from '../components/inventory-shared'
-import { AdjustmentTable } from '../components/tables/AdjustmentTable'
-import { MovementTable } from '../components/tables/MovementTable'
-import { SimpleTable } from '../components/tables/SimpleTable'
-import { StockTable } from '../components/tables/StockTable'
-import { useInventoryController } from '../hooks/useInventoryController'
+import { AdjustmentDialog } from '@/features/inventory/components/inventory-dialogs/AdjustmentDialog'
+import { TransferDialog } from '@/features/inventory/components/inventory-dialogs/TransferDialog'
+import { Header } from '@/features/inventory/components/inventory-shared'
+import { AdjustmentTable } from '@/features/inventory/components/tables/AdjustmentTable'
+import { MovementTable } from '@/features/inventory/components/tables/MovementTable'
+import { SimpleTable } from '@/features/inventory/components/tables/SimpleTable'
+import { StockTable } from '@/features/inventory/components/tables/StockTable'
+import { useInventoryController } from '@/features/inventory/hooks/useInventoryController'
 
 export function InventoryPage() {
   const { client, tab, setTab, modal, setModal, stockStatus, setStockStatus, notice, setNotice, transferDraft, setTransferDraft, noticeTimer, transferInFlight, adjustmentInFlight, stock, catalog, movements, transfers, adjustments, warehouses, transferStock, notify, showNewMovements, transfer, adjustment, submitTransfer, submitAdjustment, tabs } = useInventoryController()

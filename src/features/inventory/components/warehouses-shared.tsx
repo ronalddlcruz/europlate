@@ -1,9 +1,9 @@
 import { ChevronDown,Search,X } from 'lucide-react'
 import { useEffect,useRef,useState,type ReactNode } from 'react'
-import { matchesProductSearch } from '../../../lib/product-search'
+import { matchesProductSearch } from '@/lib/product-search'
 import {
 type Warehouse,type WarehouseResponsible
-} from '../services/inventory-api.service'
+} from '@/features/inventory/services/inventory-api.service'
 
 export type WarehousePayload = Omit<Warehouse, 'id' | 'responsible'>
 

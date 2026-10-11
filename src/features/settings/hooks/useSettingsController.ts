@@ -1,7 +1,7 @@
 import { useMutation,useQuery,useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
-import { amount } from '../components/shared'
-import { createExchangeRate,deleteExchangeRate,listExchangeRates,refreshExchangeRate,updateExchangeRate,type ExchangeRate,type ExchangeRatePayload } from '../services/exchange-rate-api.service'
+import { amount } from '@/features/settings/components/shared'
+import { createExchangeRate,deleteExchangeRate,listExchangeRates,refreshExchangeRate,updateExchangeRate,type ExchangeRate,type ExchangeRatePayload } from '@/features/settings/services/exchange-rate-api.service'
 
 export function useSettingsController() {
   const client = useQueryClient(); const [modal, setModal] = useState(false); const [editing, setEditing] = useState<ExchangeRate>(); const [notice, setNotice] = useState(''); const query = useQuery({ queryKey: ['exchange-rates'], queryFn: listExchangeRates }); const rates = query.data ?? []; const current = rates[0]

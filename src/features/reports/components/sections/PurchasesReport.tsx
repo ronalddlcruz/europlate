@@ -1,8 +1,8 @@
 import { useMemo,useState } from 'react'
-import { Input } from '../../../../components/ui/input'
-import { type ReportPurchase } from '../../services/report-api.service'
-import { ExcelButton,Pagination,Select,dateKey,exportCsv,localDate,purchaseLabels,usePagination } from '../shared'
-import { ReportTable } from '../tables/ReportTable'
+import { Input } from '@/components/ui/input'
+import { type ReportPurchase } from '@/features/reports/services/report-api.service'
+import { ExcelButton,Pagination,Select,dateKey,exportCsv,localDate,purchaseLabels,usePagination } from '@/features/reports/components/shared'
+import { ReportTable } from '@/features/reports/components/tables/ReportTable'
 
 export function PurchasesReport({ rows }: { rows: ReportPurchase[] }) {
   const [start, setStart] = useState(''); const [end, setEnd] = useState(''); const [type, setType] = useState(''); const [status, setStatus] = useState(''); const [search, setSearch] = useState('')

@@ -7,8 +7,8 @@ import type {
 ProductBase,
 ProductVariant,
 Unit
-} from "../../types/product.types";
-import { ActionGroup,badge,IconButton,productNameWithCategory,roleAbbreviation,StatusBadge } from '../shared';
+} from "@/features/products/types/product.types";
+import { ActionGroup,badge,IconButton,productNameWithCategory,roleAbbreviation,StatusBadge } from '@/features/products/components/shared';
 
 export function GroupedProductsTable({
   bases,

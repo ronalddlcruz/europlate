@@ -1,7 +1,7 @@
 import { useMutation,useQuery,useQueryClient } from '@tanstack/react-query'
 import { useMemo,useState } from 'react'
-import { sortAgents } from '../components/shared'
-import { createCustomsAgent,deleteCustomsAgent,listCustomsAgents,updateCustomsAgent,type CustomsAgent } from '../services/customs-agent-api.service'
+import { sortAgents } from '@/features/customs-agents/components/shared'
+import { createCustomsAgent,deleteCustomsAgent,listCustomsAgents,updateCustomsAgent,type CustomsAgent } from '@/features/customs-agents/services/customs-agent-api.service'
 
 export function useCustomsAgentsController() {
   const queryClient = useQueryClient()

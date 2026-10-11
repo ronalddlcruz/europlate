@@ -1,8 +1,8 @@
-import { Button } from "../../../components/ui/button";
-import { normalizeProductSearch } from "../../../lib/product-search";
+import { Button } from "@/components/ui/button";
+import { normalizeProductSearch } from "@/lib/product-search";
 import {
 loadCatalog
-} from "../services/product-api.service";
+} from "@/features/products/services/product-api.service";
 import type {
 AttributeDefinition,
 ProductBase,
@@ -12,7 +12,7 @@ ProductStatus,
 ProductSubcategory,
 ProductVariant,
 Unit
-} from "../types/product.types";
+} from "@/features/products/types/product.types";
 
 export const ENABLE_PRODUCT_DELETION = true;
 

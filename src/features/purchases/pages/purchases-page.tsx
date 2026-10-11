@@ -1,9 +1,9 @@
 import { Plus } from 'lucide-react'
-import { Button } from '../../../components/ui/button'
-import { DetailDialog } from '../components/dialogs/DetailDialog'
-import { PurchaseDialog } from '../components/dialogs/PurchaseDialog'
-import { PurchasesTable } from '../components/tables/PurchasesTable'
-import { usePurchasesController } from '../hooks/usePurchasesController'
+import { Button } from '@/components/ui/button'
+import { DetailDialog } from '@/features/purchases/components/dialogs/DetailDialog'
+import { PurchaseDialog } from '@/features/purchases/components/dialogs/PurchaseDialog'
+import { PurchasesTable } from '@/features/purchases/components/tables/PurchasesTable'
+import { usePurchasesController } from '@/features/purchases/hooks/usePurchasesController'
 
 export function PurchasesPage() {
   const model = usePurchasesController()

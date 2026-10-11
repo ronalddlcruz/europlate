@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { Pencil, Plus, Power, Search } from 'lucide-react'
-import { Button } from '../../../components/ui/button'
-import { Dialog } from '../../../components/ui/dialog'
-import { Input } from '../../../components/ui/input'
-import type { AttributeDefinition, ProductStatus } from '../types/product.types'
+import { Button } from '@/components/ui/button'
+import { Dialog } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import type { AttributeDefinition, ProductStatus } from '@/features/products/types/product.types'
 
 const empty = (): AttributeDefinition => ({ id: crypto.randomUUID(), code: '', name: '', type: 'Texto', suffix: '', status: 'Activo', isWeight: false })
 const codePreview = (name: string) => name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 24) || 'SE-GENERARÁ'

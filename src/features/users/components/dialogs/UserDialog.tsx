@@ -1,9 +1,9 @@
 import { useState,type FormEvent } from 'react'
-import { Button } from '../../../../components/ui/button'
-import { Dialog } from '../../../../components/ui/dialog'
-import { Input } from '../../../../components/ui/input'
-import { type Role,type SystemUser,type UserPayload,type UserStatus } from '../../services/user-api.service'
-import { Field,Select,statusName } from '../shared'
+import { Button } from '@/components/ui/button'
+import { Dialog } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { type Role,type SystemUser,type UserPayload,type UserStatus } from '@/features/users/services/user-api.service'
+import { Field,Select,statusName } from '@/features/users/components/shared'
 
 export function UserDialog({ item, roles, saving, onClose, onSave }: { item?: SystemUser; roles: Role[]; saving: boolean; onClose: () => void; onSave: (payload: UserPayload) => void }) {
   const [name, setName] = useState(item?.name ?? '')

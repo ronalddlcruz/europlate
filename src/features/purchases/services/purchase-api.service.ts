@@ -1,4 +1,4 @@
-import { accessToken, api, apiBaseUrl, ApiError } from '../../../lib/api-client'
+import { accessToken, api, apiBaseUrl, ApiError } from '@/lib/api-client'
 
 export type PurchaseLine = { id: string; productId: string; presentationId: string; warehouseId: string; product: string; presentation: string; warehouse: string; unit: string; quantity: number; price: number }
 export type PurchaseAttachment = { name: string; size: number | null; mimeType: string | null; link: string | null }

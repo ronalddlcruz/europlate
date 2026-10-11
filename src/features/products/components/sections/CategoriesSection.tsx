@@ -3,11 +3,11 @@ Pencil,
 Plus,
 Trash2
 } from "lucide-react";
-import { Button } from "../../../../components/ui/button";
+import { Button } from "@/components/ui/button";
 import type {
 ProductCategory
-} from "../../types/product.types";
-import { IconButton } from '../shared';
+} from "@/features/products/types/product.types";
+import { IconButton } from '@/features/products/components/shared';
 
 export function CategoriesSection({
   categories,

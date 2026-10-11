@@ -1,7 +1,7 @@
 import { useMutation,useQuery,useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
-import { loadCatalog } from '../../products/services/product-api.service'
-import { createImport,deleteImport,getImport,listImports,loadImportCatalog,updateImport,type ImportPayload,type ImportRecord } from '../services/import-api.service'
+import { loadCatalog } from '@/features/products/services/product-api.service'
+import { createImport,deleteImport,getImport,listImports,loadImportCatalog,updateImport,type ImportPayload,type ImportRecord } from '@/features/imports/services/import-api.service'
 
 export function useImportsController() {
   const queryClient = useQueryClient()

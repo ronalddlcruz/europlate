@@ -1,6 +1,6 @@
 import { Pencil,Trash2 } from 'lucide-react'
-import { useCustomersController } from '../../hooks/useCustomersController'
-import { IconButton,StatusBadge } from '../shared'
+import { useCustomersController } from '@/features/customers/hooks/useCustomersController'
+import { IconButton,StatusBadge } from '@/features/customers/components/shared'
 
 export function CustomersTable({ model }: { model: ReturnType<typeof useCustomersController> }) {
   const { queryClient, customersQuery, customers, query, setQuery, modalItem, setModalItem, notice, setNotice, notify, syncCustomerPickers, saveMutation, removeMutation, visible } = model

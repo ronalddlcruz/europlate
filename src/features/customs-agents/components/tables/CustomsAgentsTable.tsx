@@ -1,6 +1,6 @@
 import { Pencil,Trash2 } from 'lucide-react'
-import { useCustomsAgentsController } from '../../hooks/useCustomsAgentsController'
-import { IconButton,StatusBadge } from '../shared'
+import { useCustomsAgentsController } from '@/features/customs-agents/hooks/useCustomsAgentsController'
+import { IconButton,StatusBadge } from '@/features/customs-agents/components/shared'
 
 export function CustomsAgentsTable({ model }: { model: ReturnType<typeof useCustomsAgentsController> }) {
   const { queryClient, agentsQuery, agents, modalItem, setModalItem, search, setSearch, notice, setNotice, notify, saveMutation, removeMutation, filtered } = model

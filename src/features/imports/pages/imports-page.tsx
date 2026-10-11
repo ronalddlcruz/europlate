@@ -1,9 +1,9 @@
 import { Plus } from 'lucide-react'
-import { Button } from '../../../components/ui/button'
-import { ImportDetail } from '../components/dialogs/ImportDetail'
-import { ImportDialog } from '../components/import-dialog'
-import { ImportsTable } from '../components/tables/ImportsTable'
-import { useImportsController } from '../hooks/useImportsController'
+import { Button } from '@/components/ui/button'
+import { ImportDetail } from '@/features/imports/components/dialogs/ImportDetail'
+import { ImportDialog } from '@/features/imports/components/import-dialog'
+import { ImportsTable } from '@/features/imports/components/tables/ImportsTable'
+import { useImportsController } from '@/features/imports/hooks/useImportsController'
 
 export function ImportsPage() {
   const model = useImportsController()

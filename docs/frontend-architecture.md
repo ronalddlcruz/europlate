@@ -13,6 +13,7 @@ features/<nombre>/
   components/  presentación propia del módulo (tables/, dialogs/, sections/)
   hooks/       estado de pantalla y coordinación de React Query
   services/    llamadas HTTP y adaptación de contratos API
+  schemas/     validación Zod de entradas y contratos externos, cuando aplique
   domain/      reglas puras y selectores con pruebas
   types/       tipos del módulo compartidos entre sus capas
   data/        datos estáticos, nunca estado de negocio mutable
@@ -65,3 +66,22 @@ explícitos al abordar cada dominio. No se crean carpetas vacías.
 
 Los componentes visuales existentes no se rediseñan en esta rama. La rama
 feature se mantiene aislada de `main` y no se despliega durante la migración.
+
+## Convenciones y avance de calidad
+
+- Los imports del frontend usan el alias `@/`, resuelto por TypeScript y Vite
+  desde `src/`. Las pruebas frontend usan
+  `tsx --tsconfig tsconfig.app.json` (`npm run test:frontend`) para resolverlo.
+  Los imports de paquetes y la API del servidor no cambian.
+- Auth ya sigue el patrón de página de composición, formulario visual,
+  controlador de interacción, servicio HTTP y esquemas Zod. La validación del
+  cliente refleja el contrato de credenciales del servidor y verifica las
+  respuestas antes de guardar un token o restaurar una sesión en caché.
+- `npm run lint` y `npm run format:check` verifican estrictamente Auth, el
+  primer módulo de la migración. `npm run lint:all` y
+  `npm run format:check:all` exponen la deuda de los demás módulos sin
+  ocultarla. Cada módulo incorporado deberá quedar limpio antes de ampliar
+  el alcance de los comandos predeterminados. `npm run format` formatea todo
+  `src` de forma explícita; no se ejecuta como parte de la compilación.
+- No se crean enums sin un conjunto cerrado de estados de dominio. Los tipos
+  de Auth se infieren de los esquemas para evitar contratos duplicados.

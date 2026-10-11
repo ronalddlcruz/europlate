@@ -1,9 +1,9 @@
 import { useState,type FormEvent } from 'react'
-import { Button } from '../../../../components/ui/button'
-import { Dialog } from '../../../../components/ui/dialog'
-import { Input } from '../../../../components/ui/input'
-import { type CatalogCustomer,type CatalogProduct,type StockRecord,type Warehouse } from '../../services/inventory-api.service'
-import { CustomerPicker,Field,ProductPicker,Select } from '../inventory-shared'
+import { Button } from '@/components/ui/button'
+import { Dialog } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { type CatalogCustomer,type CatalogProduct,type StockRecord,type Warehouse } from '@/features/inventory/services/inventory-api.service'
+import { CustomerPicker,Field,ProductPicker,Select } from '@/features/inventory/components/inventory-shared'
 
 export function AdjustmentDialog({ catalog, stock, saving, onClose, onSave }: {
   catalog: { products: CatalogProduct[]; warehouses: Warehouse[]; customers: CatalogCustomer[] }

@@ -1,5 +1,5 @@
-import { type Adjustment } from '../../services/inventory-api.service';
-import { StockAmount } from '../inventory-shared';
+import { type Adjustment } from '@/features/inventory/services/inventory-api.service';
+import { StockAmount } from '@/features/inventory/components/inventory-shared';
 
 export function AdjustmentTable({ rows, loading }: { rows: Adjustment[]; loading: boolean }) {
   const headers = ['Fecha', 'Tipo', 'Producto', 'Almacén', 'Stock anterior', 'Stock nuevo', 'Justificación', 'Usuario']

@@ -1,11 +1,11 @@
 import { RefreshCw } from 'lucide-react'
-import { Button } from '../../../components/ui/button'
-import { MovementsReport } from '../components/sections/MovementsReport'
-import { ProductionReport } from '../components/sections/ProductionReport'
-import { PurchasesReport } from '../components/sections/PurchasesReport'
-import { StockReport } from '../components/sections/StockReport'
-import { cards } from '../components/shared'
-import { useReportsController } from '../hooks/useReportsController'
+import { Button } from '@/components/ui/button'
+import { MovementsReport } from '@/features/reports/components/sections/MovementsReport'
+import { ProductionReport } from '@/features/reports/components/sections/ProductionReport'
+import { PurchasesReport } from '@/features/reports/components/sections/PurchasesReport'
+import { StockReport } from '@/features/reports/components/sections/StockReport'
+import { cards } from '@/features/reports/components/shared'
+import { useReportsController } from '@/features/reports/hooks/useReportsController'
 
 export function ReportsPage() {
   const { report, setReport, stock, movements, purchases, production, activeQuery } = useReportsController()

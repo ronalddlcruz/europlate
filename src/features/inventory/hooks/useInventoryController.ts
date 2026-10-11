@@ -1,7 +1,7 @@
 import { useMutation,useQuery,useQueryClient } from '@tanstack/react-query'
 import { useEffect,useRef,useState } from 'react'
-import { type Tab } from '../components/inventory-shared'
-import { createAdjustment,createTransfer,listAdjustments,listMovements,listStock,listTransfers,listWarehouses,loadInventoryCatalog,movementFromAdjustment,movementsFromTransfer,transferFromCreated,type Movement,type StockRecord,type StockStatusFilter,type Transfer } from '../services/inventory-api.service'
+import { type Tab } from '@/features/inventory/components/inventory-shared'
+import { createAdjustment,createTransfer,listAdjustments,listMovements,listStock,listTransfers,listWarehouses,loadInventoryCatalog,movementFromAdjustment,movementsFromTransfer,transferFromCreated,type Movement,type StockRecord,type StockStatusFilter,type Transfer } from '@/features/inventory/services/inventory-api.service'
 
 export function useInventoryController() {
   const client = useQueryClient(); const [tab, setTab] = useState<Tab>('stock'); const [modal, setModal] = useState<'transfer' | 'adjustment' | null>(null); const [stockStatus, setStockStatus] = useState<StockStatusFilter>('ACTIVE'); const [notice, setNotice] = useState('')

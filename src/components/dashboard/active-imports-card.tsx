@@ -1,5 +1,5 @@
 import { Ship } from 'lucide-react'
-import { DashboardPanel } from './dashboard-components'
+import { DashboardPanel } from '@/components/dashboard/dashboard-components'
 
 export function ActiveImportsCard({ number, supplier, status }: { number: string; supplier: string; status: string }) {
   return <DashboardPanel title="Importaciones activas" icon={Ship} titleClassName="text-brand">

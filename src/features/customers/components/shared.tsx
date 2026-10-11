@@ -1,4 +1,4 @@
-import { type Customer,type CustomerStatus } from '../services/customer-api.service';
+import { type Customer,type CustomerStatus } from '@/features/customers/services/customer-api.service';
 
 export const emptyCustomer = (): Omit<Customer, 'id'> => ({ name: '', ruc: '', phone: '', email: '', address: '', note: '', status: 'Activo' })
 

@@ -1,8 +1,8 @@
 import { ExternalLink,FileText,Package } from 'lucide-react'
-import { Button } from '../../../../components/ui/button'
-import { Dialog } from '../../../../components/ui/dialog'
-import { type Purchase } from '../../services/purchase-api.service'
-import { money,Status } from '../shared'
+import { Button } from '@/components/ui/button'
+import { Dialog } from '@/components/ui/dialog'
+import { type Purchase } from '@/features/purchases/services/purchase-api.service'
+import { money,Status } from '@/features/purchases/components/shared'
 
 export function DetailDialog({ purchase, onClose }: { purchase: Purchase; onClose: () => void }) {
   const currency = purchase.currency === 'PEN' ? 'S/ ' : 'USD '

@@ -1,6 +1,6 @@
 import { Navigate, Outlet } from 'react-router-dom'
-import { useAuth } from '../../../features/auth/hooks/use-auth'
-import { PATHS } from '../constants/paths'
+import { useAuth } from '@/features/auth/hooks/use-auth'
+import { PATHS } from '@/app/router/constants/paths'
 
 export function PublicRoute() {
   const { isAuthenticated, isInitializing } = useAuth()

@@ -1,13 +1,13 @@
 import { Pencil,Plus,X } from 'lucide-react'
 import { Fragment,useEffect,useMemo,useRef,useState,type FormEvent } from 'react'
-import { Button } from '../../../../components/ui/button'
-import { Dialog } from '../../../../components/ui/dialog'
-import { Input } from '../../../../components/ui/input'
-import { ProductWizard } from '../../../products/components/product-wizard'
-import { loadCatalog } from '../../../products/services/product-api.service'
-import type { ProductBase,ProductVariant } from '../../../products/types/product.types'
-import { createPurchase,removePurchaseDocument,uploadPurchaseDocument,type PurchaseCatalog,type UploadedPurchaseDocument } from '../../services/purchase-api.service'
-import { CatalogPicker,DateField,DraftLine,Field,money,PurchaseDocumentDropzone,Select,SupplierPicker,today,variableSubcategoryPrefix } from '../shared'
+import { Button } from '@/components/ui/button'
+import { Dialog } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { ProductWizard } from '@/features/products/components/product-wizard'
+import { loadCatalog } from '@/features/products/services/product-api.service'
+import type { ProductBase,ProductVariant } from '@/features/products/types/product.types'
+import { createPurchase,removePurchaseDocument,uploadPurchaseDocument,type PurchaseCatalog,type UploadedPurchaseDocument } from '@/features/purchases/services/purchase-api.service'
+import { CatalogPicker,DateField,DraftLine,Field,money,PurchaseDocumentDropzone,Select,SupplierPicker,today,variableSubcategoryPrefix } from '@/features/purchases/components/shared'
 
 export function PurchaseDialog({ catalog, productsCatalog, saving, onClose, onSave }: { catalog: PurchaseCatalog; productsCatalog: Awaited<ReturnType<typeof loadCatalog>>; saving: boolean; onClose: () => void; onSave: (payload: Parameters<typeof createPurchase>[0]) => Promise<void> }) {
   const [supplierName, setSupplierName] = useState(''); const [supplierId, setSupplierId] = useState(''); const [invoice, setInvoice] = useState(''); const [date, setDate] = useState(today); const [receiptDate, setReceiptDate] = useState(today); const [currency, setCurrency] = useState<'PEN' | 'USD'>('PEN'); const [attachments, setAttachments] = useState<UploadedPurchaseDocument[]>([]); const [uploading, setUploading] = useState(false); const [attachmentError, setAttachmentError] = useState(''); const [formError, setFormError] = useState(''); const [isSubmitting, setIsSubmitting] = useState(false); const [lines, setLines] = useState<DraftLine[]>([{ productId: '', presentationId: '', variableSubcategoryId: '', isVariable: false, warehouseId: catalog.warehouses[0]?.id ?? '', quantity: '', price: '' }]); const input = useRef<HTMLInputElement>(null)

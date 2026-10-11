@@ -1,12 +1,12 @@
 import { useState,type FormEvent } from 'react'
-import { Button } from '../../../../components/ui/button'
-import { Dialog } from '../../../../components/ui/dialog'
-import { Input } from '../../../../components/ui/input'
-import { departments,peruLocations } from '../../data/peru-locations'
+import { Button } from '@/components/ui/button'
+import { Dialog } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { departments,peruLocations } from '@/features/inventory/data/peru-locations'
 import {
 type Warehouse,type WarehouseResponsible
-} from '../../services/inventory-api.service'
-import { Field,LocationPicker,ResponsiblePicker,Select,WarehousePayload } from '../warehouses-shared'
+} from '@/features/inventory/services/inventory-api.service'
+import { Field,LocationPicker,ResponsiblePicker,Select,WarehousePayload } from '@/features/inventory/components/warehouses-shared'
 
 export function WarehouseDialog({ item, responsibles, loadingResponsibles, saving, onClose, onSave }: {
   item?: Warehouse; responsibles: WarehouseResponsible[]; loadingResponsibles: boolean; saving: boolean; onClose: () => void; onSave: (payload: WarehousePayload) => void

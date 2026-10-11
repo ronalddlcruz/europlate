@@ -9,7 +9,7 @@ import type {
 AttributeDefinition,
 ConfiguredAttribute,
 ProductSubcategory
-} from "../types/product.types";
+} from "@/features/products/types/product.types";
 
 export const uid = () => `draft-${crypto.randomUUID()}`;
 
