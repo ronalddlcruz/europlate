@@ -1,4 +1,4 @@
-import { DashboardMetric } from '../../../components/dashboard/dashboard-components'
+import { DashboardMetric } from '@/components/dashboard/dashboard-components'
 
 export function DashboardMetrics({ periodLabel, purchasesPen, nationalPurchaseCount, purchasesUnconvertedUsd, purchasesUsdRate, activeProducts, imports, totalStock, chart }: { periodLabel: string; purchasesPen: number; nationalPurchaseCount: number; purchasesUnconvertedUsd: number; purchasesUsdRate: number | null; activeProducts: number; imports: number; totalStock: number; chart: number[] }) {
   const money = new Intl.NumberFormat('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(purchasesPen)

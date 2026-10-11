@@ -1,86 +1,674 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Boxes, ChevronDown, ClipboardList, Search, SlidersHorizontal, Sparkles, Tags, X } from 'lucide-react'
-import { Button } from '../../../components/ui/button'
-import { Dialog } from '../../../components/ui/dialog'
-import { Input } from '../../../components/ui/input'
-import type { Attribute, ProductBase, ProductCategory, ProductRole, ProductStatus, ProductVariant, Unit } from '../types/product.types'
+import {
+  Boxes,
+  ChevronDown,
+  ClipboardList,
+  Search,
+  SlidersHorizontal,
+  Sparkles,
+  Tags,
+  X,
+} from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Dialog } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import type {
+  Attribute,
+  ProductBase,
+  ProductCategory,
+  ProductRole,
+  ProductStatus,
+  ProductVariant,
+  Unit,
+} from '@/features/products/types/product.types'
 
 type SaveValue = { base: ProductBase; variants: ProductVariant[] }
-type Props = { item?: ProductBase; variants?: ProductVariant[]; products: ProductBase[]; categories: ProductCategory[]; units: Unit[]; onClose: () => void; onSave: (value: SaveValue) => void | Promise<void>; presetSubcategoryId?: string; saveLabel?: string; floating?: boolean; inline?: boolean; readOnly?: boolean }
+type Props = {
+  item?: ProductBase
+  variants?: ProductVariant[]
+  categories: ProductCategory[]
+  units: Unit[]
+  onClose: () => void
+  onSave: (value: SaveValue) => void | Promise<void>
+  presetSubcategoryId?: string
+  saveLabel?: string
+  floating?: boolean
+  inline?: boolean
+  readOnly?: boolean
+}
 type PickerItem = { id: string; name: string; code?: string | null }
 
 const roles: ProductRole[] = ['Mercadería', 'Insumo', 'Producto terminado']
 const uid = () => crypto.randomUUID()
-const num = (value: string, fallback: number) => Number.isFinite(Number(value)) ? Number(value) : fallback
+const num = (value: string, fallback: number) =>
+  Number.isFinite(Number(value)) ? Number(value) : fallback
 // Cada especificación se presenta como una sola pieza: valor + sufijo.
 // Así el texto automático queda, por ejemplo, "16cal · 12g".
-const description = (attributes: Attribute[], values: Record<string, string>) => attributes.map(attribute => values[attribute.id]?.trim() ? `${values[attribute.id].trim()}${attribute.suffix?.trim() ?? ''}` : '').filter(Boolean).join(' ')
-const isAvailableAttribute = (attribute: Attribute) => attribute.status !== 'Inactivo' && attribute.definitionStatus !== 'Inactivo'
+const description = (attributes: Attribute[], values: Record<string, string>) =>
+  attributes
+    .map((attribute) =>
+      values[attribute.id]?.trim()
+        ? `${values[attribute.id].trim()}${attribute.suffix?.trim() ?? ''}`
+        : '',
+    )
+    .filter(Boolean)
+    .join(' ')
+const isAvailableAttribute = (attribute: Attribute) =>
+  attribute.status !== 'Inactivo' && attribute.definitionStatus !== 'Inactivo'
 
-function ClassificationPicker({ items, value, placeholder, disabled, onChange }: { items: PickerItem[]; value: string; placeholder: string; disabled?: boolean; onChange: (id: string) => void }) {
+function ClassificationPicker({
+  items,
+  value,
+  placeholder,
+  disabled,
+  onChange,
+}: {
+  items: PickerItem[]
+  value: string
+  placeholder: string
+  disabled?: boolean
+  onChange: (id: string) => void
+}) {
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
-  const selected = items.find(item => item.id === value)
-  const filtered = items.filter(item => `${item.name} ${item.code ?? ''}`.toLocaleLowerCase().includes(query.toLocaleLowerCase()))
+  const selected = items.find((item) => item.id === value)
+  const filtered = items.filter((item) =>
+    `${item.name} ${item.code ?? ''}`.toLocaleLowerCase().includes(query.toLocaleLowerCase()),
+  )
 
-  useEffect(() => { setQuery(selected?.name ?? '') }, [selected?.name])
   useEffect(() => {
-    const close = (event: MouseEvent) => { if (ref.current && !ref.current.contains(event.target as Node)) { setOpen(false); setQuery(selected?.name ?? '') } }
+    setQuery(selected?.name ?? '')
+  }, [selected?.name])
+  useEffect(() => {
+    const close = (event: MouseEvent) => {
+      if (ref.current && !ref.current.contains(event.target as Node)) {
+        setOpen(false)
+        setQuery(selected?.name ?? '')
+      }
+    }
     document.addEventListener('mousedown', close)
     return () => document.removeEventListener('mousedown', close)
   }, [selected?.name])
 
-  return <div ref={ref} className="relative"><div className={`flex h-11 items-center rounded-md border bg-white px-3 transition ${disabled ? 'cursor-not-allowed border-border bg-slate-50 text-slate-400' : open ? 'border-brand ring-1 ring-brand' : 'border-border hover:border-blue-200'}`}><Search className="mr-2 h-4 w-4 shrink-0 text-slate-400" /><input disabled={disabled} value={query} onFocus={() => { if (!open) setQuery(''); setOpen(true) }} onChange={event => { setQuery(event.target.value); setOpen(true) }} placeholder={placeholder} className="min-w-0 flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-slate-400 disabled:cursor-not-allowed" /><button type="button" disabled={disabled} onClick={() => { if (!open) setQuery(''); setOpen(current => !current) }} aria-label={`Mostrar ${placeholder}`} className="ml-2 text-slate-400 disabled:cursor-not-allowed"><ChevronDown className="h-4 w-4" /></button></div>{open && !disabled && <div className="absolute z-50 mt-1 w-full overflow-hidden rounded-md border border-border bg-white shadow-panel"><p className="border-b border-border px-3 py-2 text-[11px] font-semibold uppercase tracking-[.4px] text-muted">Resultados · {filtered.length}</p><div className="max-h-56 overflow-y-auto">{filtered.map(item => <button type="button" key={item.id} onClick={() => { onChange(item.id); setOpen(false) }} className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition hover:bg-blue-50"><span className="min-w-0 flex-1"><span className="block text-sm font-medium text-ink">{item.name}</span>{item.code && <span className="mt-0.5 block text-xs text-muted">{item.code}</span>}</span></button>)}{!filtered.length && <p className="p-4 text-center text-sm text-muted">No se encontraron resultados.</p>}</div></div>}</div>
+  return (
+    <div ref={ref} className="relative">
+      <div
+        className={`flex h-11 items-center rounded-md border bg-white px-3 transition ${disabled ? 'cursor-not-allowed border-border bg-slate-50 text-slate-400' : open ? 'border-brand ring-1 ring-brand' : 'border-border hover:border-blue-200'}`}
+      >
+        <Search className="mr-2 h-4 w-4 shrink-0 text-slate-400" />
+        <input
+          disabled={disabled}
+          value={query}
+          onFocus={() => {
+            if (!open) setQuery('')
+            setOpen(true)
+          }}
+          onChange={(event) => {
+            setQuery(event.target.value)
+            setOpen(true)
+          }}
+          placeholder={placeholder}
+          className="min-w-0 flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-slate-400 disabled:cursor-not-allowed"
+        />
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={() => {
+            if (!open) setQuery('')
+            setOpen((current) => !current)
+          }}
+          aria-label={`Mostrar ${placeholder}`}
+          className="ml-2 text-slate-400 disabled:cursor-not-allowed"
+        >
+          <ChevronDown className="h-4 w-4" />
+        </button>
+      </div>
+      {open && !disabled && (
+        <div className="absolute z-50 mt-1 w-full overflow-hidden rounded-md border border-border bg-white shadow-panel">
+          <p className="border-b border-border px-3 py-2 text-[11px] font-semibold uppercase tracking-[.4px] text-muted">
+            Resultados · {filtered.length}
+          </p>
+          <div className="max-h-56 overflow-y-auto">
+            {filtered.map((item) => (
+              <button
+                type="button"
+                key={item.id}
+                onClick={() => {
+                  onChange(item.id)
+                  setOpen(false)
+                }}
+                className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition hover:bg-blue-50"
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-medium text-ink">{item.name}</span>
+                  {item.code && (
+                    <span className="mt-0.5 block text-xs text-muted">{item.code}</span>
+                  )}
+                </span>
+              </button>
+            ))}
+            {!filtered.length && (
+              <p className="p-4 text-center text-sm text-muted">No se encontraron resultados.</p>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
 }
 
-export function ProductWizard({ item, variants = [], products: _products, categories, units, onClose, onSave, presetSubcategoryId, saveLabel = 'Guardar producto', floating = false, inline = false, readOnly = false }: Props) {
+export function ProductWizard({
+  item,
+  variants = [],
+  categories,
+  units,
+  onClose,
+  onSave,
+  presetSubcategoryId,
+  saveLabel = 'Guardar producto',
+  floating = false,
+  inline = false,
+  readOnly = false,
+}: Props) {
   const variant = variants[0]
-  const fixedCategory = categories.find(category => category.subcategories.some(subcategory => subcategory.id === presetSubcategoryId))
-  const fixedSubcategory = fixedCategory?.subcategories.find(subcategory => subcategory.id === presetSubcategoryId)
+  const fixedCategory = categories.find((category) =>
+    category.subcategories.some((subcategory) => subcategory.id === presetSubcategoryId),
+  )
+  const fixedSubcategory = fixedCategory?.subcategories.find(
+    (subcategory) => subcategory.id === presetSubcategoryId,
+  )
   const [categoryId, setCategoryId] = useState(item?.categoryId ?? fixedCategory?.id ?? '')
-  const [subcategoryId, setSubcategoryId] = useState(item?.subcategoryId ?? presetSubcategoryId ?? '')
-  const [productRoles, setProductRoles] = useState<ProductRole[]>(item?.roles?.length ? item.roles : ['Mercadería'])
+  const [subcategoryId, setSubcategoryId] = useState(
+    item?.subcategoryId ?? presetSubcategoryId ?? '',
+  )
+  const [productRoles, setProductRoles] = useState<ProductRole[]>(
+    item?.roles?.length ? item.roles : ['Mercadería'],
+  )
   const [status, setStatus] = useState<ProductStatus>(item?.status ?? 'Activo')
-  const [attributes, setAttributes] = useState<Attribute[]>(item?.attributes ?? (fixedCategory && fixedSubcategory ? [...fixedCategory.attributes, ...fixedSubcategory.attributes].filter(isAvailableAttribute) : []))
+  const [attributes, setAttributes] = useState<Attribute[]>(
+    item?.attributes ??
+      (fixedCategory && fixedSubcategory
+        ? [...fixedCategory.attributes, ...fixedSubcategory.attributes].filter(isAvailableAttribute)
+        : []),
+  )
   const [values, setValues] = useState<Record<string, string>>(variant?.values ?? {})
-  const [unit, setUnit] = useState(variant?.unit ?? units.find(unit => unit.status === 'Activo')?.code ?? '')
+  const [unit, setUnit] = useState(
+    variant?.unit ?? units.find((unit) => unit.status === 'Activo')?.code ?? '',
+  )
   const [factor, setFactor] = useState(String(variant?.factor ?? 1))
   const [minimum, setMinimum] = useState(String(variant?.minimum ?? 0))
   // Habilitado temporalmente para la toma física inicial del inventario.
   const [stock, setStock] = useState(String(variant?.stock ?? 0))
-  const [openingUnitCostCurrency, setOpeningUnitCostCurrency] = useState<'PEN' | 'USD'>(variant?.openingUnitCostCurrency ?? (variant?.openingUnitCostUsd ? 'USD' : 'PEN'))
-  const [openingUnitCost, setOpeningUnitCost] = useState(String((variant?.openingUnitCostCurrency === 'USD' || (!variant?.openingUnitCostCurrency && variant?.openingUnitCostUsd)) ? variant?.openingUnitCostUsd ?? 0 : variant?.openingUnitCostPen ?? 0))
+  const [openingUnitCostCurrency, setOpeningUnitCostCurrency] = useState<'PEN' | 'USD'>(
+    variant?.openingUnitCostCurrency ?? (variant?.openingUnitCostUsd ? 'USD' : 'PEN'),
+  )
+  const [openingUnitCost, setOpeningUnitCost] = useState(
+    String(
+      variant?.openingUnitCostCurrency === 'USD' ||
+        (!variant?.openingUnitCostCurrency && variant?.openingUnitCostUsd)
+        ? (variant?.openingUnitCostUsd ?? 0)
+        : (variant?.openingUnitCostPen ?? 0),
+    ),
+  )
   const [automatic, setAutomatic] = useState(true)
   const [manualName, setManualName] = useState(item?.name ?? '')
   const [error, setError] = useState('')
-  const activeCategories = categories.filter(category => category.status === 'Activo')
+  const activeCategories = categories.filter((category) => category.status === 'Activo')
   // El producto puede pertenecer a una subcategoría variable. Debe mostrarse
   // siempre al abrirlo, aunque el selector se haya cargado después del producto.
-  const category = activeCategories.find(candidate => candidate.id === categoryId) ?? categories.find(candidate => candidate.id === categoryId)
-  const categoriesForPicker = activeCategories.some(candidate => candidate.id === categoryId) || !category ? activeCategories : [...activeCategories, category]
-  const subcategories = category?.subcategories.filter(candidate => candidate.status === 'Activo' || candidate.id === subcategoryId) ?? []
-  const subcategory = subcategories.find(candidate => candidate.id === subcategoryId)
+  const category =
+    activeCategories.find((candidate) => candidate.id === categoryId) ??
+    categories.find((candidate) => candidate.id === categoryId)
+  const categoriesForPicker =
+    activeCategories.some((candidate) => candidate.id === categoryId) || !category
+      ? activeCategories
+      : [...activeCategories, category]
+  const subcategories =
+    category?.subcategories.filter(
+      (candidate) => candidate.status === 'Activo' || candidate.id === subcategoryId,
+    ) ?? []
+  const subcategory = subcategories.find((candidate) => candidate.id === subcategoryId)
   // Ocultar no es borrar: al guardar, `attributes` conserva la instantánea y
   // sus valores para que el nombre histórico del producto no se modifique.
   const visibleAttributes = attributes.filter(isAvailableAttribute)
-  const generatedName = useMemo(() => [category?.name, subcategory?.name, description(attributes, values)].filter(Boolean).join(' ') || 'Producto', [attributes, category?.name, subcategory?.name, values])
+  const generatedName = useMemo(
+    () =>
+      [category?.name, subcategory?.name, description(attributes, values)]
+        .filter(Boolean)
+        .join(' ') || 'Producto',
+    [attributes, category?.name, subcategory?.name, values],
+  )
   const name = automatic ? generatedName : manualName
-  const selectCategory = (id: string) => { const next = activeCategories.find(value => value.id === id); setCategoryId(id); setSubcategoryId(''); setAttributes((next?.attributes ?? []).filter(isAvailableAttribute)); setValues({}); setError('') }
-  const selectSubcategory = (id: string) => { const next = subcategories.find(value => value.id === id); setSubcategoryId(id); setAttributes([...(category?.attributes ?? []), ...(next?.attributes ?? [])].filter(isAvailableAttribute)); setValues({}); setError('') }
-  const save = async () => { const missing = attributes.find(attribute => attribute.required && !values[attribute.id]?.trim()); if (!category || (subcategories.length && !subcategory) || !productRoles.length || !unit || missing || !name.trim()) { setError(missing ? `Completa el atributo obligatorio: ${missing.name}.` : 'Completa los datos obligatorios del producto.'); return }; const initialCost = Math.max(0, num(openingUnitCost, 0)); const base: ProductBase = { id: item?.id ?? uid(), code: item?.code ?? '', name, categoryId: category.id, categoryName: category.name, subcategoryId: subcategory?.id ?? null, subcategoryName: subcategory?.name ?? null, roles: productRoles, status, variantType: 'Básico', immediateConsumption: !productRoles.includes('Insumo'), attributes }; await onSave({ base, variants: [{ id: variant?.id ?? uid(), baseId: base.id, code: variant?.code ?? '', name, values, unit, factor: Math.max(.001, num(factor, 1)), minimum: Math.max(0, num(minimum, 0)), stock: Math.max(0, num(stock, 0)), openingUnitCostCurrency, openingUnitCostPen: openingUnitCostCurrency === 'PEN' ? initialCost : null, openingUnitCostUsd: openingUnitCostCurrency === 'USD' ? initialCost : null, status }] }) }
+  const selectCategory = (id: string) => {
+    const next = activeCategories.find((value) => value.id === id)
+    setCategoryId(id)
+    setSubcategoryId('')
+    setAttributes((next?.attributes ?? []).filter(isAvailableAttribute))
+    setValues({})
+    setError('')
+  }
+  const selectSubcategory = (id: string) => {
+    const next = subcategories.find((value) => value.id === id)
+    setSubcategoryId(id)
+    setAttributes(
+      [...(category?.attributes ?? []), ...(next?.attributes ?? [])].filter(isAvailableAttribute),
+    )
+    setValues({})
+    setError('')
+  }
+  const save = async () => {
+    const missing = attributes.find(
+      (attribute) => attribute.required && !values[attribute.id]?.trim(),
+    )
+    if (
+      !category ||
+      (subcategories.length && !subcategory) ||
+      !productRoles.length ||
+      !unit ||
+      missing ||
+      !name.trim()
+    ) {
+      setError(
+        missing
+          ? `Completa el atributo obligatorio: ${missing.name}.`
+          : 'Completa los datos obligatorios del producto.',
+      )
+      return
+    }
+    const initialCost = Math.max(0, num(openingUnitCost, 0))
+    const base: ProductBase = {
+      id: item?.id ?? uid(),
+      code: item?.code ?? '',
+      name,
+      categoryId: category.id,
+      categoryName: category.name,
+      subcategoryId: subcategory?.id ?? null,
+      subcategoryName: subcategory?.name ?? null,
+      roles: productRoles,
+      status,
+      variantType: 'Básico',
+      immediateConsumption: !productRoles.includes('Insumo'),
+      attributes,
+    }
+    await onSave({
+      base,
+      variants: [
+        {
+          id: variant?.id ?? uid(),
+          baseId: base.id,
+          code: variant?.code ?? '',
+          name,
+          values,
+          unit,
+          factor: Math.max(0.001, num(factor, 1)),
+          minimum: Math.max(0, num(minimum, 0)),
+          stock: Math.max(0, num(stock, 0)),
+          openingUnitCostCurrency,
+          openingUnitCostPen: openingUnitCostCurrency === 'PEN' ? initialCost : null,
+          openingUnitCostUsd: openingUnitCostCurrency === 'USD' ? initialCost : null,
+          status,
+        },
+      ],
+    })
+  }
 
-  const classification = <Section number="1" title="Clasificación" icon={Tags}><div className="grid gap-4 md:grid-cols-2"><Field label="Categoría *"><ClassificationPicker items={categoriesForPicker} value={categoryId} onChange={selectCategory} disabled={readOnly} placeholder="Buscar categoría..." /></Field><Field label="Subcategoría"><ClassificationPicker items={subcategories} value={subcategoryId} onChange={selectSubcategory} disabled={readOnly || !category} placeholder={category ? 'Buscar subcategoría...' : 'Primero selecciona categoría'} /></Field></div><div className="mt-4 flex flex-wrap items-center gap-2 border-t border-dashed border-border pt-4"><span className="mr-1 text-xs font-semibold uppercase tracking-[.35px] text-slate-600">Uso del producto *</span>{roles.map(role => <button key={role} type="button" disabled={readOnly} onClick={() => setProductRoles(current => current.includes(role) ? current.filter(value => value !== role) : [...current, role])} className={`rounded-full border px-3 py-2 text-xs font-semibold disabled:cursor-default ${productRoles.includes(role) ? 'border-brand bg-blue-50 text-brand' : 'border-border text-ink hover:border-blue-200'}`}>{productRoles.includes(role) && <span className="mr-1.5">✓</span>}{role}</button>)}<select disabled={readOnly} value={status} onChange={event => setStatus(event.target.value as ProductStatus)} className="input ml-auto w-auto disabled:cursor-default"><option>Activo</option><option>Inactivo</option></select></div></Section>
-  const identification = <Section number="2" title="Identificación comercial" icon={Sparkles}><div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3"><Field label="Unidad de inventario *"><ClassificationPicker items={units.filter(value => value.status === 'Activo').map(value => ({ id: value.code, name: value.description }))} value={unit} onChange={setUnit} disabled={readOnly} placeholder="Buscar unidad..." /></Field><Field label="Factor de conversión"><Input disabled={readOnly} value={factor} onChange={event => setFactor(event.target.value)} /></Field><Field label="Stock mínimo"><Input disabled={readOnly} value={minimum} onChange={event => setMinimum(event.target.value)} /></Field></div></Section>
-  const automaticDescription = <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3"><label className="flex items-center gap-2 text-xs font-semibold text-emerald-900"><input disabled={readOnly} type="checkbox" checked={automatic} onChange={event => { if (!event.target.checked) setManualName(generatedName); setAutomatic(event.target.checked) }} />Descripción automática</label>{automatic ? <p className="mt-2 text-sm font-semibold">{readOnly && item ? item.name : name}</p> : <Input disabled={readOnly} className="mt-2" value={manualName} onChange={event => setManualName(event.target.value)} />}</div>
-  const specifications = <Section number="3" title="Especificaciones" icon={ClipboardList}>{visibleAttributes.length ? <div className="grid gap-4 md:grid-cols-3">{visibleAttributes.map(attribute => <Field key={attribute.id} label={`${attribute.name}${attribute.required ? ' *' : ''}`}><Input disabled={readOnly} type={attribute.type === 'Numérico' ? 'number' : 'text'} value={values[attribute.id] ?? ''} onChange={event => setValues(current => ({ ...current, [attribute.id]: event.target.value }))} placeholder={attribute.suffix ? `En ${attribute.suffix}` : `Ingresa ${attribute.name.toLowerCase()}`} /><p className="mt-1 text-xs text-muted">{`${attribute.type}${attribute.suffix ? ` · ${attribute.suffix}` : ''}`}</p></Field>)}</div> : <p className="text-sm text-muted">No hay atributos activos configurados.</p>}{automaticDescription}</Section>
-  const initialInventory = <Section number="4" title="Datos de carga inicial" icon={Boxes}><div className="grid gap-4 md:grid-cols-2"><Field label={`Stock actual (${(units.find(value => value.code === unit)?.description ?? unit) || 'UM'})`}><Input disabled={readOnly} type="number" min="0" step="0.001" value={stock} onChange={event => setStock(event.target.value)} /></Field><Field label="Moneda del costo actual"><select disabled={readOnly} value={openingUnitCostCurrency} onChange={event => { setOpeningUnitCostCurrency(event.target.value as 'PEN' | 'USD'); setOpeningUnitCost('0') }} className="input w-full disabled:cursor-default"><option value="PEN">Soles (S/)</option><option value="USD">Dólares (USD)</option></select></Field><Field label={`Costo actual por unidad (${openingUnitCostCurrency === 'USD' ? 'USD' : 'S/'})`}><Input disabled={readOnly} type="number" min="0" step="0.0001" value={openingUnitCost} onChange={event => setOpeningUnitCost(event.target.value)} /></Field></div></Section>
-  const body = <div className={`space-y-4 ${presetSubcategoryId ? '[&_h2_span]:hidden' : ''}`}><div className="flex items-center gap-3 rounded-lg border border-blue-100 bg-[#f6f9ff] px-4 py-3"><span className="grid h-9 w-9 place-items-center rounded-lg bg-brand text-white"><Boxes className="h-4 w-4" /></span><div><p className="text-sm font-semibold">Registro rápido de catálogo</p><p className="text-xs text-muted">Completa los datos antes de registrar la compra.</p></div></div>{!presetSubcategoryId && classification}{presetSubcategoryId ? <>{specifications}{identification}</> : <>{identification}{specifications}{initialInventory}</>}{error && <p className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}</div>
-  const floatingEditor = <><div className="relative flex items-center justify-between gap-3"><div className="flex min-w-0 items-center gap-2"><span className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-blue-50 text-brand"><SlidersHorizontal className="h-4 w-4" /></span><div className="min-w-0"><h4 className="text-sm font-semibold text-ink">Atributos del producto</h4><p className="truncate text-xs text-muted">Completa las especificaciones de {fixedSubcategory?.name ?? 'este producto'}.</p></div></div><button type="button" onClick={onClose} className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700" aria-label="Cerrar atributos"><X className="h-4 w-4" /></button></div><div className="relative mt-2 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">{visibleAttributes.map(attribute => <Field key={attribute.id} label={`${attribute.name}${attribute.required ? ' *' : ''}`}><Input className="h-9" type={attribute.type === 'Numérico' ? 'number' : 'text'} value={values[attribute.id] ?? ''} onChange={event => setValues(current => ({ ...current, [attribute.id]: event.target.value }))} placeholder={attribute.suffix ? `En ${attribute.suffix}` : `Ingresa ${attribute.name.toLowerCase()}`} /></Field>)}</div>{!visibleAttributes.length && <p className="relative mt-2 text-sm text-muted">Esta subcategoría no tiene atributos activos configurados.</p>}<div className="relative mt-2 flex flex-wrap items-center justify-between gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2"><span className="text-[10px] font-semibold uppercase tracking-[.3px] text-emerald-800">Descripción</span><p className="min-w-0 flex-1 truncate text-sm font-semibold text-emerald-950">{name}</p></div>{error && <p className="relative mt-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}<div className="relative mt-2 flex justify-end gap-2"><Button type="button" variant="outline" size="sm" onClick={onClose}>Cancelar</Button><Button type="button" size="sm" onClick={() => void save()}>{saveLabel}</Button></div></>
+  const classification = (
+    <Section number="1" title="Clasificación" icon={Tags}>
+      <div className="grid gap-4 md:grid-cols-2">
+        <Field label="Categoría *">
+          <ClassificationPicker
+            items={categoriesForPicker}
+            value={categoryId}
+            onChange={selectCategory}
+            disabled={readOnly}
+            placeholder="Buscar categoría..."
+          />
+        </Field>
+        <Field label="Subcategoría">
+          <ClassificationPicker
+            items={subcategories}
+            value={subcategoryId}
+            onChange={selectSubcategory}
+            disabled={readOnly || !category}
+            placeholder={category ? 'Buscar subcategoría...' : 'Primero selecciona categoría'}
+          />
+        </Field>
+      </div>
+      <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-dashed border-border pt-4">
+        <span className="mr-1 text-xs font-semibold uppercase tracking-[.35px] text-slate-600">
+          Uso del producto *
+        </span>
+        {roles.map((role) => (
+          <button
+            key={role}
+            type="button"
+            disabled={readOnly}
+            onClick={() =>
+              setProductRoles((current) =>
+                current.includes(role)
+                  ? current.filter((value) => value !== role)
+                  : [...current, role],
+              )
+            }
+            className={`rounded-full border px-3 py-2 text-xs font-semibold disabled:cursor-default ${productRoles.includes(role) ? 'border-brand bg-blue-50 text-brand' : 'border-border text-ink hover:border-blue-200'}`}
+          >
+            {productRoles.includes(role) && <span className="mr-1.5">✓</span>}
+            {role}
+          </button>
+        ))}
+        <select
+          disabled={readOnly}
+          value={status}
+          onChange={(event) => setStatus(event.target.value as ProductStatus)}
+          className="input ml-auto w-auto disabled:cursor-default"
+        >
+          <option>Activo</option>
+          <option>Inactivo</option>
+        </select>
+      </div>
+    </Section>
+  )
+  const identification = (
+    <Section number="2" title="Identificación comercial" icon={Sparkles}>
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <Field label="Unidad de inventario *">
+          <ClassificationPicker
+            items={units
+              .filter((value) => value.status === 'Activo')
+              .map((value) => ({ id: value.code, name: value.description }))}
+            value={unit}
+            onChange={setUnit}
+            disabled={readOnly}
+            placeholder="Buscar unidad..."
+          />
+        </Field>
+        <Field label="Factor de conversión">
+          <Input
+            disabled={readOnly}
+            value={factor}
+            onChange={(event) => setFactor(event.target.value)}
+          />
+        </Field>
+        <Field label="Stock mínimo">
+          <Input
+            disabled={readOnly}
+            value={minimum}
+            onChange={(event) => setMinimum(event.target.value)}
+          />
+        </Field>
+      </div>
+    </Section>
+  )
+  const automaticDescription = (
+    <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3">
+      <label className="flex items-center gap-2 text-xs font-semibold text-emerald-900">
+        <input
+          disabled={readOnly}
+          type="checkbox"
+          checked={automatic}
+          onChange={(event) => {
+            if (!event.target.checked) setManualName(generatedName)
+            setAutomatic(event.target.checked)
+          }}
+        />
+        Descripción automática
+      </label>
+      {automatic ? (
+        <p className="mt-2 text-sm font-semibold">{readOnly && item ? item.name : name}</p>
+      ) : (
+        <Input
+          disabled={readOnly}
+          className="mt-2"
+          value={manualName}
+          onChange={(event) => setManualName(event.target.value)}
+        />
+      )}
+    </div>
+  )
+  const specifications = (
+    <Section number="3" title="Especificaciones" icon={ClipboardList}>
+      {visibleAttributes.length ? (
+        <div className="grid gap-4 md:grid-cols-3">
+          {visibleAttributes.map((attribute) => (
+            <Field key={attribute.id} label={`${attribute.name}${attribute.required ? ' *' : ''}`}>
+              <Input
+                disabled={readOnly}
+                type={attribute.type === 'Numérico' ? 'number' : 'text'}
+                value={values[attribute.id] ?? ''}
+                onChange={(event) =>
+                  setValues((current) => ({ ...current, [attribute.id]: event.target.value }))
+                }
+                placeholder={
+                  attribute.suffix
+                    ? `En ${attribute.suffix}`
+                    : `Ingresa ${attribute.name.toLowerCase()}`
+                }
+              />
+              <p className="mt-1 text-xs text-muted">{`${attribute.type}${attribute.suffix ? ` · ${attribute.suffix}` : ''}`}</p>
+            </Field>
+          ))}
+        </div>
+      ) : (
+        <p className="text-sm text-muted">No hay atributos activos configurados.</p>
+      )}
+      {automaticDescription}
+    </Section>
+  )
+  const initialInventory = (
+    <Section number="4" title="Datos de carga inicial" icon={Boxes}>
+      <div className="grid gap-4 md:grid-cols-2">
+        <Field
+          label={`Stock actual (${(units.find((value) => value.code === unit)?.description ?? unit) || 'UM'})`}
+        >
+          <Input
+            disabled={readOnly}
+            type="number"
+            min="0"
+            step="0.001"
+            value={stock}
+            onChange={(event) => setStock(event.target.value)}
+          />
+        </Field>
+        <Field label="Moneda del costo actual">
+          <select
+            disabled={readOnly}
+            value={openingUnitCostCurrency}
+            onChange={(event) => {
+              setOpeningUnitCostCurrency(event.target.value as 'PEN' | 'USD')
+              setOpeningUnitCost('0')
+            }}
+            className="input w-full disabled:cursor-default"
+          >
+            <option value="PEN">Soles (S/)</option>
+            <option value="USD">Dólares (USD)</option>
+          </select>
+        </Field>
+        <Field
+          label={`Costo actual por unidad (${openingUnitCostCurrency === 'USD' ? 'USD' : 'S/'})`}
+        >
+          <Input
+            disabled={readOnly}
+            type="number"
+            min="0"
+            step="0.0001"
+            value={openingUnitCost}
+            onChange={(event) => setOpeningUnitCost(event.target.value)}
+          />
+        </Field>
+      </div>
+    </Section>
+  )
+  const body = (
+    <div className={`space-y-4 ${presetSubcategoryId ? '[&_h2_span]:hidden' : ''}`}>
+      <div className="flex items-center gap-3 rounded-lg border border-blue-100 bg-[#f6f9ff] px-4 py-3">
+        <span className="grid h-9 w-9 place-items-center rounded-lg bg-brand text-white">
+          <Boxes className="h-4 w-4" />
+        </span>
+        <div>
+          <p className="text-sm font-semibold">Registro rápido de catálogo</p>
+          <p className="text-xs text-muted">Completa los datos antes de registrar la compra.</p>
+        </div>
+      </div>
+      {!presetSubcategoryId && classification}
+      {presetSubcategoryId ? (
+        <>
+          {specifications}
+          {identification}
+        </>
+      ) : (
+        <>
+          {identification}
+          {specifications}
+          {initialInventory}
+        </>
+      )}
+      {error && (
+        <p className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          {error}
+        </p>
+      )}
+    </div>
+  )
+  const floatingEditor = (
+    <>
+      <div className="relative flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-blue-50 text-brand">
+            <SlidersHorizontal className="h-4 w-4" />
+          </span>
+          <div className="min-w-0">
+            <h4 className="text-sm font-semibold text-ink">Atributos del producto</h4>
+            <p className="truncate text-xs text-muted">
+              Completa las especificaciones de {fixedSubcategory?.name ?? 'este producto'}.
+            </p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+          aria-label="Cerrar atributos"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+      <div className="relative mt-2 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+        {visibleAttributes.map((attribute) => (
+          <Field key={attribute.id} label={`${attribute.name}${attribute.required ? ' *' : ''}`}>
+            <Input
+              className="h-9"
+              type={attribute.type === 'Numérico' ? 'number' : 'text'}
+              value={values[attribute.id] ?? ''}
+              onChange={(event) =>
+                setValues((current) => ({ ...current, [attribute.id]: event.target.value }))
+              }
+              placeholder={
+                attribute.suffix
+                  ? `En ${attribute.suffix}`
+                  : `Ingresa ${attribute.name.toLowerCase()}`
+              }
+            />
+          </Field>
+        ))}
+      </div>
+      {!visibleAttributes.length && (
+        <p className="relative mt-2 text-sm text-muted">
+          Esta subcategoría no tiene atributos activos configurados.
+        </p>
+      )}
+      <div className="relative mt-2 flex flex-wrap items-center justify-between gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2">
+        <span className="text-[10px] font-semibold uppercase tracking-[.3px] text-emerald-800">
+          Descripción
+        </span>
+        <p className="min-w-0 flex-1 truncate text-sm font-semibold text-emerald-950">{name}</p>
+      </div>
+      {error && (
+        <p className="relative mt-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          {error}
+        </p>
+      )}
+      <div className="relative mt-2 flex justify-end gap-2">
+        <Button type="button" variant="outline" size="sm" onClick={onClose}>
+          Cancelar
+        </Button>
+        <Button type="button" size="sm" onClick={() => void save()}>
+          {saveLabel}
+        </Button>
+      </div>
+    </>
+  )
   if (floating && inline) return <section className="p-3">{floatingEditor}</section>
-  if (floating) return <section className="absolute left-0 top-[calc(100%+8px)] z-50 w-[min(70rem,calc(100vw-4rem))] max-w-[calc(100vw-3rem)] rounded-lg border border-blue-200 bg-white p-3 shadow-panel before:absolute before:-top-2 before:left-10 before:h-4 before:w-4 before:rotate-45 before:border-l before:border-t before:border-blue-200 before:bg-white">{floatingEditor}</section>
-  return <Dialog open wide title={readOnly ? 'Detalle del producto' : item ? 'Editar producto' : 'Nuevo producto'} onClose={onClose} footer={readOnly ? <Button variant="outline" onClick={onClose}>Cerrar</Button> : <><Button variant="outline" onClick={onClose}>Cancelar</Button><Button onClick={() => void save()}>{saveLabel}</Button></>}><form onSubmit={event => { event.preventDefault(); if (!readOnly) void save() }}>{body}</form></Dialog>
+  if (floating)
+    return (
+      <section className="absolute left-0 top-[calc(100%+8px)] z-50 w-[min(70rem,calc(100vw-4rem))] max-w-[calc(100vw-3rem)] rounded-lg border border-blue-200 bg-white p-3 shadow-panel before:absolute before:-top-2 before:left-10 before:h-4 before:w-4 before:rotate-45 before:border-l before:border-t before:border-blue-200 before:bg-white">
+        {floatingEditor}
+      </section>
+    )
+  return (
+    <Dialog
+      open
+      wide
+      title={readOnly ? 'Detalle del producto' : item ? 'Editar producto' : 'Nuevo producto'}
+      onClose={onClose}
+      footer={
+        readOnly ? (
+          <Button variant="outline" onClick={onClose}>
+            Cerrar
+          </Button>
+        ) : (
+          <>
+            <Button variant="outline" onClick={onClose}>
+              Cancelar
+            </Button>
+            <Button onClick={() => void save()}>{saveLabel}</Button>
+          </>
+        )
+      }
+    >
+      <form
+        onSubmit={(event) => {
+          event.preventDefault()
+          if (!readOnly) void save()
+        }}
+      >
+        {body}
+      </form>
+    </Dialog>
+  )
 }
 
-function Section({ number, title, icon: Icon, children }: { number: string; title: string; icon: typeof Boxes; children: React.ReactNode }) { return <section className="rounded-xl border border-border bg-white p-5"><header className="mb-4 flex items-center gap-3"><span className="grid h-8 w-8 place-items-center rounded-lg bg-blue-50 text-brand"><Icon className="h-4 w-4" /></span><h2 className="text-[15px] font-semibold"><span className="mr-1.5 text-brand">{number}.</span>{title}</h2></header>{children}</section> }
-function Field({ label, children }: { label: string; children: React.ReactNode }) { return <label className="block"><span className="mb-1.5 block text-xs font-semibold text-slate-700">{label}</span>{children}</label> }
+function Section({
+  number,
+  title,
+  icon: Icon,
+  children,
+}: {
+  number: string
+  title: string
+  icon: typeof Boxes
+  children: React.ReactNode
+}) {
+  return (
+    <section className="rounded-xl border border-border bg-white p-5">
+      <header className="mb-4 flex items-center gap-3">
+        <span className="grid h-8 w-8 place-items-center rounded-lg bg-blue-50 text-brand">
+          <Icon className="h-4 w-4" />
+        </span>
+        <h2 className="text-[15px] font-semibold">
+          <span className="mr-1.5 text-brand">{number}.</span>
+          {title}
+        </h2>
+      </header>
+      {children}
+    </section>
+  )
+}
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="block">
+      <span className="mb-1.5 block text-xs font-semibold text-slate-700">{label}</span>
+      {children}
+    </label>
+  )
+}

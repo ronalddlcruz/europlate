@@ -1,6 +1,6 @@
 import { TrendingUp } from 'lucide-react'
-import { DashboardPanel } from '../../../components/dashboard/dashboard-components'
-import type { RotationProduct } from './dashboard-data'
+import { DashboardPanel } from '@/components/dashboard/dashboard-components'
+import type { RotationProduct } from '@/features/dashboard/components/dashboard-data'
 
 const number = new Intl.NumberFormat('es-PE', { maximumFractionDigits: 3 })
 

@@ -1,4 +1,4 @@
-import { api } from '../../../lib/api-client'
+import { api } from '@/lib/api-client'
 
 export type AgentStatus = 'Activo' | 'Inactivo'
 export type CustomsAgent = { id: string; name: string; ruc: string; contact: string; phone: string; email: string; status: AgentStatus }

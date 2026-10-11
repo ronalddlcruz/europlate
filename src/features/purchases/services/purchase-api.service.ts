@@ -1,4 +1,4 @@
-import { accessToken, api, apiBaseUrl, ApiError } from '../../../lib/api-client'
+import { api, apiClient } from '@/lib/api-client'
 
 export type PurchaseLine = { id: string; productId: string; presentationId: string; warehouseId: string; product: string; presentation: string; warehouse: string; unit: string; quantity: number; price: number }
 export type PurchaseAttachment = { name: string; size: number | null; mimeType: string | null; link: string | null }
@@ -14,6 +14,12 @@ export async function getPurchase(id: string) { return mapPurchase(await api<Api
 export async function loadPurchaseCatalog() { return api<PurchaseCatalog>('/api/purchases/catalog') }
 type PurchaseItemPayload = { productId: string; presentationId: string; warehouseId: string; quantity: number; unitPrice: number } | { variableSubcategoryId: string; name: string; values: Record<string, string>; unitCode: string; factor: number; minimumStock: number; roles: ('MERCHANDISE' | 'SUPPLY' | 'FINISHED_PRODUCT')[]; warehouseId: string; quantity: number; unitPrice: number }
 export async function createPurchase(payload: { supplierId: string; supplierInvoiceNumber: string; purchaseDate: string; receiptDate: string; currency: 'PEN' | 'USD'; items: PurchaseItemPayload[]; documents: UploadedPurchaseDocument[] }) { return mapPurchase(await api<ApiPurchase>('/api/purchases', { method: 'POST', body: JSON.stringify(payload) })) }
-export async function uploadPurchaseDocument(file: File) { const response = await fetch(`${apiBaseUrl}/api/purchases/documents`, { method: 'POST', headers: { 'Content-Type': 'application/pdf', 'X-File-Name': encodeURIComponent(file.name), ...(accessToken() && { Authorization: `Bearer ${accessToken()}` }) }, body: file }); const body = await response.json().catch(() => null); if (!response.ok) throw new ApiError(body?.error?.message ?? 'No se pudo subir el PDF.', response.status); return body.data as UploadedPurchaseDocument }
+export async function uploadPurchaseDocument(file: File): Promise<UploadedPurchaseDocument> {
+  return apiClient.uploadPdf<UploadedPurchaseDocument>(
+    '/api/purchases/documents',
+    file,
+    'No se pudo subir el PDF.',
+  )
+}
 export async function removePurchaseDocument(storageKey: string) { await api<void>('/api/purchases/documents', { method: 'DELETE', body: JSON.stringify({ storageKey }) }) }
 export async function deletePurchase(id: string) { await api<void>(`/api/purchases/${id}`, { method: 'DELETE' }) }

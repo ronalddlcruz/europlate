@@ -2,11 +2,11 @@ import { Boxes, ClipboardList, FileBarChart, LayoutDashboard, LogOut, Menu, Pack
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
-import { Button } from '../../components/ui/button'
-import { PageFrame } from '../../components/layout/page-frame'
-import { cn } from '../../lib/utils'
-import { getCurrentExchangeRate } from '../../features/settings/services/exchange-rate-api.service'
-import { useAuth } from '../../features/auth/hooks/use-auth'
+import { Button } from '@/components/ui/button'
+import { PageFrame } from '@/components/layout/page-frame'
+import { cn } from '@/lib/utils'
+import { getCurrentExchangeRate } from '@/features/settings/services/exchange-rate-api.service'
+import { useAuth } from '@/features/auth/hooks/use-auth'
 
 const primaryItems = [{ label: 'Dashboard', icon: LayoutDashboard, to: '/dashboard' }]
 const setupItems = [{ label: 'Productos', icon: Package, to: '/productos' }, { label: 'Almacenes', icon: Boxes, to: '/almacenes' }, { label: 'Clientes', icon: Users, to: '/clientes' }, { label: 'Proveedores', icon: Users, to: '/proveedores' }, { label: 'Agentes de Aduana', icon: Boxes, to: '/agentes-aduana' }]

@@ -1,76 +1,14 @@
-import { useState, type FormEvent } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Pencil, Plus, RotateCcw, Save, Trash2 } from 'lucide-react'
-import { Button } from '../../../components/ui/button'
-import { Dialog } from '../../../components/ui/dialog'
-import { Input } from '../../../components/ui/input'
-import { createUser, deleteUser, listUserAudit, listUsers, loadUsersCatalog, type Role, type SystemUser, type UserPayload, type UserStatus, updateRolePermissions, updateUser } from '../services/user-api.service'
-
-type Tab = 'users' | 'profiles' | 'audit'
-const statusName: Record<UserStatus, string> = { ACTIVE: 'Activo', INACTIVE: 'Inactivo', SUSPENDED: 'Suspendido' }
-const moduleName: Record<string, string> = { products: 'Productos', suppliers: 'Proveedores', customs_agents: 'Agentes de Aduana', purchases: 'Compras Nacionales', imports: 'Importaciones', production: 'Producción', inventory: 'Almacén e Inventario', users: 'Usuarios y Permisos', dashboard: 'Dashboard', reports: 'Reportes', settings: 'Configuración' }
-const Select = (props: React.SelectHTMLAttributes<HTMLSelectElement>) => <select {...props} className="h-10 w-full rounded-md border border-border bg-[#f4f7fb] px-3 text-sm outline-none focus:border-brand">{props.children}</select>
-const Field = ({ label, children }: { label: string; children: React.ReactNode }) => <label className="block"><span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[.4px] text-slate-600">{label}</span>{children}</label>
+import { UserDialog } from '@/features/users/components/dialogs/UserDialog'
+import { Profiles } from '@/features/users/components/sections/Profiles'
+import { AuditTable } from '@/features/users/components/tables/AuditTable'
+import { UsersTable } from '@/features/users/components/tables/UsersTable'
+import { useUsersController } from '@/features/users/hooks/useUsersController'
 
 export function UsersPage() {
-  const client = useQueryClient(); const [tab, setTab] = useState<Tab>('users'); const [editing, setEditing] = useState<SystemUser>(); const [open, setOpen] = useState(false); const [notice, setNotice] = useState('')
-  const users = useQuery({ queryKey: ['users'], queryFn: listUsers }); const catalog = useQuery({ queryKey: ['users', 'catalog'], queryFn: loadUsersCatalog }); const audit = useQuery({ queryKey: ['users', 'audit'], queryFn: listUserAudit, enabled: tab === 'audit' })
-  const refresh = () => { void client.invalidateQueries({ queryKey: ['users'] }) }; const say = (text: string) => { setNotice(text); window.setTimeout(() => setNotice(''), 3500) }
-  const save = useMutation({ mutationFn: ({ id, payload }: { id?: string; payload: UserPayload }) => id ? updateUser(id, payload) : createUser(payload), onSuccess: () => { refresh(); setOpen(false); say('Usuario guardado correctamente.') }, onError: (error: Error) => say(error.message) })
-  const remove = useMutation({ mutationFn: deleteUser, onSuccess: () => { refresh(); say('Usuario eliminado correctamente.') }, onError: (error: Error) => say(error.message) })
-  const permissionMutation = useMutation({ mutationFn: (updates: { id: string; ids: string[] }[]) => Promise.all(updates.map(update => updateRolePermissions(update.id, update.ids))), onSuccess: () => { refresh(); say('Permisos actualizados correctamente.') }, onError: (error: Error) => say(error.message) })
-  const roleList = catalog.data?.roles ?? []; const permissions = catalog.data?.permissions ?? []
+  const { tab, setTab, editing, setEditing, open, setOpen, notice, users, audit, save, remove, permissionMutation, roleList, permissions } = useUsersController()
   return <div className="mx-auto max-w-none"><nav className="mb-6 flex gap-1 overflow-x-auto rounded-t-[10px] border border-border bg-white px-2">{([['users', 'Usuarios y Permisos'], ['profiles', 'Perfiles y Permisos'], ['audit', 'Registro de Auditoría']] as const).map(([value, label]) => <button key={value} onClick={() => setTab(value)} className={`whitespace-nowrap border-b-2 px-4 py-2.5 text-[13px] font-medium ${tab === value ? 'border-brand text-brand' : 'border-transparent text-muted'}`}>{label}</button>)}</nav>
     {tab === 'users' && <UsersTable users={users.data ?? []} loading={users.isLoading} error={users.error?.message} onNew={() => { setEditing(undefined); setOpen(true) }} onEdit={item => { setEditing(item); setOpen(true) }} onDelete={id => remove.mutate(id)}/>}
     {tab === 'profiles' && <Profiles roles={roleList} permissions={permissions} saving={permissionMutation.isPending} onSave={updates => permissionMutation.mutate(updates)}/>}
     {tab === 'audit' && <AuditTable loading={audit.isLoading} logs={audit.data ?? []}/>}
     {open && <UserDialog item={editing} roles={roleList} saving={save.isPending} onClose={() => setOpen(false)} onSave={payload => save.mutate({ id: editing?.id, payload })}/>} {notice && <div className="fixed bottom-6 right-6 z-[60] rounded-md border border-border border-l-4 border-l-emerald-600 bg-white px-4 py-3 text-sm shadow-panel">{notice}</div>}</div>
 }
-function UsersTable({ users, loading, error, onNew, onEdit, onDelete }: { users: SystemUser[]; loading: boolean; error?: string; onNew: () => void; onEdit: (user: SystemUser) => void; onDelete: (id: string) => void }) {
-  return <section className="rounded-[10px] border border-border bg-white p-5 shadow-card">
-    <header className="flex items-center justify-between"><h1 className="text-sm font-semibold">Usuarios y Permisos</h1><Button size="sm" onClick={onNew}><Plus className="h-4 w-4"/>Nuevo usuario</Button></header>
-    <div className="mt-4 overflow-x-auto"><table className="w-full min-w-[850px] text-left">
-      <thead><tr className="bg-[#f7f9fc] text-[11px] uppercase tracking-[.5px] text-muted">{['Nombre', 'Email', 'Roles', 'Estado', 'Acceso a módulos', ''].map(item => <th className="border-y border-border px-4 py-2.5" key={item}>{item}</th>)}</tr></thead>
-      <tbody>{loading ? <tr><td colSpan={6} className="p-8 text-center text-sm text-muted">Cargando usuarios…</td></tr> : error ? <tr><td colSpan={6} className="p-8 text-center text-sm text-red-600">No se pudieron cargar los usuarios: {error}</td></tr> : users.map(user => {
-        const all = user.roles.some(role => role.key === 'admin')
-        const access = all ? 'Todos los módulos' : [...new Set(user.roles.flatMap(role => role.permissions.map(p => moduleName[p.permission.module] ?? p.permission.module)))].join(', ') || 'Sin módulos asignados'
-        return <tr key={user.id} className="border-b border-border text-[13px]"><td className="px-4 py-3 font-medium">{user.name}</td><td className="px-4 py-3 text-slate-600">{user.email}</td><td className="px-4 py-3"><div className="flex flex-wrap gap-1">{user.roles.map(role => <RoleBadge key={role.id} role={role}/>)}</div></td><td className="px-4 py-3"><StatusBadge status={user.status}/></td><td className="max-w-[330px] px-4 py-3 text-xs text-muted">{access}</td><td className="whitespace-nowrap px-4 py-3 text-right"><Mini onClick={() => onEdit(user)}><Pencil className="h-3.5 w-3.5"/></Mini><Mini danger onClick={() => { if (window.confirm(`¿Eliminar a ${user.name}?`)) onDelete(user.id) }}><Trash2 className="h-3.5 w-3.5"/></Mini></td></tr>
-      })}</tbody>
-    </table></div>
-  </section>
-}
-const permissionSections = [
-  { label: 'Principal', modules: ['dashboard'] },
-  { label: 'Configuración', modules: ['products', 'suppliers', 'customs_agents'] },
-  { label: 'Operaciones', modules: ['purchases', 'imports', 'production', 'inventory'] },
-  { label: 'Administración', modules: ['users', 'settings', 'reports'] },
-]
-function Profiles({ roles, permissions, saving, onSave }: { roles: Role[]; permissions: { id: string; module: string; action: string }[]; saving: boolean; onSave: (updates: { id: string; ids: string[] }[]) => void }) {
-  const [changed, setChanged] = useState<Record<string, Set<string>>>({})
-  if (!roles.length) return <section className="rounded-[10px] border border-border bg-white p-8 text-center text-sm text-muted">No hay roles configurados.</section>
-  const permissionsFor = (role: Role) => changed[role.id] ?? new Set(role.permissions.map(entry => entry.permission.id))
-  const idsForModule = (module: string) => permissions.filter(item => item.module === module).map(item => item.id)
-  const hasModule = (role: Role, module: string) => module === 'dashboard' || role.key === 'admin' || idsForModule(module).some(id => permissionsFor(role).has(id))
-  const toggle = (role: Role, module: string) => { if (role.key === 'admin' || module === 'dashboard') return; const next = new Set(permissionsFor(role)); const ids = idsForModule(module); const grant = !ids.some(id => next.has(id)); ids.forEach(id => grant ? next.add(id) : next.delete(id)); setChanged(current => ({ ...current, [role.id]: next })) }
-  const reset = () => setChanged({})
-  return <section className="rounded-[10px] border border-border bg-white p-5 shadow-card"><header className="mb-4 flex flex-wrap items-start justify-between gap-3"><h1 className="text-sm font-semibold">Perfiles y Permisos</h1><p className="max-w-2xl text-right text-xs text-muted">Define a qué módulos accede cada perfil. El Dashboard es siempre visible y el Administrador tiene acceso total.</p></header><div className="overflow-x-auto"><table className="w-full min-w-[760px] text-left"><thead><tr className="bg-[#f7f9fc] text-[11px] uppercase tracking-[.5px] text-muted"><th className="border-y border-border px-4 py-2.5">Módulo</th>{roles.map(role => <th key={role.id} className="border-y border-border px-4 py-2.5 text-center">{role.name}{role.key === 'admin' && <small className="ml-1 normal-case font-normal">(total)</small>}</th>)}</tr></thead><tbody>{permissionSections.flatMap(section => [<tr key={section.label}><td colSpan={roles.length + 1} className="bg-[#f7f9fc] px-4 py-2 text-[11px] font-bold uppercase tracking-[.5px] text-slate-600">{section.label}</td></tr>, ...section.modules.filter(module => module === 'dashboard' || permissions.some(item => item.module === module)).map(module => <tr key={module} className="border-b border-border text-[13px]"><td className="px-4 py-3">{moduleName[module] ?? module}{module === 'dashboard' && <span className="ml-1 text-xs text-muted">(siempre visible)</span>}</td>{roles.map(role => <td key={role.id} className="px-4 py-3 text-center"><input className="h-4 w-4 accent-brand disabled:opacity-50" type="checkbox" checked={hasModule(role, module)} disabled={role.key === 'admin' || module === 'dashboard'} onChange={() => toggle(role, module)}/></td>)}</tr>)])}</tbody></table></div><footer className="mt-4 flex justify-end gap-2"><Button variant="outline" onClick={reset}><RotateCcw className="h-4 w-4"/>Restaurar valores</Button><Button disabled={saving} onClick={() => onSave(roles.filter(role => role.key !== 'admin').map(role => ({ id: role.id, ids: [...permissionsFor(role)] })))}><Save className="h-4 w-4"/>Guardar cambios</Button></footer></section>
-}
-function AuditTable({ logs, loading }: { logs: Awaited<ReturnType<typeof listUserAudit>>; loading: boolean }) { return <section className="rounded-[10px] border border-border bg-white p-5 shadow-card"><h1 className="mb-4 text-sm font-semibold">Registro de Auditoría</h1><div className="overflow-x-auto"><table className="w-full min-w-[750px] text-left"><thead><tr className="bg-[#f7f9fc] text-[11px] uppercase tracking-[.5px] text-muted">{['Fecha / hora', 'Usuario', 'Acción', 'Módulo', 'Detalle'].map(item => <th className="border-y border-border px-4 py-2.5" key={item}>{item}</th>)}</tr></thead><tbody>{loading ? <tr><td colSpan={5} className="p-8 text-center text-sm text-muted">Cargando auditoría…</td></tr> : logs.length ? logs.map(item => <tr key={item.id} className="border-b border-border text-[13px]"><td className="px-4 py-3 text-xs text-muted">{new Date(item.createdAt).toLocaleString('es-PE')}</td><td className="px-4 py-3 text-xs">{item.user?.email ?? 'Sistema'}</td><td className="px-4 py-3">{item.action}</td><td className="px-4 py-3"><span className="rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-semibold text-blue-700">{item.module}</span></td><td className="px-4 py-3 text-xs text-slate-600">{item.detail ? JSON.stringify(item.detail) : '—'}</td></tr>) : <tr><td colSpan={5} className="p-8 text-center text-sm text-muted">Sin actividad registrada.</td></tr>}</tbody></table></div></section> }
-function UserDialog({ item, roles, saving, onClose, onSave }: { item?: SystemUser; roles: Role[]; saving: boolean; onClose: () => void; onSave: (payload: UserPayload) => void }) {
-  const [name, setName] = useState(item?.name ?? '')
-  const [email, setEmail] = useState(item?.email ?? '')
-  const [password, setPassword] = useState('')
-  const [roleIds, setRoleIds] = useState<string[]>(item?.roles.map(role => role.id) ?? [])
-  const [status, setStatus] = useState<UserStatus>(item?.status ?? 'ACTIVE')
-  const toggleRole = (id: string) => setRoleIds(current => current.includes(id) ? current.filter(value => value !== id) : [...current, id])
-  return <Dialog open title={item ? 'Editar usuario' : 'Nuevo usuario'} onClose={onClose} footer={<><Button variant="outline" onClick={onClose}>Cancelar</Button><Button form="user-form" type="submit" disabled={saving || roleIds.length === 0}>Guardar</Button></>}>
-    <form id="user-form" className="space-y-4" onSubmit={(event: FormEvent) => { event.preventDefault(); if (roleIds.length) onSave({ name: name.trim(), email: email.trim(), ...(password && { password }), roleIds, status }) }}>
-      <Field label="Nombre completo *"><Input required value={name} onChange={event => setName(event.target.value)}/></Field>
-      <Field label="Correo *"><Input required type="email" value={email} onChange={event => setEmail(event.target.value)} placeholder="usuario@europlate.pe"/></Field>
-      <Field label={item ? 'Contraseña (opcional)' : 'Contraseña *'}><Input required={!item} minLength={8} type="password" value={password} onChange={event => setPassword(event.target.value)}/></Field>
-      <div><p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[.4px] text-slate-600">Roles * <span className="font-normal normal-case">(puedes elegir varios)</span></p><div className="max-h-40 space-y-2 overflow-y-auto rounded-md border border-border bg-[#f4f7fb] p-3">{roles.map(role => <label key={role.id} className="flex items-center gap-2 text-sm"><input type="checkbox" className="h-4 w-4 accent-brand" checked={roleIds.includes(role.id)} onChange={() => toggleRole(role.id)}/>{role.name}</label>)}</div><p className="mt-1 text-xs text-muted">Administrador y Gerente General conservan acceso global aunque sean responsables de un almacén.</p></div>
-      <Field label="Estado"><Select value={status} onChange={event => setStatus(event.target.value as UserStatus)}>{Object.entries(statusName).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</Select></Field>
-    </form>
-  </Dialog>
-}
-function RoleBadge({ role }: { role: Role }) { const shade = role.key === 'admin' ? 'bg-blue-100 text-blue-700' : role.key === 'operador' ? 'bg-emerald-100 text-emerald-700' : 'bg-violet-100 text-violet-700'; return <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${shade}`}>{role.name}</span> } function StatusBadge({ status }: { status: UserStatus }) { return <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${status === 'ACTIVE' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>{statusName[status]}</span> } function Mini({ children, danger, onClick }: { children: React.ReactNode; danger?: boolean; onClick: () => void }) { return <button onClick={onClick} className={`ml-1 inline-flex h-7 w-7 items-center justify-center rounded border ${danger ? 'border-red-200 bg-red-50 text-red-600' : 'border-border bg-white text-slate-600'}`}>{children}</button> }

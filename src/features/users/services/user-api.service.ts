@@ -1,4 +1,4 @@
-import { api } from '../../../lib/api-client'
+import { api } from '@/lib/api-client'
 
 export type UserStatus = 'ACTIVE' | 'INACTIVE' | 'SUSPENDED'
 export type Permission = { id: string; key: string; module: string; action: string }

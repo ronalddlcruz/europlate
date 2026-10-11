@@ -1,10 +1,10 @@
 import { ChevronDown, Pencil, Plus, Search, Trash2 } from 'lucide-react'
 import { Fragment, type ReactNode, useEffect, useRef, useState } from 'react'
-import { Button } from '../../../components/ui/button'
-import { Input } from '../../../components/ui/input'
-import type { ProductBase, Unit } from '../../products/types/product.types'
-import type { ImportCatalog } from '../services/import-api.service'
-import { calculateImportLineSubtotal } from '../utils/import-line-calculator'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import type { ProductBase, Unit } from '@/features/products/types/product.types'
+import type { ImportCatalog } from '@/features/imports/services/import-api.service'
+import { calculateImportLineSubtotal } from '@/features/imports/utils/import-line-calculator'
 
 export type WeightDraft = { attributeId?: string; name: string; unit: string; value: number }
 export type VariableDraft = { name: string; values: Record<string, string>; unit: string; factor: number; minimumStock: number; stock: number; roles: ProductBase['roles']; weight?: WeightDraft }

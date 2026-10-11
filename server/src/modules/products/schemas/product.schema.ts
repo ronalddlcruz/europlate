@@ -1,10 +1,11 @@
 import { z } from 'zod'
 import { databaseIdSchema } from '../../../shared/schemas/database-id.schema.js'
+import { ATTRIBUTE_DATA_TYPE_VALUES, PRODUCT_ROLE_VALUES, PRODUCT_STATUS_VALUES, PRODUCT_VARIANT_VALUES } from '../constants/product.constants.js'
 
-const productStatus = z.enum(['ACTIVE', 'INACTIVE'])
-const productRole = z.enum(['MERCHANDISE', 'SUPPLY', 'FINISHED_PRODUCT'])
-const variantType = z.enum(['WITH_VARIANTS', 'BASIC'])
-const attributeType = z.enum(['TEXT', 'NUMBER'])
+const productStatus = z.enum(PRODUCT_STATUS_VALUES)
+const productRole = z.enum(PRODUCT_ROLE_VALUES)
+const variantType = z.enum(PRODUCT_VARIANT_VALUES)
+const attributeType = z.enum(ATTRIBUTE_DATA_TYPE_VALUES)
 
 const attributeSchema = z.object({ id: databaseIdSchema.optional(), attributeDefinitionId: databaseIdSchema.optional().nullable(), name: z.string().trim().min(1).max(80), dataType: attributeType.default('TEXT'), suffix: z.string().trim().max(20).optional().nullable(), required: z.boolean().default(false), status: productStatus.default('ACTIVE'), useInSubtotal: z.boolean().default(false), isWeight: z.boolean().default(false) }).superRefine((value, context) => {
   if (value.isWeight && value.dataType !== 'NUMBER') context.addIssue({ code: z.ZodIssueCode.custom, path: ['isWeight'], message: 'El atributo de peso debe ser numérico.' })

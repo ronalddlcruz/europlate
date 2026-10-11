@@ -1,92 +1,16 @@
-import { useMemo, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { ArrowDownToLine, Boxes, ChevronLeft, ChevronRight, Factory, FileSpreadsheet, RefreshCw, SlidersHorizontal } from 'lucide-react'
-import { Button } from '../../../components/ui/button'
-import { Input } from '../../../components/ui/input'
-import { loadMovementsReport, loadProductionReport, loadPurchasesReport, loadStockReport, type ReportMovement, type ReportPurchase, type ReportStock, type ReportsDashboard } from '../services/report-api.service'
-
-type Report = 'stock' | 'movements' | 'purchases' | 'production'
-const PAGE_SIZE = 10
-const cards: { id: Report; title: string; description: string; icon: typeof Boxes; colors: string }[] = [
-  { id: 'stock', title: 'Stock total', description: 'Todos los productos y existencias por almacén', icon: Boxes, colors: 'bg-emerald-100 text-emerald-700' },
-  { id: 'movements', title: 'Movimientos de inventario', description: 'Ingresos, salidas, ajustes, traslados y producción', icon: SlidersHorizontal, colors: 'bg-amber-100 text-amber-700' },
-  { id: 'purchases', title: 'Compras e importaciones', description: 'Documentos registrados y sus importes', icon: ArrowDownToLine, colors: 'bg-violet-100 text-violet-700' },
-  { id: 'production', title: 'Órdenes de producción', description: 'Producciones registradas y sus salidas', icon: Factory, colors: 'bg-pink-100 text-pink-700' },
-]
-const movementLabels: Record<string, string> = { PURCHASE_RECEIPT: 'Ingreso por compra nacional', IMPORT_RECEIPT: 'Ingreso por importación', SALE_OUT: 'Salida de inventario', PRODUCTION_CONSUMPTION: 'Consumo en producción', PRODUCTION_OUTPUT: 'Ingreso por producción', TRANSFER_IN: 'Transferencia recibida', TRANSFER_OUT: 'Transferencia enviada', ADJUSTMENT_IN: 'Ajuste de ingreso', ADJUSTMENT_OUT: 'Salida de producto', ADJUSTMENT_WASTE: 'Merma', INITIAL_STOCK: 'Stock inicial' }
-const purchaseLabels: Record<string, string> = { DRAFT: 'Borrador', APPROVED: 'Aprobada', RECEIVED: 'Recibida', CANCELLED: 'Anulada', IN_TRANSIT: 'En tránsito' }
-const productionLabels: Record<string, string> = { PLANNED: 'Planificada', IN_PROGRESS: 'En producción', COMPLETED: 'Completada', CANCELLED: 'Cancelada' }
-const roleLabels: Record<string, string> = { MERCHANDISE: 'Mercadería', SUPPLY: 'Insumo', FINISHED_PRODUCT: 'Producto terminado' }
-const dateKey = (value: string) => value.slice(0, 10)
-const localDate = (value: string) => new Date(value).toLocaleDateString('es-PE')
-const amount = (value: number) => new Intl.NumberFormat('es-PE', { maximumFractionDigits: 3 }).format(value)
-const Select = ({ children, value, onChange }: { children: React.ReactNode; value: string; onChange: (value: string) => void }) => <select value={value} onChange={event => onChange(event.target.value)} className="h-9 w-full rounded-md border border-border bg-[#f4f7fb] px-3 text-sm outline-none focus:border-brand">{children}</select>
-
-function exportCsv(name: string, headers: string[], rows: (string | number)[][]) {
-  const safe = (value: string | number) => `"${String(value).replace(/"/g, '""')}"`
-  const blob = new Blob([`\uFEFF${[headers, ...rows].map(row => row.map(safe).join(';')).join('\n')}`], { type: 'text/csv;charset=utf-8' })
-  const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = `${name}-${dateKey(new Date().toISOString())}.csv`; link.click(); URL.revokeObjectURL(url)
-}
-function usePagination<T>(rows: T[]) {
-  const [requestedPage, setRequestedPage] = useState(1)
-  const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE))
-  const page = Math.min(requestedPage, totalPages)
-  return { page, totalPages, rows: rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE), goTo: setRequestedPage }
-}
-function Pagination({ page, totalPages, total, goTo }: { page: number; totalPages: number; total: number; goTo: (page: number) => void }) {
-  if (total <= PAGE_SIZE) return null
-  const first = (page - 1) * PAGE_SIZE + 1; const last = Math.min(page * PAGE_SIZE, total)
-  return <footer className="flex flex-wrap items-center justify-between gap-3 px-1 pt-4 text-xs text-muted"><span>Mostrando {first}–{last} de {total} registros</span><div className="flex items-center gap-2"><Button size="sm" variant="outline" disabled={page === 1} onClick={() => goTo(page - 1)}><ChevronLeft className="h-3.5 w-3.5" />Anterior</Button><span className="font-medium text-slate-700">Página {page} de {totalPages}</span><Button size="sm" variant="outline" disabled={page === totalPages} onClick={() => goTo(page + 1)}>Siguiente<ChevronRight className="h-3.5 w-3.5" /></Button></div></footer>
-}
-function Empty({ children }: { children: React.ReactNode }) { return <tr><td colSpan={20} className="p-10 text-center text-sm text-muted">{children}</td></tr> }
-function ExcelButton({ onClick }: { onClick: () => void }) { return <Button size="sm" variant="outline" onClick={onClick}><FileSpreadsheet className="h-4 w-4 text-emerald-600" />Exportar Excel</Button> }
+import { RefreshCw } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { MovementsReport } from '@/features/reports/components/sections/MovementsReport'
+import { ProductionReport } from '@/features/reports/components/sections/ProductionReport'
+import { PurchasesReport } from '@/features/reports/components/sections/PurchasesReport'
+import { StockReport } from '@/features/reports/components/sections/StockReport'
+import { cards } from '@/features/reports/components/shared'
+import { useReportsController } from '@/features/reports/hooks/useReportsController'
 
 export function ReportsPage() {
-  const [report, setReport] = useState<Report>('stock')
-  // Cada sección carga únicamente sus propios datos; Compras ya no espera
-  // la valorización del inventario ni el historial de movimientos.
-  const stock = useQuery({ queryKey: ['reports', 'stock'], queryFn: ({ signal }) => loadStockReport(signal), enabled: report === 'stock', staleTime: 30_000 })
-  const movements = useQuery({ queryKey: ['reports', 'movements'], queryFn: ({ signal }) => loadMovementsReport(signal), enabled: report === 'movements', staleTime: 30_000 })
-  const purchases = useQuery({ queryKey: ['reports', 'purchases'], queryFn: ({ signal }) => loadPurchasesReport(signal), enabled: report === 'purchases', staleTime: 30_000 })
-  const production = useQuery({ queryKey: ['reports', 'production'], queryFn: ({ signal }) => loadProductionReport(signal), enabled: report === 'production', staleTime: 30_000 })
-  const activeQuery = report === 'stock' ? stock : report === 'movements' ? movements : report === 'purchases' ? purchases : production
+  const { report, setReport, stock, movements, purchases, production, activeQuery } = useReportsController()
   return <div className="mx-auto w-full max-w-[1540px]">
     <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">{cards.map(card => { const Icon = card.icon; return <button key={card.id} onClick={() => setReport(card.id)} className={`rounded-[10px] border bg-white p-5 text-left shadow-card transition hover:shadow-panel ${report === card.id ? 'border-brand ring-1 ring-brand' : 'border-border'}`}><span className={`mb-3 flex h-10 w-10 items-center justify-center rounded-lg ${card.colors}`}><Icon className="h-5 w-5" /></span><strong className="block text-sm">{card.title}</strong><span className="mt-1 block text-xs text-muted">{card.description}</span></button> })}</section>
     <section className="mt-5 rounded-[10px] border border-border bg-white p-5 shadow-card"><header className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-sm font-semibold">{cards.find(card => card.id === report)?.title}</h2><p className="mt-1 text-xs text-muted">Información consultada desde los registros actuales de la base de datos.</p></div><Button size="sm" variant="outline" disabled={activeQuery.isFetching} onClick={() => void activeQuery.refetch()}><RefreshCw className={`h-4 w-4 ${activeQuery.isFetching ? 'animate-spin' : ''}`} />Actualizar</Button></header>{activeQuery.isLoading ? <div className="p-12 text-center text-sm text-muted">Cargando reporte desde la base de datos…</div> : activeQuery.isError ? <div className="p-12 text-center text-sm text-red-600">No se pudo cargar el reporte. Inténtalo nuevamente.</div> : report === 'stock' && stock.data ? <StockReport rows={stock.data} /> : report === 'movements' && movements.data ? <MovementsReport rows={movements.data} warehouses={[...new Set(movements.data.map(row => row.warehouse))].sort()} /> : report === 'purchases' && purchases.data ? <PurchasesReport rows={[...purchases.data.purchases, ...purchases.data.imports]} /> : report === 'production' && production.data ? <ProductionReport rows={production.data} /> : null}</section>
   </div>
-}
-
-function StockReport({ rows }: { rows: ReportStock[] }) {
-  const [search, setSearch] = useState(''); const [warehouse, setWarehouse] = useState(''); const [role, setRole] = useState('')
-  const warehouses = useMemo(() => [...new Set(rows.flatMap(row => row.warehouses.map(item => item.name)))].sort(), [rows])
-  const visible = useMemo(() => rows.filter(row => (!warehouse || row.warehouses.some(item => item.name === warehouse)) && (!role || row.roles.includes(role as ReportStock['roles'][number])) && `${row.code} ${row.product} ${row.category} ${row.subcategory}`.toLowerCase().includes(search.toLowerCase())), [rows, search, warehouse, role])
-  const pagination = usePagination(visible)
-  return <><div className="mt-4 grid gap-3 md:grid-cols-4"><Input value={search} onChange={event => setSearch(event.target.value)} placeholder="Buscar producto o código…" /><Select value={warehouse} onChange={setWarehouse}><option value="">Todos los almacenes</option>{warehouses.map(item => <option key={item}>{item}</option>)}</Select><Select value={role} onChange={setRole}><option value="">Todos los tipos</option>{Object.entries(roleLabels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</Select><ExcelButton onClick={() => exportCsv('stock-total', ['Código', 'Producto', 'Categoría', 'Subcategoría', 'Tipo', 'UM', 'Stock total', 'Disponible', 'En producción', 'Por almacén'], visible.map(row => [row.code, row.product, row.category, row.subcategory, row.roles.map(item => roleLabels[item]).join(', '), row.unit, amount(row.total), amount(row.available), amount(row.inProduction), row.warehouses.map(item => `${item.name}: ${amount(item.quantity)}`).join(' | ')]))} /></div><ReportTable headers={['Código', 'Producto', 'Categoría', 'Tipo', 'UM', 'Stock total', 'Disponible', 'En producción', 'Por almacén']} empty="No hay productos para los filtros elegidos.">{visible.length ? pagination.rows.map(row => <tr className="border-b border-border text-[13px] text-slate-600" key={row.productId}><td className="px-4 py-3 font-mono text-xs font-bold text-brand">{row.code}</td><td className="px-4 py-3 font-medium text-ink">{row.product}</td><td className="px-4 py-3">{row.category}<span className="block text-xs text-muted">{row.subcategory}</span></td><td className="px-4 py-3">{row.roles.map(item => roleLabels[item]).join(', ') || '—'}</td><td className="px-4 py-3">{row.unit}</td><td className="px-4 py-3 font-mono font-semibold text-emerald-700">{amount(row.total)} {row.unit}</td><td className="px-4 py-3 font-mono text-emerald-600">{amount(row.available)} {row.unit}</td><td className="px-4 py-3 font-mono text-brand">{row.inProduction ? `${amount(row.inProduction)} und.` : '—'}</td><td className="px-4 py-3">{row.warehouses.length ? row.warehouses.map(item => <span className="mr-1 inline-block rounded bg-blue-50 px-2 py-1 text-xs text-brand" key={item.id}>{item.name}: {amount(item.quantity)}</span>) : '—'}</td></tr>) : null}</ReportTable><Pagination {...pagination} total={visible.length} /></>
-}
-
-function MovementsReport({ rows, warehouses }: { rows: ReportMovement[]; warehouses: string[] }) {
-  const [start, setStart] = useState(''); const [end, setEnd] = useState(''); const [warehouse, setWarehouse] = useState(''); const [type, setType] = useState(''); const [search, setSearch] = useState('')
-  const visible = useMemo(() => rows.filter(row => (!start || dateKey(row.createdAt) >= start) && (!end || dateKey(row.createdAt) <= end) && (!warehouse || row.warehouse === warehouse) && (!type || row.type === type) && `${row.product} ${row.reference} ${row.note ?? ''}`.toLowerCase().includes(search.toLowerCase())), [rows, start, end, warehouse, type, search])
-  const pagination = usePagination(visible)
-  return <><div className="mt-4 grid gap-3 md:grid-cols-3 xl:grid-cols-6"><Input type="date" value={start} onChange={event => setStart(event.target.value)} /><Input type="date" value={end} onChange={event => setEnd(event.target.value)} /><Select value={warehouse} onChange={setWarehouse}><option value="">Todos los almacenes</option>{warehouses.map(item => <option key={item}>{item}</option>)}</Select><Select value={type} onChange={setType}><option value="">Todos los movimientos</option>{Object.entries(movementLabels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</Select><Input value={search} onChange={event => setSearch(event.target.value)} placeholder="Producto o referencia…" /><ExcelButton onClick={() => exportCsv('movimientos-inventario', ['Fecha', 'Tipo', 'Producto', 'Presentación', 'Almacén', 'Cantidad', 'Referencia', 'Usuario', 'Nota'], visible.map(row => [localDate(row.createdAt), movementLabels[row.type] ?? row.type, row.product, row.presentation, row.warehouse, amount(row.quantity), row.reference, row.user, row.note ?? '']))} /></div><ReportTable headers={['Fecha', 'Tipo', 'Producto', 'Presentación', 'Almacén', 'Cantidad', 'Referencia', 'Usuario']} empty="No hay movimientos para los filtros elegidos.">{visible.length ? pagination.rows.map(row => <tr className="border-b border-border text-[13px] text-slate-600" key={row.id}><td className="px-4 py-3 whitespace-nowrap">{localDate(row.createdAt)}</td><td className="px-4 py-3 font-medium text-ink">{movementLabels[row.type] ?? row.type}</td><td className="px-4 py-3">{row.product}</td><td className="px-4 py-3">{row.presentation}</td><td className="px-4 py-3">{row.warehouse}</td><td className={`px-4 py-3 font-mono font-semibold ${row.quantity < 0 ? 'text-red-600' : 'text-emerald-600'}`}>{row.quantity > 0 ? '+' : ''}{amount(row.quantity)}</td><td className="px-4 py-3 font-mono text-xs">{row.reference}</td><td className="px-4 py-3">{row.user}</td></tr>) : null}</ReportTable><Pagination {...pagination} total={visible.length} /></>
-}
-
-function PurchasesReport({ rows }: { rows: ReportPurchase[] }) {
-  const [start, setStart] = useState(''); const [end, setEnd] = useState(''); const [type, setType] = useState(''); const [status, setStatus] = useState(''); const [search, setSearch] = useState('')
-  const statuses = useMemo(() => [...new Set(rows.map(row => row.status))], [rows])
-  const visible = useMemo(() => rows.filter(row => (!start || dateKey(row.date) >= start) && (!end || dateKey(row.date) <= end) && (!type || row.type === type) && (!status || row.status === status) && `${row.number} ${row.supplier}`.toLowerCase().includes(search.toLowerCase())), [rows, start, end, type, status, search])
-  const pagination = usePagination(visible)
-  return <><div className="mt-4 grid gap-3 md:grid-cols-3 xl:grid-cols-6"><Input type="date" value={start} onChange={event => setStart(event.target.value)} /><Input type="date" value={end} onChange={event => setEnd(event.target.value)} /><Select value={type} onChange={setType}><option value="">Compras e importaciones</option><option>Compra nacional</option><option>Importación</option></Select><Select value={status} onChange={setStatus}><option value="">Todos los estados</option>{statuses.map(item => <option key={item} value={item}>{purchaseLabels[item] ?? item}</option>)}</Select><Input value={search} onChange={event => setSearch(event.target.value)} placeholder="Proveedor o documento…" /><ExcelButton onClick={() => exportCsv('compras-importaciones', ['Número', 'Tipo', 'Proveedor', 'Fecha', 'Moneda', 'Total', 'Estado'], visible.map(row => [row.number, row.type, row.supplier, localDate(row.date), row.currency, row.total.toFixed(2), purchaseLabels[row.status] ?? row.status]))} /></div><ReportTable headers={['N°', 'Tipo', 'Proveedor', 'Fecha', 'Moneda', 'Total', 'Estado']} empty="No hay compras o importaciones para los filtros elegidos.">{visible.length ? pagination.rows.map(row => <tr className="border-b border-border text-[13px] text-slate-600" key={`${row.type}:${row.id}`}><td className="px-4 py-3 font-mono font-semibold text-brand">{row.number}</td><td className="px-4 py-3">{row.type}</td><td className="px-4 py-3 font-medium text-ink">{row.supplier}</td><td className="px-4 py-3">{localDate(row.date)}</td><td className="px-4 py-3">{row.currency}</td><td className="px-4 py-3 font-mono">{row.currency === 'PEN' ? 'S/' : 'USD'} {row.total.toFixed(2)}</td><td className="px-4 py-3">{purchaseLabels[row.status] ?? row.status}</td></tr>) : null}</ReportTable><Pagination {...pagination} total={visible.length} /></>
-}
-
-function ProductionReport({ rows }: { rows: ReportsDashboard['production'] }) {
-  const [start, setStart] = useState(''); const [end, setEnd] = useState(''); const [status, setStatus] = useState(''); const [search, setSearch] = useState('')
-  const statuses = useMemo(() => [...new Set(rows.map(row => row.status))], [rows])
-  const visible = useMemo(() => rows.filter(row => (!start || dateKey(row.date) >= start) && (!end || dateKey(row.date) <= end) && (!status || row.status === status) && `${row.number} ${row.product} ${row.warehouse}`.toLowerCase().includes(search.toLowerCase())), [rows, start, end, status, search])
-  const pagination = usePagination(visible)
-  return <><div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-5"><Input type="date" value={start} onChange={event => setStart(event.target.value)} /><Input type="date" value={end} onChange={event => setEnd(event.target.value)} /><Select value={status} onChange={setStatus}><option value="">Todos los estados</option>{statuses.map(item => <option key={item} value={item}>{productionLabels[item] ?? item}</option>)}</Select><Input value={search} onChange={event => setSearch(event.target.value)} placeholder="Producto, almacén u orden…" /><ExcelButton onClick={() => exportCsv('ordenes-produccion', ['Orden', 'Producto', 'Almacén', 'Cantidad', 'Fecha', 'Estado', 'Salida de inventario'], visible.map(row => [row.number, row.product, row.warehouse, amount(row.quantity), localDate(row.date), productionLabels[row.status] ?? row.status, row.outputDispatched ? 'Sí' : 'No']))} /></div><ReportTable headers={['N° Orden', 'Producto', 'Almacén', 'Cantidad', 'Fecha', 'Estado', 'Salida']} empty="No hay órdenes de producción para los filtros elegidos.">{visible.length ? pagination.rows.map(row => <tr className="border-b border-border text-[13px] text-slate-600" key={row.id}><td className="px-4 py-3 font-mono font-semibold text-brand">{row.number}</td><td className="px-4 py-3 font-medium text-ink">{row.product}</td><td className="px-4 py-3">{row.warehouse}</td><td className="px-4 py-3 font-mono">{amount(row.quantity)}</td><td className="px-4 py-3">{localDate(row.date)}</td><td className="px-4 py-3">{productionLabels[row.status] ?? row.status}</td><td className="px-4 py-3">{row.outputDispatched ? <span className="rounded bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-700">↗ Salida de inventario</span> : '—'}</td></tr>) : null}</ReportTable><Pagination {...pagination} total={visible.length} /></>
-}
-
-function ReportTable({ headers, empty, children }: { headers: string[]; empty: string; children: React.ReactNode }) {
-  return <div className="mt-4 overflow-x-auto"><table className="w-full min-w-[860px] text-left"><thead><tr className="bg-[#f7f9fc] text-[11px] uppercase tracking-[.5px] text-muted">{headers.map(header => <th className="border-y border-border px-4 py-2.5" key={header}>{header}</th>)}</tr></thead><tbody>{children || <Empty>{empty}</Empty>}</tbody></table></div>
 }

@@ -5,6 +5,7 @@ import { env } from '../../config/env.js'
 import { AppError } from '../errors/app-error.js'
 import type { AuthenticatedUser } from '../types/auth.js'
 import { authRepository } from '../../modules/auth/repositories/auth.repository.js'
+import { sessionUser } from '../../modules/auth/domain/session-user.js'
 
 export async function requireAuthentication(request: Request, _response: Response, next: NextFunction) {
   const token = request.headers.authorization?.replace(/^Bearer\s+/i, '')
@@ -21,11 +22,6 @@ export async function requireAuthentication(request: Request, _response: Respons
   if (!user || user.companyId !== payload.companyId || user.status !== UserStatus.ACTIVE) {
     return next(new AppError('INVALID_SESSION', 'La sesión no es válida o el usuario ya no está activo.', 401))
   }
-  const roles = user.roles.map(entry => entry.role.key)
-  const permissions = roles.includes('admin') ? ['*'] : [...new Set([
-    ...user.roles.flatMap(entry => entry.role.permissions.map(item => item.permission.key)),
-    ...user.permissions.map(entry => entry.permission.key),
-  ])]
-  request.auth = { id: user.id, companyId: user.companyId, permissions } satisfies AuthenticatedUser
+  request.auth = sessionUser(user) satisfies AuthenticatedUser
   next()
 }

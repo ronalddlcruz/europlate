@@ -1,0 +1,8 @@
+node_modules
+dist
+server/dist
+.pnpm-store
+.pnpm-fresh-store
+.netlify
+package-lock.json
+pnpm-lock.yaml

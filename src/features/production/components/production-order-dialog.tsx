@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { CalendarDays, ChevronDown, Plus, Search, Trash2 } from 'lucide-react'
-import { Button } from '../../../components/ui/button'
-import { Dialog } from '../../../components/ui/dialog'
-import { Input } from '../../../components/ui/input'
-import type { CatalogProduct, ProductionCatalog, ProductionPayload } from '../services/production-api.service'
-import { matchesProductSearch } from '../../../lib/product-search'
+import { Button } from '@/components/ui/button'
+import { Dialog } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import type { CatalogProduct, ProductionCatalog, ProductionPayload } from '@/features/production/services/production-api.service'
+import { matchesProductSearch } from '@/lib/product-search'
 
 type DraftMaterial = { productId: string; warehouseId: string; quantity: number; immediateConsumption: boolean; shareReservation?: boolean }
 type PickerItem = { id: string; title: string; detail: string }

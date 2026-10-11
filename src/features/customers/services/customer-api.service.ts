@@ -1,4 +1,4 @@
-import { api } from '../../../lib/api-client'
+import { api } from '@/lib/api-client'
 
 export type CustomerStatus = 'Activo' | 'Inactivo'
 export type Customer = { id: string; name: string; ruc: string; phone: string; email: string; address: string; note: string; status: CustomerStatus }
