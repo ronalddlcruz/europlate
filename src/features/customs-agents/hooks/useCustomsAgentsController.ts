@@ -3,10 +3,12 @@ import { useMemo,useState } from 'react'
 import { sortAgents } from '@/features/customs-agents/components/shared'
 import { createCustomsAgent,deleteCustomsAgent,listCustomsAgents,updateCustomsAgent,type CustomsAgent } from '@/features/customs-agents/services/customs-agent-api.service'
 
+const EMPTY_AGENTS: CustomsAgent[] = []
+
 export function useCustomsAgentsController() {
   const queryClient = useQueryClient()
   const agentsQuery = useQuery({ queryKey: ['customs-agents'], queryFn: listCustomsAgents })
-  const agents = agentsQuery.data ?? []
+  const agents = agentsQuery.data ?? EMPTY_AGENTS
   const [modalItem, setModalItem] = useState<CustomsAgent | null | undefined>(undefined)
   const [search, setSearch] = useState(''); const [notice, setNotice] = useState('')
   const notify = (message: string) => { setNotice(message); window.setTimeout(() => setNotice(''), 2800) }

@@ -3,7 +3,7 @@ import { usePurchasesController } from '@/features/purchases/hooks/usePurchasesC
 import { money,Status } from '@/features/purchases/components/shared'
 
 export function PurchasesTable({ model }: { model: ReturnType<typeof usePurchasesController> }) {
-  const { queryClient, purchasesQuery, catalogQuery, productsCatalogQuery, modal, setModal, selected, setSelected, detailQuery, notice, setNotice, notify, refreshPurchaseConsumers, createMutation, deleteMutation, purchases } = model
+  const { purchasesQuery, setModal, setSelected, deleteMutation, purchases } = model
   return (<table className="w-full min-w-[750px] text-left">
 <thead>
 <tr className="bg-[#f7f9fc] text-[11px] uppercase tracking-[.5px] text-muted">{['N° OC', 'Proveedor', 'Fecha', 'Moneda', 'Total', 'Estado', ''].map(value => <th className="border-y border-border px-4 py-2.5" key={value}>{value}</th>)}</tr>

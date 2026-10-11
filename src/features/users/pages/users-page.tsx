@@ -5,7 +5,7 @@ import { UsersTable } from '@/features/users/components/tables/UsersTable'
 import { useUsersController } from '@/features/users/hooks/useUsersController'
 
 export function UsersPage() {
-  const { client, tab, setTab, editing, setEditing, open, setOpen, notice, setNotice, users, catalog, audit, refresh, say, save, remove, permissionMutation, roleList, permissions } = useUsersController()
+  const { tab, setTab, editing, setEditing, open, setOpen, notice, users, audit, save, remove, permissionMutation, roleList, permissions } = useUsersController()
   return <div className="mx-auto max-w-none"><nav className="mb-6 flex gap-1 overflow-x-auto rounded-t-[10px] border border-border bg-white px-2">{([['users', 'Usuarios y Permisos'], ['profiles', 'Perfiles y Permisos'], ['audit', 'Registro de Auditoría']] as const).map(([value, label]) => <button key={value} onClick={() => setTab(value)} className={`whitespace-nowrap border-b-2 px-4 py-2.5 text-[13px] font-medium ${tab === value ? 'border-brand text-brand' : 'border-transparent text-muted'}`}>{label}</button>)}</nav>
     {tab === 'users' && <UsersTable users={users.data ?? []} loading={users.isLoading} error={users.error?.message} onNew={() => { setEditing(undefined); setOpen(true) }} onEdit={item => { setEditing(item); setOpen(true) }} onDelete={id => remove.mutate(id)}/>}
     {tab === 'profiles' && <Profiles roles={roleList} permissions={permissions} saving={permissionMutation.isPending} onSave={updates => permissionMutation.mutate(updates)}/>}

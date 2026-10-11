@@ -6,7 +6,7 @@ import { useWarehousesController } from '@/features/inventory/hooks/useWarehouse
 
 export function WarehousesPage() {
   const model = useWarehousesController()
-  const { client, session, canManage, warehouses, responsibles, editing, setEditing, modal, setModal, notice, setNotice, notify, sync, save, remove } = model
+  const { canManage, responsibles, editing, setEditing, modal, setModal, notice, save } = model
   return <div className="mx-auto max-w-7xl">
     <section className="card">
       <header className="flex flex-wrap items-center justify-between gap-3">

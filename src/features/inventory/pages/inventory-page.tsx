@@ -8,7 +8,7 @@ import { StockTable } from '@/features/inventory/components/tables/StockTable'
 import { useInventoryController } from '@/features/inventory/hooks/useInventoryController'
 
 export function InventoryPage() {
-  const { client, tab, setTab, modal, setModal, stockStatus, setStockStatus, notice, setNotice, transferDraft, setTransferDraft, noticeTimer, transferInFlight, adjustmentInFlight, stock, catalog, movements, transfers, adjustments, warehouses, transferStock, notify, showNewMovements, transfer, adjustment, submitTransfer, submitAdjustment, tabs } = useInventoryController()
+  const { tab, setTab, modal, setModal, stockStatus, setStockStatus, notice, transferDraft, setTransferDraft, stock, catalog, movements, transfers, adjustments, warehouses, transferStock, transfer, adjustment, submitTransfer, submitAdjustment, tabs } = useInventoryController()
   return <div className="inventory-module mx-auto w-full max-w-[1540px]">
     <nav className="mb-6 flex gap-1 overflow-x-auto border-b border-border bg-white px-2">
       {tabs.map(([key, label]) => <button key={key} onClick={() => setTab(key)} className={`whitespace-nowrap border-b-2 px-5 py-3 text-[13px] font-medium ${tab === key ? 'border-brand text-brand' : 'border-transparent text-muted hover:text-ink'}`}>{label}</button>)}

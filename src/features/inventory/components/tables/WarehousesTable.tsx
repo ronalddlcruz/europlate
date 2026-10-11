@@ -2,7 +2,7 @@ import { Pencil,Trash2 } from 'lucide-react';
 import { useWarehousesController } from '@/features/inventory/hooks/useWarehousesController';
 
 export function WarehousesTable({ model }: { model: ReturnType<typeof useWarehousesController> }) {
-  const { client, session, canManage, warehouses, responsibles, editing, setEditing, modal, setModal, notice, setNotice, notify, sync, save, remove } = model
+  const { canManage, warehouses, setEditing, setModal, remove } = model
   return (<table className="w-full min-w-[1080px] text-left">
         <thead><tr className="bg-[#f7f9fc] text-[11px] uppercase tracking-[.45px] text-muted">
           {['Nombre', 'Responsable', 'Departamento', 'Provincia', 'Distrito', 'Calle / dirección', 'Estado', ...(canManage ? [''] : [])].map((value, index) =>

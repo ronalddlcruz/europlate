@@ -8,7 +8,7 @@ import { UnitsSection } from '@/features/products/components/sections/UnitsSecti
 import { useProductsController } from '@/features/products/hooks/useProductsController';
 
 export function ProductsConfigurationPage({ model }: { model: ReturnType<typeof useProductsController> }) {
-  const { queryClient, navigate, pathname, catalog, products, bases, variants, units, categories, attributes, modal, setModal, roleFilter, setRoleFilter, statusFilter, setStatusFilter, search, setSearch, notice, setNotice, productsPage, setProductsPage, isConfiguration, configurationTab, openCatalog, openConfiguration, notify, refreshCatalog, createAttributeForCategory, refreshProductConsumers, synchronizeAttributeDefinition, syncProductionCatalogProduct, removeProductFromProductionCatalog, warmProductionCatalog, productMutation, statusMutation, deleteProductMutation, unitMutation, deleteUnitMutation, categoryMutation, attributeMutation, filteredBases, orderedBases, pageSize, totalProductPages, currentProductsPage, visibleBases, saveVariant, toggleVariantStatus } = model
+  const { units, categories, attributes, setModal, configurationTab, deleteUnitMutation, attributeMutation } = model
   return ((
         <section>
           {configurationTab === "categories" ? (

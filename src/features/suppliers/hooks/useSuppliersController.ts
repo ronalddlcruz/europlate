@@ -5,10 +5,12 @@ import type { PurchaseCatalog } from '@/features/purchases/services/purchase-api
 import { sortSuppliers,updateCatalogSuppliers } from '@/features/suppliers/components/shared'
 import { createSupplier,deleteSupplier,listSuppliers,updateSupplier,type Supplier } from '@/features/suppliers/services/supplier-api.service'
 
+const EMPTY_SUPPLIERS: Supplier[] = []
+
 export function useSuppliersController() {
   const queryClient = useQueryClient()
   const suppliersQuery = useQuery({ queryKey: ['suppliers'], queryFn: listSuppliers, staleTime: 5 * 60 * 1000, gcTime: 15 * 60 * 1000 })
-  const suppliers = suppliersQuery.data ?? []
+  const suppliers = suppliersQuery.data ?? EMPTY_SUPPLIERS
   const [modalItem, setModalItem] = useState<Supplier | null | undefined>(undefined)
   const [search, setSearch] = useState('')
   const [notice, setNotice] = useState('')

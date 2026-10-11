@@ -1,21 +1,38 @@
+import { AttributeDefinitionDialog } from '@/features/products/components/attribute-catalog'
 import {
-AttributeDefinitionDialog
-} from "@/features/products/components/attribute-catalog";
-import {
-CategoryConfigurationDialog,
-SubcategoryEditDialog
-} from "@/features/products/components/category-configuration";
-import { UnitDialog } from '@/features/products/components/dialogs/UnitDialog';
-import { VariantDialog } from '@/features/products/components/dialogs/VariantDialog';
-import { ProductWizard } from "@/features/products/components/product-wizard";
-import { ProductsNavigation } from "@/features/products/components/products-navigation";
-import { useProductsController } from '@/features/products/hooks/useProductsController';
-import { ProductsCatalogPage } from '@/features/products/pages/products-catalog-page';
-import { ProductsConfigurationPage } from '@/features/products/pages/products-configuration-page';
+  CategoryConfigurationDialog,
+  SubcategoryEditDialog,
+} from '@/features/products/components/category-configuration'
+import { UnitDialog } from '@/features/products/components/dialogs/UnitDialog'
+import { VariantDialog } from '@/features/products/components/dialogs/VariantDialog'
+import { ProductWizard } from '@/features/products/components/product-wizard'
+import { ProductsNavigation } from '@/features/products/components/products-navigation'
+import { useProductsController } from '@/features/products/hooks/useProductsController'
+import { ProductsCatalogPage } from '@/features/products/pages/products-catalog-page'
+import { ProductsConfigurationPage } from '@/features/products/pages/products-configuration-page'
 
 export function ProductsPage() {
   const model = useProductsController()
-  const { queryClient, navigate, pathname, catalog, products, bases, variants, units, categories, attributes, modal, setModal, roleFilter, setRoleFilter, statusFilter, setStatusFilter, search, setSearch, notice, setNotice, productsPage, setProductsPage, isConfiguration, configurationTab, openCatalog, openConfiguration, notify, refreshCatalog, createAttributeForCategory, refreshProductConsumers, synchronizeAttributeDefinition, syncProductionCatalogProduct, removeProductFromProductionCatalog, warmProductionCatalog, productMutation, statusMutation, deleteProductMutation, unitMutation, deleteUnitMutation, categoryMutation, attributeMutation, filteredBases, orderedBases, pageSize, totalProductPages, currentProductsPage, visibleBases, saveVariant, toggleVariantStatus } = model
+  const {
+    bases,
+    variants,
+    units,
+    categories,
+    attributes,
+    modal,
+    setModal,
+    notice,
+    isConfiguration,
+    configurationTab,
+    openCatalog,
+    openConfiguration,
+    createAttributeForCategory,
+    productMutation,
+    unitMutation,
+    categoryMutation,
+    attributeMutation,
+    saveVariant,
+  } = model
   return (
     <div className="-mx-2 max-w-none sm:-mx-4 lg:-mx-[3%]">
       <ProductsNavigation
@@ -24,17 +41,18 @@ export function ProductsPage() {
         onOpenCatalog={openCatalog}
         onOpenConfiguration={openConfiguration}
       />
-      {isConfiguration ? <ProductsConfigurationPage model={model} /> : <ProductsCatalogPage model={model} />}
-      {modal?.type === "base" && (
+      {isConfiguration ? (
+        <ProductsConfigurationPage model={model} />
+      ) : (
+        <ProductsCatalogPage model={model} />
+      )}
+      {modal?.type === 'base' && (
         <ProductWizard
-          key={modal.item?.id ?? "new-product"}
+          key={modal.item?.id ?? 'new-product'}
           item={modal.item}
           variants={
-            modal.item
-              ? variants.filter((variant) => variant.baseId === modal.item!.id)
-              : []
+            modal.item ? variants.filter((variant) => variant.baseId === modal.item!.id) : []
           }
-          products={bases}
           categories={categories}
           units={units}
           readOnly={modal.readOnly}
@@ -48,7 +66,7 @@ export function ProductsPage() {
           }
         />
       )}
-      {modal?.type === "variant" && (
+      {modal?.type === 'variant' && (
         <VariantDialog
           item={modal.item}
           base={bases.find((base) => base.id === modal.item?.baseId)!}
@@ -57,16 +75,14 @@ export function ProductsPage() {
           onSave={(item) => saveVariant(item, Boolean(modal.item))}
         />
       )}
-      {modal?.type === "unit" && (
+      {modal?.type === 'unit' && (
         <UnitDialog
           item={modal.item}
           onClose={() => setModal(null)}
-          onSave={(item) =>
-            unitMutation.mutate({ item, editing: Boolean(modal.item) })
-          }
+          onSave={(item) => unitMutation.mutate({ item, editing: Boolean(modal.item) })}
         />
       )}
-      {modal?.type === "category" && (
+      {modal?.type === 'category' && (
         <CategoryConfigurationDialog
           item={modal.item}
           definitions={attributes}
@@ -78,22 +94,19 @@ export function ProductsPage() {
           }
         />
       )}
-      {modal?.type === "subcategory" && (
+      {modal?.type === 'subcategory' && (
         <SubcategoryEditDialog
           category={modal.category}
           item={modal.item}
           definitions={attributes}
-          hasProducts={bases.some(
-            (base) => base.subcategoryId === modal.item.id,
-          )}
+          hasProducts={bases.some((base) => base.subcategoryId === modal.item.id)}
           onClose={() => setModal(null)}
           onSave={(item) =>
             categoryMutation.mutate({
               item: {
                 ...modal.category,
-                subcategories: modal.category.subcategories.map(
-                  (subcategory) =>
-                    subcategory.id === item.id ? item : subcategory,
+                subcategories: modal.category.subcategories.map((subcategory) =>
+                  subcategory.id === item.id ? item : subcategory,
                 ),
               },
               editing: true,
@@ -101,7 +114,7 @@ export function ProductsPage() {
           }
         />
       )}
-      {modal?.type === "attribute" && (
+      {modal?.type === 'attribute' && (
         <AttributeDefinitionDialog
           item={modal.item}
           editing={modal.editing ?? Boolean(modal.item)}
@@ -121,5 +134,5 @@ export function ProductsPage() {
         </div>
       )}
     </div>
-  );
+  )
 }

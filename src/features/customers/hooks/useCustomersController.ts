@@ -3,8 +3,10 @@ import { useMemo,useState } from 'react'
 import { sortCustomers } from '@/features/customers/components/shared'
 import { createCustomer,deleteCustomer,listCustomers,updateCustomer,type Customer } from '@/features/customers/services/customer-api.service'
 
+const EMPTY_CUSTOMERS: Customer[] = []
+
 export function useCustomersController() {
-  const queryClient = useQueryClient(); const customersQuery = useQuery({ queryKey: ['customers'], queryFn: listCustomers }); const customers = customersQuery.data ?? []
+  const queryClient = useQueryClient(); const customersQuery = useQuery({ queryKey: ['customers'], queryFn: listCustomers }); const customers = customersQuery.data ?? EMPTY_CUSTOMERS
   const [query, setQuery] = useState(''); const [modalItem, setModalItem] = useState<Customer | null | undefined>(undefined); const [notice, setNotice] = useState('')
   const notify = (message: string) => { setNotice(message); window.setTimeout(() => setNotice(''), 2800) }
   const syncCustomerPickers = (customer?: Customer, removedId?: string) => {

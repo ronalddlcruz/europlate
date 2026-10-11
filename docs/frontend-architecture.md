@@ -77,11 +77,10 @@ feature se mantiene aislada de `main` y no se despliega durante la migración.
   controlador de interacción, servicio HTTP y esquemas Zod. La validación del
   cliente refleja el contrato de credenciales del servidor y verifica las
   respuestas antes de guardar un token o restaurar una sesión en caché.
-- `npm run lint` y `npm run format:check` verifican estrictamente Auth, el
-  primer módulo de la migración. `npm run lint:all` y
-  `npm run format:check:all` exponen la deuda de los demás módulos sin
-  ocultarla. Cada módulo incorporado deberá quedar limpio antes de ampliar
-  el alcance de los comandos predeterminados. `npm run format` formatea todo
+- `npm run lint` verifica todo `src` con cero advertencias. TypeScript también
+  rechaza variables y parámetros sin uso durante `npm run build`.
+  `npm run format:check` verifica Auth; `npm run format:check:all` muestra el
+  formato pendiente en los demás módulos. `npm run format` formatea todo
   `src` de forma explícita; no se ejecuta como parte de la compilación.
 - No se crean enums sin un conjunto cerrado de estados de dominio. Los tipos
   de Auth se infieren de los esquemas para evitar contratos duplicados.

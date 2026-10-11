@@ -9,7 +9,7 @@ import { GroupedProductsTable } from '@/features/products/components/tables/Grou
 import { useProductsController } from '@/features/products/hooks/useProductsController';
 
 export function ProductsCatalogPage({ model }: { model: ReturnType<typeof useProductsController> }) {
-  const { queryClient, navigate, pathname, catalog, products, bases, variants, units, categories, attributes, modal, setModal, roleFilter, setRoleFilter, statusFilter, setStatusFilter, search, setSearch, notice, setNotice, productsPage, setProductsPage, isConfiguration, configurationTab, openCatalog, openConfiguration, notify, refreshCatalog, createAttributeForCategory, refreshProductConsumers, synchronizeAttributeDefinition, syncProductionCatalogProduct, removeProductFromProductionCatalog, warmProductionCatalog, productMutation, statusMutation, deleteProductMutation, unitMutation, deleteUnitMutation, categoryMutation, attributeMutation, filteredBases, orderedBases, pageSize, totalProductPages, currentProductsPage, visibleBases, saveVariant, toggleVariantStatus } = model
+  const { catalog, bases, variants, units, categories, setModal, roleFilter, setRoleFilter, statusFilter, setStatusFilter, search, setSearch, setProductsPage, deleteProductMutation, orderedBases, pageSize, totalProductPages, currentProductsPage, visibleBases, toggleVariantStatus } = model
   return ((
         <section className="rounded-xl border border-border bg-white p-6 shadow-card">
           <header className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 pb-5">

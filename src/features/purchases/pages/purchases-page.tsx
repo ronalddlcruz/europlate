@@ -7,7 +7,7 @@ import { usePurchasesController } from '@/features/purchases/hooks/usePurchasesC
 
 export function PurchasesPage() {
   const model = usePurchasesController()
-  const { queryClient, purchasesQuery, catalogQuery, productsCatalogQuery, modal, setModal, selected, setSelected, detailQuery, notice, setNotice, notify, refreshPurchaseConsumers, createMutation, deleteMutation, purchases } = model
+  const { catalogQuery, productsCatalogQuery, modal, setModal, selected, detailQuery, notice, createMutation } = model
   return <div className="mx-auto max-w-7xl">
 <section className="card">
 <header className="flex flex-wrap items-center justify-between gap-3">

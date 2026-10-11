@@ -29,6 +29,8 @@ ProductVariant,
 Unit
 } from "@/features/products/types/product.types";
 
+const EMPTY_CATEGORIES: ProductCategory[] = [];
+
 export function useProductsController() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -41,7 +43,7 @@ export function useProductsController() {
   const bases = products.map((product) => product.base);
   const variants = products.flatMap((product) => product.variants);
   const units = catalog.data?.units ?? [];
-  const categories = catalog.data?.categories ?? [];
+  const categories = catalog.data?.categories ?? EMPTY_CATEGORIES;
   const attributes = catalog.data?.attributes ?? [];
   const [modal, setModal] = useState<Modal>(null);
   const [roleFilter, setRoleFilter] = useState<"Todos" | ProductRole>("Todos");
@@ -405,7 +407,7 @@ export function useProductsController() {
       item: ProductCategory;
       editing: boolean;
     }) => {
-      const { id: _id, ...payload } = item;
+      const { ...payload } = item;
       return editing
         ? updateCatalogCategory(item.id, payload)
         : createCatalogCategory(payload);
@@ -477,7 +479,7 @@ export function useProductsController() {
       item: AttributeDefinition;
       editing: boolean;
     }) => {
-      const { id: _id, ...payload } = item;
+      const { ...payload } = item;
       return editing
         ? updateAttributeDefinition(item.id, payload)
         : createAttributeDefinition(payload);
