@@ -1,31 +1,12 @@
 import { Button } from "@/components/ui/button";
 import { normalizeProductSearch } from "@/lib/product-search";
-import {
-loadCatalog
-} from "@/features/products/services/product-api.service";
 import type {
-AttributeDefinition,
 ProductBase,
-ProductCategory,
 ProductRole,
 ProductStatus,
-ProductSubcategory,
-ProductVariant,
-Unit
 } from "@/features/products/types/product.types";
 
 export const ENABLE_PRODUCT_DELETION = true;
-
-export type Modal =
-  | { type: "base"; item?: ProductBase; readOnly?: boolean }
-  | { type: "variant"; item?: ProductVariant; baseId?: string }
-  | { type: "unit"; item?: Unit }
-  | { type: "category"; item?: ProductCategory; editing?: boolean }
-  | { type: "subcategory"; category: ProductCategory; item: ProductSubcategory }
-  | { type: "attribute"; item?: AttributeDefinition; editing?: boolean }
-  | null;
-
-export type CatalogData = Awaited<ReturnType<typeof loadCatalog>>;
 
 export const roles: ProductRole[] = ["Mercadería", "Insumo", "Producto terminado"];
 

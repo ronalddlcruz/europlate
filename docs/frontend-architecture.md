@@ -31,6 +31,23 @@ Productos tiene vistas de página separadas para catálogo y configuración;
 categorías y subcategorías se gestionan en componentes y diálogos propios
 dentro de la configuración. Las rutas y pestañas públicas no se alteraron.
 
+El controlador de Productos solo compone estado de pantalla y operaciones.
+`useProductCatalog` consulta y actualiza el caché; `useProductList` coordina
+filtros y paginación; `useProductOperations`, `useCategoryOperations`,
+`useAttributeOperations` y `useUnitOperations` conservan sus mutaciones con
+actualización optimista y rollback. La subcategoría continúa siendo parte del
+agregado categoría porque el contrato actual de la API la guarda con ella.
+Las transformaciones puras de búsqueda, orden y sincronización de atributos
+residen en `domain/` y tienen pruebas independientes.
+
+Toda petición HTTP del frontend sale de la instancia `apiClient` en
+`src/lib/api-client.ts`. Los servicios de cada módulo son adaptadores de
+endpoints y contratos; hooks y componentes no ejecutan `fetch` directamente.
+La fachada `api()` se conserva para no cambiar de golpe todos los servicios.
+El calentamiento de la API y la carga de PDF también pasan por la instancia.
+React Query sigue siendo el caché de UI; no se introducen colas, Redis ni
+otro runtime en esta refactorización.
+
 Las dependencias objetivo fluyen de `pages` hacia `components` y `hooks`; de
 `hooks` hacia `services` y `domain`. `domain` no importa React ni HTTP. Las
 dependencias cruzadas heredadas entre módulos se conservan en esta fase para

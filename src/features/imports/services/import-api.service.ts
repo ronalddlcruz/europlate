@@ -1,4 +1,4 @@
-import { accessToken, api, apiBaseUrl, ApiError } from '@/lib/api-client'
+import { api, apiClient } from '@/lib/api-client'
 
 export type ImportStatus = 'En tránsito' | 'Recibido' | 'Cancelado'
 export type ImportCalculationType = 'STANDARD' | 'WEIGHT_BASED'
@@ -22,5 +22,11 @@ export async function createImport(payload: ImportPayload) { return mapImport(aw
 export async function updateImport(id: string, payload: Partial<ImportPayload>) { return mapImport(await api<ApiImport>(`/api/imports/${id}`, { method: 'PATCH', body: JSON.stringify(payload) })) }
 export async function receiveImport(id: string) { return mapImport(await api<ApiImport>(`/api/imports/${id}/receive`, { method: 'POST' })) }
 export async function deleteImport(id: string) { await api<void>(`/api/imports/${id}`, { method: 'DELETE' }) }
-export async function uploadImportDocument(file: File) { const response = await fetch(`${apiBaseUrl}/api/imports/documents`, { method: 'POST', headers: { 'Content-Type': 'application/pdf', 'X-File-Name': encodeURIComponent(file.name), ...(accessToken() && { Authorization: `Bearer ${accessToken()}` }) }, body: file }); const body = await response.json().catch(() => null); if (!response.ok) throw new ApiError(body?.error?.message ?? 'No se pudo subir el PDF.', response.status); return body.data as UploadedImportDocument }
+export async function uploadImportDocument(file: File): Promise<UploadedImportDocument> {
+  return apiClient.uploadPdf<UploadedImportDocument>(
+    '/api/imports/documents',
+    file,
+    'No se pudo subir el PDF.',
+  )
+}
 export async function removeImportDocument(storageKey: string) { await api<void>('/api/imports/documents', { method: 'DELETE', body: JSON.stringify({ storageKey }) }) }

@@ -18,7 +18,7 @@
     "seed": "node scripts/seed.js",
     "server:dev": "npm run dev:api",
     "server:build": "tsc -p server/tsconfig.json",
-    "test:frontend": "tsx --tsconfig tsconfig.app.json --test src/lib/product-search.test.ts src/features/auth/schemas/auth.schema.test.ts",
+    "test:frontend": "tsx --tsconfig tsconfig.app.json --test src/lib/product-search.test.ts src/lib/api-client.test.ts src/features/auth/schemas/auth.schema.test.ts src/features/products/domain/product-list.test.ts src/features/products/domain/synchronize-attribute-definition.test.ts",
     "test:imports": "tsx --test server/src/modules/imports/services/import-line-calculator.test.ts",
     "db:generate": "prisma generate",
     "db:validate": "prisma validate",

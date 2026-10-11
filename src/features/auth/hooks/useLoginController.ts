@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { apiBaseUrl } from '@/lib/api-client'
+import { apiClient } from '@/lib/api-client'
 import { PATHS } from '@/app/router/constants/paths'
 import { useAuth } from '@/features/auth/hooks/use-auth'
 import { loginInputSchema } from '@/features/auth/schemas/auth.schema'
@@ -16,7 +16,7 @@ export function useLoginController() {
   useEffect(() => {
     // Despierta la API mientras el usuario completa el formulario. No bloquea
     // el login ni muestra errores si Render está arrancando tras inactividad.
-    void fetch(`${apiBaseUrl}/health`, { cache: 'no-store' }).catch(() => undefined)
+    void apiClient.warmUp().catch(() => undefined)
   }, [])
 
   async function submit(event: FormEvent<HTMLFormElement>) {
