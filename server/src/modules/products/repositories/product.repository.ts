@@ -15,6 +15,7 @@ export const productRepository = {
   delete: (id: string) => prisma.product.delete({ where: { id } }),
   listUnits: () => prisma.unit.findMany({ orderBy: { code: 'asc' } }),
   listCategories: () => prisma.category.findMany({ include: categoryInclude, orderBy: { name: 'asc' } }),
+  findCategoryBySubcategoryId: (subcategoryId: string) => prisma.category.findFirst({ where: { subcategories: { some: { id: subcategoryId } } }, include: categoryInclude }),
   findCategory: (id: string) => prisma.category.findUnique({ where: { id }, include: categoryInclude }),
   findCategoryByName: (name: string) => prisma.category.findUnique({ where: { name }, include: categoryInclude }),
   createCategory: (data: Prisma.CategoryCreateInput) => prisma.category.create({ data, include: categoryInclude }),
