@@ -56,7 +56,14 @@ enum InventoryMovementType {
   TRANSFER_OUT
   ADJUSTMENT_IN
   ADJUSTMENT_OUT
+  ADJUSTMENT_WASTE
   INITIAL_STOCK
+}
+
+enum InventoryAdjustmentType {
+  IN
+  OUT
+  WASTE
 }
 
 enum PurchaseStatus {
@@ -70,6 +77,11 @@ enum ImportStatus {
   IN_TRANSIT
   RECEIVED
   CANCELLED
+}
+
+enum ImportCalculationType {
+  STANDARD
+  WEIGHT_BASED
 }
 
 enum ProductionStatus {
@@ -120,6 +132,10 @@ model User {
   stockTransfers StockTransfer[]
   inventoryAdjustments InventoryAdjustment[]
   createdExchangeRates ExchangeRate[] @relation("ExchangeRateCreator")
+  responsibleWarehouses Warehouse[] @relation("WarehouseResponsible")
+  createdPurchases Purchase[] @relation("PurchaseCreator")
+  createdImports Import[] @relation("ImportCreator")
+  createdProductionOrders ProductionOrder[] @relation("ProductionOrderCreator")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@index([companyId, status])
@@ -274,8 +290,10 @@ model AttributeDefinition {
   dataType AttributeDataType @default(TEXT)
   suffix String?
   status ProductStatus @default(ACTIVE)
+  isWeight Boolean @default(false)
   categoryLinks CategoryAttribute[]
   subcategoryLinks SubcategoryAttribute[]
+  productLinks ProductAttribute[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@index([name, status])
@@ -291,6 +309,8 @@ model Product {
   id String @id @default(cuid())
   code String @unique
   name String
+  /// Orden estable de visualización. No cambia cuando se edita el producto.
+  sortOrder Int @default(0)
   categoryId String?
   subcategoryId String?
   brandId String?
@@ -312,21 +332,26 @@ model Product {
   materials ProductionMaterial[]
   stockTransfers StockTransfer[]
   inventoryAdjustments InventoryAdjustment[]
+  @@index([sortOrder])
   @@index([name, status])
 }
 
 model ProductAttribute {
   id String @id @default(cuid())
   productId String
+  attributeDefinitionId String?
   name String
   dataType AttributeDataType @default(TEXT)
   suffix String?
   required Boolean @default(false)
   status ProductStatus @default(ACTIVE)
   useInSubtotal Boolean @default(false)
+  isWeight Boolean @default(false)
   position Int @default(0)
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  attributeDefinition AttributeDefinition? @relation(fields: [attributeDefinitionId], references: [id], onDelete: SetNull)
   @@unique([productId, name])
+  @@index([attributeDefinitionId])
 }
 
 model ProductPresentation {
@@ -339,13 +364,14 @@ model ProductPresentation {
   factor Decimal @default(1) @db.Decimal(14, 3)
   minimumStock Decimal @default(0) @db.Decimal(14, 3)
   currentStock Decimal @default(0) @db.Decimal(14, 3)
+  openingUnitCostPen Decimal? @db.Decimal(14, 4)
+  openingUnitCostUsd Decimal? @db.Decimal(14, 4)
+  openingUnitCostCurrency String @default("PEN")
   status ProductStatus @default(ACTIVE)
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
   unit Unit @relation(fields: [unitId], references: [id])
   purchaseItems PurchaseItem[]
   importItems ImportItem[]
-  productionOrders ProductionOrder[] @relation("ProductionOutputPresentation")
-  productionMaterials ProductionMaterial[] @relation("ProductionMaterialPresentation")
   inventoryMovements InventoryMovement[]
   stockTransfers StockTransfer[]
   inventoryAdjustments InventoryAdjustment[]
@@ -365,11 +391,17 @@ model ProductIdentifier {
 model Warehouse {
   id String @id @default(cuid())
   companyId String
+  responsibleUserId String?
   name String
   location String?
+  department String?
+  province String?
+  district String?
+  address String?
   description String?
   status ProductStatus @default(ACTIVE)
   company Company @relation(fields: [companyId], references: [id])
+  responsible User? @relation("WarehouseResponsible", fields: [responsibleUserId], references: [id], onDelete: SetNull)
   stocks Stock[]
   movements InventoryMovement[]
   purchaseItems PurchaseItem[]
@@ -380,6 +412,7 @@ model Warehouse {
   inboundTransfers StockTransfer[] @relation("TransferDestination")
   inventoryAdjustments InventoryAdjustment[]
   @@unique([companyId, name])
+  @@index([companyId, responsibleUserId])
 }
 
 model Stock {
@@ -437,6 +470,8 @@ model InventoryAdjustment {
   presentationId String?
   companyId String?
   createdByUserId String?
+  customerId String?
+  type InventoryAdjustmentType @default(IN)
   previousQuantity Decimal @db.Decimal(14, 3)
   newQuantity Decimal @db.Decimal(14, 3)
   reason String
@@ -446,7 +481,9 @@ model InventoryAdjustment {
   warehouse Warehouse @relation(fields: [warehouseId], references: [id])
   company Company? @relation(fields: [companyId], references: [id])
   createdBy User? @relation(fields: [createdByUserId], references: [id])
+  customer Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
   @@index([companyId, createdAt])
+  @@index([customerId])
 }
 
 model Supplier {
@@ -468,16 +505,20 @@ model Customer {
   id String @id @default(cuid())
   companyId String
   name String
+  ruc String?
   phone String
   email String
   address String
   note String?
   status ProductStatus @default(ACTIVE)
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  inventoryAdjustments InventoryAdjustment[]
+  productionOutputOrders ProductionOrder[] @relation("ProductionOutputCustomer")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@index([companyId, name])
   @@index([companyId, status])
+  @@unique([companyId, ruc])
 }
 
 model CustomsAgent {
@@ -500,6 +541,7 @@ model CustomsAgent {
 model Purchase {
   id String @id @default(cuid())
   companyId String
+  createdByUserId String?
   supplierId String
   number String @unique
   supplierInvoiceNumber String
@@ -509,11 +551,14 @@ model Purchase {
   receiptDate DateTime
   total Decimal @default(0) @db.Decimal(14, 2)
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdBy User? @relation("PurchaseCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
   supplier Supplier @relation(fields: [supplierId], references: [id])
   items PurchaseItem[]
   documents PurchaseDocument[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  @@index([companyId, purchaseDate])
+  @@index([companyId, createdByUserId, purchaseDate])
 }
 
 model PurchaseItem {
@@ -544,6 +589,7 @@ model PurchaseDocument {
 model Import {
   id String @id @default(cuid())
   companyId String
+  createdByUserId String?
   supplierId String
   customsAgentId String?
   number String @unique
@@ -558,6 +604,7 @@ model Import {
   customsCostPen Decimal @default(0) @db.Decimal(14, 2)
   totalUsd Decimal @default(0) @db.Decimal(14, 2)
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdBy User? @relation("ImportCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
   supplier Supplier @relation(fields: [supplierId], references: [id])
   customsAgent CustomsAgent? @relation(fields: [customsAgentId], references: [id])
   items ImportItem[]
@@ -566,6 +613,8 @@ model Import {
   updatedAt DateTime @updatedAt
   @@unique([companyId, duaNumber])
   @@index([companyId, status, createdAt])
+  @@index([companyId, arrivalDate])
+  @@index([companyId, createdByUserId, arrivalDate])
   @@index([supplierId])
 }
 
@@ -577,6 +626,11 @@ model ImportItem {
   warehouseId String
   quantity Decimal @db.Decimal(14, 3)
   unitCostUsd Decimal @db.Decimal(14, 4)
+  calculationType ImportCalculationType @default(STANDARD)
+  weightAttributeId String?
+  weightValue Decimal? @db.Decimal(14, 3)
+  weightUnit String?
+  subtotalUsd Decimal @default(0) @db.Decimal(14, 2)
   import Import @relation(fields: [importId], references: [id], onDelete: Cascade)
   product Product @relation(fields: [productId], references: [id])
   presentation ProductPresentation @relation(fields: [presentationId], references: [id])
@@ -600,8 +654,8 @@ model ProductionOrder {
   id String @id @default(cuid())
   number String @unique
   companyId String
+  createdByUserId String?
   productId String
-  presentationId String
   warehouseId String
   quantity Decimal @db.Decimal(14, 3)
   scheduledAt DateTime
@@ -609,31 +663,34 @@ model ProductionOrder {
   note String?
   outputDispatched Boolean @default(false)
   outputJustification String?
+  outputCustomerId String?
   completedAt DateTime?
   company Company @relation(fields: [companyId], references: [id])
+  createdBy User? @relation("ProductionOrderCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
   product Product @relation(fields: [productId], references: [id])
-  presentation ProductPresentation @relation("ProductionOutputPresentation", fields: [presentationId], references: [id])
   warehouse Warehouse @relation("ProductionOutputWarehouse", fields: [warehouseId], references: [id])
+  outputCustomer Customer? @relation("ProductionOutputCustomer", fields: [outputCustomerId], references: [id], onDelete: SetNull)
   materials ProductionMaterial[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@index([companyId, status, scheduledAt])
+  @@index([companyId, createdByUserId, scheduledAt])
   @@index([warehouseId])
+  @@index([outputCustomerId])
 }
 
 model ProductionMaterial {
   id String @id @default(cuid())
   orderId String
   productId String
-  presentationId String
   warehouseId String
   quantity Decimal @db.Decimal(14, 3)
   status ProductionMaterialStatus @default(RESERVED)
   immediateConsumption Boolean @default(false)
+  shareReservation Boolean @default(false)
   consumedAt DateTime?
   order ProductionOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
   product Product @relation(fields: [productId], references: [id])
-  presentation ProductPresentation @relation("ProductionMaterialPresentation", fields: [presentationId], references: [id])
   warehouse Warehouse @relation("ProductionMaterialWarehouse", fields: [warehouseId], references: [id])
   @@index([orderId, status])
   @@index([warehouseId])

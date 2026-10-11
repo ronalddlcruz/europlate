@@ -1,8 +1,11 @@
 node_modules/
 .env
 prisma/.env
+.seed-users.env
 .netlify/
 *.log
 .pnpm-store/
+.pnpm-fresh-store/
 dist/
 server/dist/
+server-nest/dist/

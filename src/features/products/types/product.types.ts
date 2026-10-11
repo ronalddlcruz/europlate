@@ -2,12 +2,15 @@ export type ProductRole = "Mercadería" | "Insumo" | "Producto terminado";
 export type ProductStatus = "Activo" | "Inactivo";
 export interface Attribute {
   id: string;
+  definitionId?: string | null;
+  definitionStatus?: ProductStatus | null;
   name: string;
   type: "Texto" | "Numérico";
   required: boolean;
   suffix: string;
   status?: ProductStatus;
   useInSubtotal?: boolean;
+  isWeight?: boolean;
 }
 export interface AttributeDefinition {
   id: string;
@@ -16,11 +19,13 @@ export interface AttributeDefinition {
   type: "Texto" | "Numérico";
   suffix: string;
   status: ProductStatus;
+  isWeight: boolean;
 }
 export interface ProductBase {
   id: string;
   code: string;
   name: string;
+  sortOrder?: number;
   categoryId?: string | null;
   categoryName?: string | null;
   subcategoryId?: string | null;
@@ -41,6 +46,9 @@ export interface ProductVariant {
   factor: number;
   minimum: number;
   stock: number;
+  openingUnitCostPen?: number | null;
+  openingUnitCostUsd?: number | null;
+  openingUnitCostCurrency?: "PEN" | "USD";
   status: ProductStatus;
 }
 export interface Unit {

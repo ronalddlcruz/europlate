@@ -9,5 +9,6 @@ productionRoutes.get('/catalog', requirePermission('production.read'), productio
 productionRoutes.post('/', requirePermission('production.manage'), productionController.create)
 productionRoutes.get('/:id', requirePermission('production.read'), productionController.get)
 productionRoutes.patch('/:id', requirePermission('production.manage'), productionController.update)
+productionRoutes.post('/:id/materials/:materialId/consume', requirePermission('production.manage'), productionController.consumeMaterial)
 productionRoutes.post('/:id/complete', requirePermission('production.manage'), productionController.complete)
 productionRoutes.delete('/:id', requirePermission('production.manage'), productionController.remove)

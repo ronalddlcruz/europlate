@@ -5,6 +5,10 @@ import { supplierRepository } from '../repositories/supplier.repository.js'
 import type { CreateSupplierInput, UpdateSupplierInput } from '../schemas/supplier.schema.js'
 
 const duplicateError = () => new AppError('SUPPLIER_TAX_ID_EXISTS', 'Ya existe un proveedor con este RUC / Tax ID.', 409)
+const validateTaxId = (type: 'NATIONAL' | 'FOREIGN', taxId: string) => {
+  const valid = type === 'NATIONAL' ? /^\d{11}$/.test(taxId) : /^[A-Z0-9-]{8,20}$/i.test(taxId)
+  if (!valid) throw new AppError('SUPPLIER_TAX_ID_INVALID', type === 'NATIONAL' ? 'El RUC debe tener exactamente 11 dígitos.' : 'El Tax ID debe tener entre 8 y 20 caracteres alfanuméricos.', 422)
+}
 
 export const supplierService = {
   list(companyId: string, filters: { search?: string; status?: 'ACTIVE' | 'INACTIVE'; type?: 'NATIONAL' | 'FOREIGN' }) {
@@ -22,11 +26,13 @@ export const supplierService = {
     return supplier
   },
   async create(companyId: string, input: CreateSupplierInput) {
-    if (await supplierRepository.findByTaxId(companyId, input.taxId)) throw duplicateError()
+    if (input.taxId && await supplierRepository.findByTaxId(companyId, input.taxId)) throw duplicateError()
     return supplierRepository.create(prisma, { ...input, company: { connect: { id: companyId } } })
   },
   async update(companyId: string, id: string, input: UpdateSupplierInput) {
-    await this.getById(companyId, id)
+    const existing = await this.getById(companyId, id)
+    const taxId = input.taxId === undefined ? existing.taxId : input.taxId
+    if (taxId) validateTaxId(input.type ?? existing.type, taxId)
     if (input.taxId) {
       const duplicate = await supplierRepository.findByTaxId(companyId, input.taxId)
       if (duplicate && duplicate.id !== id) throw duplicateError()

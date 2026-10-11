@@ -1,18 +1,12 @@
-# Backend preparado
+# Arquitectura del backend
 
-La API se implementará por dominio con el flujo `routes → controllers → services → repositories → Prisma → PostgreSQL`.
+La API operativa de Europlate usa Express, Prisma y PostgreSQL. El diagnóstico, la arquitectura objetivo y el avance incremental se mantienen en:
 
-`server/src/modules` ya contiene Productos, Inventario, Compras y Producción con validadores Zod, repositorios Prisma y servicios. Las rutas son marcadores sin endpoints, conforme al alcance actual.
+- [Arquitectura actual](architecture-current.md)
+- [Arquitectura objetivo](architecture-target.md)
+- [Dependencias entre módulos](module-dependencies.md)
+- [Protección de reglas de negocio](business-rules-preservation.md)
+- [Avance de la refactorización](refactoring-progress.md)
+- [Rendimiento: siguiente fase](performance-next-phase.md)
 
-## Seguridad al habilitar rutas
-
-- Registrar las rutas de autenticación públicas bajo `/api/auth`.
-- Aplicar `requireAuthentication` a las demás rutas.
-- Aplicar `requirePermission('<módulo>:read')` a GET y `requirePermission('<módulo>:manage')` a mutaciones.
-- Resolver permisos desde `Role`, `Permission`, `RolePermission` y `UserPermission`.
-
-## Supabase y Prisma
-
-- `DATABASE_URL`: URL de la base PostgreSQL; puede ser el pooler de Supabase para la API.
-- `DIRECT_URL`: usar conexión directa de Supabase para migraciones cuando se habiliten.
-- Antes de crear la primera migración, confirmar que el proyecto de Supabase esté activo y que la URL/puerto sean accesibles.
+La prueba de rutas en `server/src/shared/openapi/openapi.document.test.ts` verifica la correspondencia entre routers Express y el inventario Swagger. El proyecto `server-nest/` continúa aislado y no sustituye la API activa.

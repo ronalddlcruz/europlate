@@ -1,4 +1,4 @@
-import type { ProductBase, ProductVariant, Unit } from '../types/product.types'
+import type { ProductBase, ProductVariant, Unit } from '@/features/products/types/product.types'
 
 export const initialBases: ProductBase[] = [
   { id: 'base-1', code: 'PRD-001', name: 'Plancha de acero', roles: ['Mercadería'], status: 'Activo', variantType: 'Con variantes', attributes: [{ id: 'a-1', name: 'Espesor', type: 'Numérico', required: true, suffix: ' mm' }, { id: 'a-2', name: 'Medida', type: 'Texto', required: true, suffix: '' }] },

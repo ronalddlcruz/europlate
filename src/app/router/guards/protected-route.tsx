@@ -1,7 +1,7 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom'
-import { AppLoadingSkeleton } from '../../../components/ui/app-loading-skeleton'
-import { useAuth } from '../../../features/auth/hooks/use-auth'
-import { PATHS } from '../constants/paths'
+import { AppLoadingSkeleton } from '@/components/ui/app-loading-skeleton'
+import { useAuth } from '@/features/auth/hooks/use-auth'
+import { PATHS } from '@/app/router/constants/paths'
 
 export function ProtectedRoute() {
   const { isAuthenticated, isInitializing } = useAuth()

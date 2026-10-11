@@ -1,4 +1,4 @@
-import { api } from "../../../lib/api-client";
+import { api } from "@/lib/api-client";
 import type {
   Attribute,
   AttributeDefinition,
@@ -8,7 +8,7 @@ import type {
   ProductStatus,
   ProductVariant,
   Unit,
-} from "../types/product.types";
+} from "@/features/products/types/product.types";
 
 type ApiAttribute = {
   id: string;
@@ -18,11 +18,14 @@ type ApiAttribute = {
   suffix: string | null;
   status: "ACTIVE" | "INACTIVE";
   useInSubtotal?: boolean;
+  isWeight?: boolean;
   attributeDefinition?: {
     id: string;
     suffix: string | null;
     name: string;
     dataType: "TEXT" | "NUMBER";
+    status: "ACTIVE" | "INACTIVE";
+    isWeight?: boolean;
   } | null;
 };
 type ApiSubcategory = {
@@ -31,6 +34,7 @@ type ApiSubcategory = {
   name: string;
   description: string | null;
   status: "ACTIVE" | "INACTIVE";
+  isWeight?: boolean;
   isVariable: boolean;
   attributes: ApiAttribute[];
 };
@@ -47,6 +51,7 @@ type ApiProduct = {
   id: string;
   code: string;
   name: string;
+  sortOrder: number;
   categoryId: string | null;
   subcategoryId: string | null;
   category: ApiCategory | null;
@@ -64,6 +69,9 @@ type ApiProduct = {
     factor: string | number;
     minimumStock: string | number;
     currentStock: string | number;
+    openingUnitCostPen: string | number | null;
+    openingUnitCostUsd: string | number | null;
+    openingUnitCostCurrency: "PEN" | "USD";
     status: "ACTIVE" | "INACTIVE";
     unit: { code: string };
   }[];
@@ -81,6 +89,7 @@ type ApiAttributeDefinition = {
   dataType: "TEXT" | "NUMBER";
   suffix: string | null;
   status: "ACTIVE" | "INACTIVE";
+  isWeight: boolean;
 };
 const toRole: Record<ApiProduct["roles"][number], ProductRole> = {
   MERCHANDISE: "Mercadería",
@@ -96,21 +105,25 @@ const toStatus = (status: "ACTIVE" | "INACTIVE"): ProductStatus =>
   status === "ACTIVE" ? "Activo" : "Inactivo";
 const fromStatus = (status: ProductStatus) =>
   status === "Activo" ? "ACTIVE" : "INACTIVE";
-const isPersistedId = (value: string) => /^c[a-z0-9]{24,}$/i.test(value);
+const isPersistedId = (value: string) => /^c[a-z0-9]{24,}$/i.test(value) || /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 
 const mapAttribute = (attribute: ApiAttribute): Attribute => ({
   id: attribute.id,
+  definitionId: attribute.attributeDefinition?.id ?? null,
+  definitionStatus: attribute.attributeDefinition ? toStatus(attribute.attributeDefinition.status) : null,
   name: attribute.name,
   type: attribute.dataType === "NUMBER" ? "Numérico" : "Texto",
   required: attribute.required,
   suffix: attribute.suffix ?? "",
   status: toStatus(attribute.status),
   useInSubtotal: attribute.useInSubtotal,
+  isWeight: attribute.isWeight ?? false,
 });
 const mapConfiguredAttribute = (attribute: ApiAttribute) => ({
   ...mapAttribute(attribute),
   suffix: attribute.attributeDefinition?.suffix ?? attribute.suffix ?? "",
   definitionId: attribute.attributeDefinition?.id ?? null,
+  isWeight: attribute.attributeDefinition?.isWeight ?? attribute.isWeight ?? false,
 });
 const mapCategory = (category: ApiCategory): ProductCategory => ({
   id: category.id,
@@ -136,6 +149,7 @@ export const mapProduct = (
     id: product.id,
     code: product.code,
     name: product.name,
+    sortOrder: product.sortOrder,
     categoryId: product.categoryId,
     categoryName: product.category?.name,
     subcategoryId: product.subcategoryId,
@@ -157,6 +171,9 @@ export const mapProduct = (
     factor: Number(presentation.factor),
     minimum: Number(presentation.minimumStock),
     stock: Number(presentation.currentStock),
+    openingUnitCostPen: Number(presentation.openingUnitCostPen ?? 0),
+    openingUnitCostUsd: Number(presentation.openingUnitCostUsd ?? 0),
+    openingUnitCostCurrency: presentation.openingUnitCostCurrency ?? "PEN",
     status: toStatus(presentation.status),
   })),
 });
@@ -175,6 +192,7 @@ const mapAttributeDefinition = (
   type: attribute.dataType === "NUMBER" ? "Numérico" : "Texto",
   suffix: attribute.suffix ?? "",
   status: toStatus(attribute.status),
+  isWeight: attribute.isWeight ?? false,
 });
 
 export async function loadCatalog() {
@@ -207,12 +225,14 @@ function productPayload(
     immediateConsumption: base.immediateConsumption ?? true,
     attributes: base.attributes.map((attribute: Attribute) => ({
       ...(isPersistedId(attribute.id) && { id: attribute.id }),
+      attributeDefinitionId: attribute.definitionId || null,
       name: attribute.name,
       dataType: attribute.type === "Numérico" ? "NUMBER" : "TEXT",
       suffix: attribute.suffix || null,
       required: attribute.required,
       status: fromStatus(attribute.status ?? "Activo"),
       useInSubtotal: attribute.useInSubtotal ?? false,
+      isWeight: attribute.isWeight ?? false,
     })),
     presentations: variants.map((variant) => {
       const unit = units.find(
@@ -228,6 +248,9 @@ function productPayload(
         factor: variant.factor,
         minimumStock: variant.minimum,
         currentStock: variant.stock,
+        openingUnitCostPen: variant.openingUnitCostPen,
+        openingUnitCostUsd: variant.openingUnitCostUsd,
+        openingUnitCostCurrency: variant.openingUnitCostCurrency ?? "PEN",
         status: fromStatus(variant.status),
       };
     }),
@@ -352,11 +375,11 @@ export async function createAttributeDefinition(
     await api<ApiAttributeDefinition>("/api/products/attributes", {
       method: "POST",
       body: JSON.stringify({
-        code: attribute.code,
         name: attribute.name,
         dataType: attribute.type === "Numérico" ? "NUMBER" : "TEXT",
         suffix: attribute.suffix || null,
         status: fromStatus(attribute.status),
+        isWeight: attribute.isWeight,
       }),
     }),
   );
@@ -369,15 +392,12 @@ export async function updateAttributeDefinition(
     await api<ApiAttributeDefinition>(`/api/products/attributes/${id}`, {
       method: "PATCH",
       body: JSON.stringify({
-        code: attribute.code,
         name: attribute.name,
         dataType: attribute.type === "Numérico" ? "NUMBER" : "TEXT",
         suffix: attribute.suffix || null,
         status: fromStatus(attribute.status),
+        isWeight: attribute.isWeight,
       }),
     }),
   );
-}
-export async function deleteAttributeDefinition(id: string) {
-  await api<void>(`/api/products/attributes/${id}`, { method: "DELETE" });
 }

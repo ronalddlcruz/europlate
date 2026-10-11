@@ -7,6 +7,7 @@ export const userRepository = {
   findById: (companyId: string, id: string) => prisma.user.findFirst({ where: { id, companyId }, include: userInclude }),
   findByEmail: (email: string) => prisma.user.findUnique({ where: { email } }),
   findRole: (id: string) => prisma.role.findUnique({ where: { id } }),
+  findRolesByIds: (ids: string[]) => prisma.role.findMany({ where: { id: { in: ids } }, select: { id: true } }),
   findRoles: () => prisma.role.findMany({ include: { permissions: { include: { permission: true } } }, orderBy: { name: 'asc' } }),
   findPermissions: () => prisma.permission.findMany({ orderBy: [{ module: 'asc' }, { action: 'asc' }] }),
   create: (db: Database, data: Prisma.UserCreateInput) => db.user.create({ data, include: userInclude }),

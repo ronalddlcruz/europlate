@@ -1,4 +1,4 @@
-import { api } from '../../../lib/api-client'
+import { api } from '@/lib/api-client'
 export type ExchangeRate = { id: string; effectiveDate: string; value: string | number; source: string | null; note: string | null; createdBy: { name: string; email: string } | null }
 export type ExchangeRatePayload = { effectiveDate: string; value: number; source?: string; note?: string }
 export const listExchangeRates = () => api<ExchangeRate[]>('/api/exchange-rates')

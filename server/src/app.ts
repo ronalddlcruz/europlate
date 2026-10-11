@@ -1,5 +1,7 @@
 import express from 'express'
 import cors from 'cors'
+import { Prisma } from '@prisma/client'
+import swaggerUi from 'swagger-ui-express'
 import { env } from './config/env.js'
 import { productRoutes } from './modules/products/routes/product.routes.js'
 import { authRoutes } from './modules/auth/routes/auth.routes.js'
@@ -12,14 +14,36 @@ import { productionRoutes } from './modules/production/routes/production.routes.
 import { inventoryRoutes } from './modules/inventory/routes/inventory.routes.js'
 import { userRoutes } from './modules/users/routes/user.routes.js'
 import { exchangeRateRoutes } from './modules/exchange-rates/routes/exchange-rate.routes.js'
+import { reportRoutes } from './modules/reports/routes/report.routes.js'
+import { dashboardRoutes } from './modules/dashboard/routes/dashboard.routes.js'
 import { AppError } from './shared/errors/app-error.js'
+import { httpMetricsMiddleware } from './shared/observability/http-metrics.middleware.js'
+import { httpMetrics } from './shared/observability/http-metrics.js'
+import { createOpenApiDocument } from './shared/openapi/openapi.document.js'
+import { requireAuthentication } from './shared/middleware/require-authentication.js'
+import { requirePermission } from './shared/middleware/require-permission.js'
+import { requireGlobalAccess } from './shared/security/operation-scope.js'
 export function createApp() {
   const app = express()
   app.disable('x-powered-by')
   const localOrigin = /^http:\/\/(localhost|127\.0\.0\.1):\d+$/
   app.use(cors({ origin: (origin, callback) => callback(null, !origin || localOrigin.test(origin) || origin === env.WEB_ORIGIN), credentials: true }))
+  app.use(httpMetricsMiddleware(env.API_SLOW_REQUEST_MS))
   app.use(express.json())
   app.get('/health', (_request, response) => response.status(200).json({ status: 'ok' }))
+  const docsEnabled = env.API_DOCS_ENABLED === undefined ? env.NODE_ENV !== 'production' : env.API_DOCS_ENABLED === 'true'
+  if (docsEnabled) {
+    const document = createOpenApiDocument()
+    app.get('/openapi.json', (_request, response) => response.json(document))
+    app.use('/docs', swaggerUi.serve, swaggerUi.setup(document, {
+      customSiteTitle: 'Europlate API · Express',
+      swaggerOptions: { displayRequestDuration: true, persistAuthorization: false, docExpansion: 'none', filter: true },
+    }))
+  }
+  app.get('/internal/performance', requireAuthentication, requirePermission('users.manage'), requireGlobalAccess, (_request, response) => {
+    response.setHeader('Cache-Control', 'no-store')
+    response.json({ data: { processStartedAt: new Date(Date.now() - process.uptime() * 1000).toISOString(), sampleWindowPerRoute: 512, routes: httpMetrics.snapshot() } })
+  })
   app.use('/api/auth', authRoutes)
   app.use('/api/products', productRoutes)
   app.use('/api/suppliers', supplierRoutes)
@@ -31,8 +55,13 @@ export function createApp() {
   app.use('/api/inventory', inventoryRoutes)
   app.use('/api/users', userRoutes)
   app.use('/api/exchange-rates', exchangeRateRoutes)
+  app.use('/api/reports', reportRoutes)
+  app.use('/api/dashboard', dashboardRoutes)
   app.use((error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) => {
     if (error instanceof AppError) return response.status(error.statusCode).json({ error: { code: error.code, message: error.message } })
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      return response.status(409).json({ error: { code: 'DUPLICATE_RECORD', message: 'Ya existe un registro con esos datos. Revisa el nombre o código antes de guardar.' } })
+    }
     if (error instanceof Error && error.name === 'ZodError') {
       const issues = (error as Error & { issues?: { path: (string | number)[]; message: string }[] }).issues ?? []
       const first = issues[0]
