@@ -6,12 +6,12 @@ import { AppError } from '../errors/app-error.js'
 /** Los permisos indican el módulo; este alcance define qué registros puede operar. */
 export type OperationScope = { userId: string; warehouseIds: string[] } | null
 
-export function scopeForUserRoles(roles: Iterable<string>, userId: string, warehouseIds: string[]): OperationScope {
-  const keys = new Set(roles)
-  // Ser responsable es independiente del cargo. El acceso global explícito
-  // siempre prevalece; un empleado asignado solo opera en sus almacenes.
-  if (keys.has('admin') || keys.has('general_manager')) return null
-  if (!keys.has('warehouse_manager') && warehouseIds.length === 0) return null
+export function scopeForUserPermissions(permissions: Iterable<string>, userId: string, warehouseIds: string[]): OperationScope {
+  const keys = new Set(permissions)
+  // La política vive en la base: un permiso global prevalece sobre cualquier
+  // asignación de almacén. Un responsable sin almacenes sigue limitado.
+  if (keys.has('operations.global')) return null
+  if (!keys.has('operations.scoped') && warehouseIds.length === 0) return null
   return { userId, warehouseIds }
 }
 
@@ -19,12 +19,16 @@ export async function resolveOperationScope(companyId: string, userId: string): 
   const user = await prisma.user.findFirst({
     where: { id: userId, companyId, status: 'ACTIVE' },
     select: {
-      roles: { select: { role: { select: { key: true } } } },
+      roles: { select: { role: { select: { permissions: { select: { permission: { select: { key: true } } } } } } } },
+      permissions: { select: { permission: { select: { key: true } } } },
       responsibleWarehouses: { where: { companyId, status: 'ACTIVE' }, select: { id: true } },
     },
   })
   if (!user) throw new AppError('INVALID_SESSION', 'La sesión no es válida.', 401)
-  return scopeForUserRoles(user.roles.map(entry => entry.role.key), userId, user.responsibleWarehouses.map(warehouse => warehouse.id))
+  return scopeForUserPermissions([
+    ...user.roles.flatMap(entry => entry.role.permissions.map(item => item.permission.key)),
+    ...user.permissions.map(item => item.permission.key),
+  ], userId, user.responsibleWarehouses.map(warehouse => warehouse.id))
 }
 
 export function assertWarehouseScope(scope: OperationScope, warehouseIds: string[]) {

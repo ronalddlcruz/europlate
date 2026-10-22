@@ -1,7 +1,10 @@
 import type { Prisma, PrismaClient } from '@prisma/client'
 import { prisma } from '../../../infrastructure/database/prisma.client.js'
 type Database = PrismaClient | Prisma.TransactionClient
-const userInclude = { roles: { include: { role: true } }, permissions: { include: { permission: true } } } satisfies Prisma.UserInclude
+const userInclude = {
+  roles: { include: { role: { include: { permissions: { include: { permission: true } } } } } },
+  permissions: { include: { permission: true } },
+} satisfies Prisma.UserInclude
 export const userRepository = {
   findMany: (companyId: string) => prisma.user.findMany({ where: { companyId }, include: userInclude, orderBy: { name: 'asc' } }),
   findById: (companyId: string, id: string) => prisma.user.findFirst({ where: { id, companyId }, include: userInclude }),

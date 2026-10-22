@@ -6,7 +6,14 @@ import { userRepository } from '../repositories/user.repository.js'
 import type { CreateUserInput, UpdateUserInput } from '../schemas/user.schema.js'
 
 const notFound = () => new AppError('USER_NOT_FOUND', 'Usuario no encontrado.', 404)
-const sanitize = (user: Awaited<ReturnType<typeof userRepository.findById>>) => user && ({ ...user, roles: user.roles.map(item => item.role), directPermissions: user.permissions.map(item => item.permission) })
+const sanitize = (user: Awaited<ReturnType<typeof userRepository.findById>>) => user && ({
+  id: user.id,
+  name: user.name,
+  email: user.email,
+  status: user.status,
+  roles: user.roles.map(item => item.role),
+  directPermissions: user.permissions.map(item => item.permission),
+})
 const selectedRoleIds = (input: { roleIds?: string[]; roleId?: string }) => input.roleIds ?? (input.roleId ? [input.roleId] : undefined)
 async function validateRoleIds(ids: string[]) {
   if ((await userRepository.findRolesByIds(ids)).length !== ids.length) {
