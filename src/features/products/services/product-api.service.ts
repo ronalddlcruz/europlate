@@ -1,4 +1,4 @@
-import { api } from "@/lib/api-client";
+import { api } from '@/lib/api-client'
 import type {
   Attribute,
   AttributeDefinition,
@@ -7,124 +7,129 @@ import type {
   ProductRole,
   ProductStatus,
   ProductVariant,
+  ProductWarehouse,
+  InitialStockEntry,
   Unit,
-} from "@/features/products/types/product.types";
+} from '@/features/products/types/product.types'
 
 type ApiAttribute = {
-  id: string;
-  name: string;
-  dataType: "TEXT" | "NUMBER";
-  required: boolean;
-  suffix: string | null;
-  status: "ACTIVE" | "INACTIVE";
-  useInSubtotal?: boolean;
-  isWeight?: boolean;
+  id: string
+  name: string
+  dataType: 'TEXT' | 'NUMBER'
+  required: boolean
+  suffix: string | null
+  status: 'ACTIVE' | 'INACTIVE'
+  useInSubtotal?: boolean
+  isWeight?: boolean
   attributeDefinition?: {
-    id: string;
-    suffix: string | null;
-    name: string;
-    dataType: "TEXT" | "NUMBER";
-    status: "ACTIVE" | "INACTIVE";
-    isWeight?: boolean;
-  } | null;
-};
+    id: string
+    suffix: string | null
+    name: string
+    dataType: 'TEXT' | 'NUMBER'
+    status: 'ACTIVE' | 'INACTIVE'
+    isWeight?: boolean
+  } | null
+}
 type ApiSubcategory = {
-  id: string;
-  code: string | null;
-  name: string;
-  description: string | null;
-  status: "ACTIVE" | "INACTIVE";
-  isWeight?: boolean;
-  isVariable: boolean;
-  attributes: ApiAttribute[];
-};
+  id: string
+  code: string | null
+  name: string
+  description: string | null
+  status: 'ACTIVE' | 'INACTIVE'
+  isWeight?: boolean
+  isVariable: boolean
+  attributes: ApiAttribute[]
+}
 type ApiCategory = {
-  id: string;
-  code: string | null;
-  name: string;
-  description: string | null;
-  status: "ACTIVE" | "INACTIVE";
-  attributes: ApiAttribute[];
-  subcategories: ApiSubcategory[];
-};
+  id: string
+  code: string | null
+  name: string
+  description: string | null
+  status: 'ACTIVE' | 'INACTIVE'
+  attributes: ApiAttribute[]
+  subcategories: ApiSubcategory[]
+}
 type ApiProduct = {
-  id: string;
-  code: string;
-  name: string;
-  sortOrder: number;
-  categoryId: string | null;
-  subcategoryId: string | null;
-  category: ApiCategory | null;
-  subcategory: ApiSubcategory | null;
-  status: "ACTIVE" | "INACTIVE";
-  roles: ("MERCHANDISE" | "SUPPLY" | "FINISHED_PRODUCT")[];
-  variantType: "WITH_VARIANTS" | "BASIC";
-  immediateConsumption: boolean;
-  attributes: ApiAttribute[];
+  id: string
+  code: string
+  name: string
+  sortOrder: number
+  categoryId: string | null
+  subcategoryId: string | null
+  category: ApiCategory | null
+  subcategory: ApiSubcategory | null
+  status: 'ACTIVE' | 'INACTIVE'
+  roles: ('MERCHANDISE' | 'SUPPLY' | 'FINISHED_PRODUCT')[]
+  variantType: 'WITH_VARIANTS' | 'BASIC'
+  immediateConsumption: boolean
+  attributes: ApiAttribute[]
   presentations: {
-    id: string;
-    code: string;
-    name: string;
-    attributeValues: Record<string, string> | null;
-    factor: string | number;
-    minimumStock: string | number;
-    currentStock: string | number;
-    openingUnitCostPen: string | number | null;
-    openingUnitCostUsd: string | number | null;
-    openingUnitCostCurrency: "PEN" | "USD";
-    status: "ACTIVE" | "INACTIVE";
-    unit: { code: string };
-  }[];
-};
+    id: string
+    code: string
+    name: string
+    attributeValues: Record<string, string> | null
+    factor: string | number
+    minimumStock: string | number
+    currentStock: string | number
+    openingUnitCostPen: string | number | null
+    openingUnitCostUsd: string | number | null
+    openingUnitCostCurrency: 'PEN' | 'USD'
+    status: 'ACTIVE' | 'INACTIVE'
+    unit: { code: string }
+  }[]
+}
 type ApiUnit = {
-  id: string;
-  code: string;
-  description: string;
-  status: "ACTIVE" | "INACTIVE";
-};
+  id: string
+  code: string
+  description: string
+  status: 'ACTIVE' | 'INACTIVE'
+}
 type ApiAttributeDefinition = {
-  id: string;
-  code: string;
-  name: string;
-  dataType: "TEXT" | "NUMBER";
-  suffix: string | null;
-  status: "ACTIVE" | "INACTIVE";
-  isWeight: boolean;
-};
-const toRole: Record<ApiProduct["roles"][number], ProductRole> = {
-  MERCHANDISE: "Mercadería",
-  SUPPLY: "Insumo",
-  FINISHED_PRODUCT: "Producto terminado",
-};
-const fromRole: Record<ProductRole, ApiProduct["roles"][number]> = {
-  Mercadería: "MERCHANDISE",
-  Insumo: "SUPPLY",
-  "Producto terminado": "FINISHED_PRODUCT",
-};
-const toStatus = (status: "ACTIVE" | "INACTIVE"): ProductStatus =>
-  status === "ACTIVE" ? "Activo" : "Inactivo";
-const fromStatus = (status: ProductStatus) =>
-  status === "Activo" ? "ACTIVE" : "INACTIVE";
-const isPersistedId = (value: string) => /^c[a-z0-9]{24,}$/i.test(value) || /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+  id: string
+  code: string
+  name: string
+  dataType: 'TEXT' | 'NUMBER'
+  suffix: string | null
+  status: 'ACTIVE' | 'INACTIVE'
+  isWeight: boolean
+}
+const toRole: Record<ApiProduct['roles'][number], ProductRole> = {
+  MERCHANDISE: 'Mercadería',
+  SUPPLY: 'Insumo',
+  FINISHED_PRODUCT: 'Producto terminado',
+}
+const fromRole: Record<ProductRole, ApiProduct['roles'][number]> = {
+  Mercadería: 'MERCHANDISE',
+  Insumo: 'SUPPLY',
+  'Producto terminado': 'FINISHED_PRODUCT',
+}
+const toStatus = (status: 'ACTIVE' | 'INACTIVE'): ProductStatus =>
+  status === 'ACTIVE' ? 'Activo' : 'Inactivo'
+const fromStatus = (status: ProductStatus) => (status === 'Activo' ? 'ACTIVE' : 'INACTIVE')
+const isPersistedId = (value: string) =>
+  /^c[a-z0-9]{24,}$/i.test(value) ||
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
 
 const mapAttribute = (attribute: ApiAttribute): Attribute => ({
   id: attribute.id,
   definitionId: attribute.attributeDefinition?.id ?? null,
-  definitionStatus: attribute.attributeDefinition ? toStatus(attribute.attributeDefinition.status) : null,
+  definitionStatus: attribute.attributeDefinition
+    ? toStatus(attribute.attributeDefinition.status)
+    : null,
   name: attribute.name,
-  type: attribute.dataType === "NUMBER" ? "Numérico" : "Texto",
+  type: attribute.dataType === 'NUMBER' ? 'Numérico' : 'Texto',
   required: attribute.required,
-  suffix: attribute.suffix ?? "",
+  suffix: attribute.suffix ?? '',
   status: toStatus(attribute.status),
   useInSubtotal: attribute.useInSubtotal,
   isWeight: attribute.isWeight ?? false,
-});
+})
 const mapConfiguredAttribute = (attribute: ApiAttribute) => ({
   ...mapAttribute(attribute),
-  suffix: attribute.attributeDefinition?.suffix ?? attribute.suffix ?? "",
+  suffix: attribute.attributeDefinition?.suffix ?? attribute.suffix ?? '',
   definitionId: attribute.attributeDefinition?.id ?? null,
   isWeight: attribute.attributeDefinition?.isWeight ?? attribute.isWeight ?? false,
-});
+})
 const mapCategory = (category: ApiCategory): ProductCategory => ({
   id: category.id,
   code: category.code,
@@ -141,7 +146,7 @@ const mapCategory = (category: ApiCategory): ProductCategory => ({
     isVariable: subcategory.isVariable ?? false,
     attributes: subcategory.attributes.map(mapConfiguredAttribute),
   })),
-});
+})
 export const mapProduct = (
   product: ApiProduct,
 ): { base: ProductBase; variants: ProductVariant[] } => ({
@@ -156,8 +161,7 @@ export const mapProduct = (
     subcategoryName: product.subcategory?.name,
     status: toStatus(product.status),
     roles: product.roles.map((role) => toRole[role]),
-    variantType:
-      product.variantType === "WITH_VARIANTS" ? "Con variantes" : "Básico",
+    variantType: product.variantType === 'WITH_VARIANTS' ? 'Con variantes' : 'Básico',
     immediateConsumption: product.immediateConsumption,
     attributes: product.attributes.map(mapAttribute),
   },
@@ -173,46 +177,48 @@ export const mapProduct = (
     stock: Number(presentation.currentStock),
     openingUnitCostPen: Number(presentation.openingUnitCostPen ?? 0),
     openingUnitCostUsd: Number(presentation.openingUnitCostUsd ?? 0),
-    openingUnitCostCurrency: presentation.openingUnitCostCurrency ?? "PEN",
+    openingUnitCostCurrency: presentation.openingUnitCostCurrency ?? 'PEN',
     status: toStatus(presentation.status),
   })),
-});
+})
 export const mapUnit = (unit: ApiUnit): Unit => ({
   id: unit.id,
   code: unit.code,
   description: unit.description,
   status: toStatus(unit.status),
-});
-const mapAttributeDefinition = (
-  attribute: ApiAttributeDefinition,
-): AttributeDefinition => ({
+})
+const mapAttributeDefinition = (attribute: ApiAttributeDefinition): AttributeDefinition => ({
   id: attribute.id,
   code: attribute.code,
   name: attribute.name,
-  type: attribute.dataType === "NUMBER" ? "Numérico" : "Texto",
-  suffix: attribute.suffix ?? "",
+  type: attribute.dataType === 'NUMBER' ? 'Numérico' : 'Texto',
+  suffix: attribute.suffix ?? '',
   status: toStatus(attribute.status),
   isWeight: attribute.isWeight ?? false,
-});
+})
 
 export async function loadCatalog() {
   const [products, units, categories, attributes] = await Promise.all([
-    api<ApiProduct[]>("/api/products"),
-    api<ApiUnit[]>("/api/products/units"),
-    api<ApiCategory[]>("/api/products/categories"),
-    api<ApiAttributeDefinition[]>("/api/products/attributes"),
-  ]);
+    api<ApiProduct[]>('/api/products'),
+    api<ApiUnit[]>('/api/products/units'),
+    api<ApiCategory[]>('/api/products/categories'),
+    api<ApiAttributeDefinition[]>('/api/products/attributes'),
+  ])
   return {
     products: products.map(mapProduct),
     units: units.map(mapUnit),
     categories: categories.map(mapCategory),
     attributes: attributes.map(mapAttributeDefinition),
-  };
+  }
+}
+export async function loadProductWarehouses() {
+  return api<ProductWarehouse[]>('/api/products/warehouses')
 }
 function productPayload(
   base: ProductBase,
   variants: ProductVariant[],
   units: Unit[],
+  initialStocks: InitialStockEntry[] = [],
 ) {
   return {
     name: base.name,
@@ -220,24 +226,27 @@ function productPayload(
     subcategoryId: base.subcategoryId || null,
     status: fromStatus(base.status),
     roles: base.roles.map((role) => fromRole[role]),
-    variantType:
-      base.variantType === "Con variantes" ? "WITH_VARIANTS" : "BASIC",
+    variantType: base.variantType === 'Con variantes' ? 'WITH_VARIANTS' : 'BASIC',
     immediateConsumption: base.immediateConsumption ?? true,
+    openingStocks: initialStocks.map((entry) => ({
+      warehouseId: entry.warehouseId,
+      quantity: entry.quantity,
+      currency: entry.currency,
+      unitCost: entry.unitCost,
+    })),
     attributes: base.attributes.map((attribute: Attribute) => ({
       ...(isPersistedId(attribute.id) && { id: attribute.id }),
       attributeDefinitionId: attribute.definitionId || null,
       name: attribute.name,
-      dataType: attribute.type === "Numérico" ? "NUMBER" : "TEXT",
+      dataType: attribute.type === 'Numérico' ? 'NUMBER' : 'TEXT',
       suffix: attribute.suffix || null,
       required: attribute.required,
-      status: fromStatus(attribute.status ?? "Activo"),
+      status: fromStatus(attribute.status ?? 'Activo'),
       useInSubtotal: attribute.useInSubtotal ?? false,
       isWeight: attribute.isWeight ?? false,
     })),
     presentations: variants.map((variant) => {
-      const unit = units.find(
-        (value) => value.code.toUpperCase() === variant.unit.toUpperCase(),
-      );
+      const unit = units.find((value) => value.code.toUpperCase() === variant.unit.toUpperCase())
       return {
         ...(isPersistedId(variant.id) && { id: variant.id }),
         code: variant.code || undefined,
@@ -250,23 +259,24 @@ function productPayload(
         currentStock: variant.stock,
         openingUnitCostPen: variant.openingUnitCostPen,
         openingUnitCostUsd: variant.openingUnitCostUsd,
-        openingUnitCostCurrency: variant.openingUnitCostCurrency ?? "PEN",
+        openingUnitCostCurrency: variant.openingUnitCostCurrency ?? 'PEN',
         status: fromStatus(variant.status),
-      };
+      }
     }),
-  };
+  }
 }
 export async function createCatalogProduct(
   base: ProductBase,
   variants: ProductVariant[],
   units: Unit[],
+  initialStocks: InitialStockEntry[] = [],
 ) {
   return mapProduct(
-    await api<ApiProduct>("/api/products", {
-      method: "POST",
-      body: JSON.stringify(productPayload(base, variants, units)),
+    await api<ApiProduct>('/api/products', {
+      method: 'POST',
+      body: JSON.stringify(productPayload(base, variants, units, initialStocks)),
     }),
-  );
+  )
 }
 export async function updateCatalogProduct(
   base: ProductBase,
@@ -275,42 +285,42 @@ export async function updateCatalogProduct(
 ) {
   return mapProduct(
     await api<ApiProduct>(`/api/products/${base.id}`, {
-      method: "PATCH",
+      method: 'PATCH',
       body: JSON.stringify(productPayload(base, variants, units)),
     }),
-  );
+  )
 }
 export async function deleteCatalogProduct(id: string) {
-  await api<void>(`/api/products/${id}`, { method: "DELETE" });
+  await api<void>(`/api/products/${id}`, { method: 'DELETE' })
 }
-export async function createCatalogUnit(unit: Omit<Unit, "id">) {
+export async function createCatalogUnit(unit: Omit<Unit, 'id'>) {
   return mapUnit(
-    await api<ApiUnit>("/api/products/units", {
-      method: "POST",
+    await api<ApiUnit>('/api/products/units', {
+      method: 'POST',
       body: JSON.stringify({
         code: unit.code,
         description: unit.description,
         status: fromStatus(unit.status),
       }),
     }),
-  );
+  )
 }
-export async function updateCatalogUnit(id: string, unit: Omit<Unit, "id">) {
+export async function updateCatalogUnit(id: string, unit: Omit<Unit, 'id'>) {
   return mapUnit(
     await api<ApiUnit>(`/api/products/units/${id}`, {
-      method: "PATCH",
+      method: 'PATCH',
       body: JSON.stringify({
         code: unit.code,
         description: unit.description,
         status: fromStatus(unit.status),
       }),
     }),
-  );
+  )
 }
 export async function deleteCatalogUnit(id: string) {
-  await api<void>(`/api/products/units/${id}`, { method: "DELETE" });
+  await api<void>(`/api/products/units/${id}`, { method: 'DELETE' })
 }
-function categoryPayload(category: Omit<ProductCategory, "id">) {
+function categoryPayload(category: Omit<ProductCategory, 'id'>) {
   return {
     code: category.code || null,
     name: category.name,
@@ -320,10 +330,10 @@ function categoryPayload(category: Omit<ProductCategory, "id">) {
       ...(isPersistedId(attribute.id) && { id: attribute.id }),
       attributeDefinitionId: attribute.definitionId || null,
       name: attribute.name,
-      dataType: attribute.type === "Numérico" ? "NUMBER" : "TEXT",
+      dataType: attribute.type === 'Numérico' ? 'NUMBER' : 'TEXT',
       suffix: attribute.suffix || null,
       required: attribute.required,
-      status: fromStatus(attribute.status ?? "Activo"),
+      status: fromStatus(attribute.status ?? 'Activo'),
     })),
     subcategories: category.subcategories.map((subcategory) => ({
       ...(isPersistedId(subcategory.id) && { id: subcategory.id }),
@@ -336,68 +346,61 @@ function categoryPayload(category: Omit<ProductCategory, "id">) {
         ...(isPersistedId(attribute.id) && { id: attribute.id }),
         attributeDefinitionId: attribute.definitionId || null,
         name: attribute.name,
-        dataType: attribute.type === "Numérico" ? "NUMBER" : "TEXT",
+        dataType: attribute.type === 'Numérico' ? 'NUMBER' : 'TEXT',
         suffix: attribute.suffix || null,
         required: attribute.required,
-        status: fromStatus(attribute.status ?? "Activo"),
+        status: fromStatus(attribute.status ?? 'Activo'),
       })),
     })),
-  };
+  }
 }
-export async function createCatalogCategory(
-  category: Omit<ProductCategory, "id">,
-) {
+export async function createCatalogCategory(category: Omit<ProductCategory, 'id'>) {
   return mapCategory(
-    await api<ApiCategory>("/api/products/categories", {
-      method: "POST",
+    await api<ApiCategory>('/api/products/categories', {
+      method: 'POST',
       body: JSON.stringify(categoryPayload(category)),
     }),
-  );
+  )
 }
-export async function updateCatalogCategory(
-  id: string,
-  category: Omit<ProductCategory, "id">,
-) {
+export async function updateCatalogCategory(id: string, category: Omit<ProductCategory, 'id'>) {
   return mapCategory(
     await api<ApiCategory>(`/api/products/categories/${id}`, {
-      method: "PATCH",
+      method: 'PATCH',
       body: JSON.stringify(categoryPayload(category)),
     }),
-  );
+  )
 }
 export async function deleteCatalogCategory(id: string) {
-  await api<void>(`/api/products/categories/${id}`, { method: "DELETE" });
+  await api<void>(`/api/products/categories/${id}`, { method: 'DELETE' })
 }
-export async function createAttributeDefinition(
-  attribute: Omit<AttributeDefinition, "id">,
-) {
+export async function createAttributeDefinition(attribute: Omit<AttributeDefinition, 'id'>) {
   return mapAttributeDefinition(
-    await api<ApiAttributeDefinition>("/api/products/attributes", {
-      method: "POST",
+    await api<ApiAttributeDefinition>('/api/products/attributes', {
+      method: 'POST',
       body: JSON.stringify({
         name: attribute.name,
-        dataType: attribute.type === "Numérico" ? "NUMBER" : "TEXT",
+        dataType: attribute.type === 'Numérico' ? 'NUMBER' : 'TEXT',
         suffix: attribute.suffix || null,
         status: fromStatus(attribute.status),
         isWeight: attribute.isWeight,
       }),
     }),
-  );
+  )
 }
 export async function updateAttributeDefinition(
   id: string,
-  attribute: Omit<AttributeDefinition, "id">,
+  attribute: Omit<AttributeDefinition, 'id'>,
 ) {
   return mapAttributeDefinition(
     await api<ApiAttributeDefinition>(`/api/products/attributes/${id}`, {
-      method: "PATCH",
+      method: 'PATCH',
       body: JSON.stringify({
         name: attribute.name,
-        dataType: attribute.type === "Numérico" ? "NUMBER" : "TEXT",
+        dataType: attribute.type === 'Numérico' ? 'NUMBER' : 'TEXT',
         suffix: attribute.suffix || null,
         status: fromStatus(attribute.status),
         isWeight: attribute.isWeight,
       }),
     }),
-  );
+  )
 }

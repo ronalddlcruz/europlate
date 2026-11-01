@@ -1,81 +1,96 @@
-export type ProductRole = "Mercadería" | "Insumo" | "Producto terminado";
-export type ProductStatus = "Activo" | "Inactivo";
+export type ProductRole = 'Mercadería' | 'Insumo' | 'Producto terminado'
+export type ProductStatus = 'Activo' | 'Inactivo'
 export interface Attribute {
-  id: string;
-  definitionId?: string | null;
-  definitionStatus?: ProductStatus | null;
-  name: string;
-  type: "Texto" | "Numérico";
-  required: boolean;
-  suffix: string;
-  status?: ProductStatus;
-  useInSubtotal?: boolean;
-  isWeight?: boolean;
+  id: string
+  definitionId?: string | null
+  definitionStatus?: ProductStatus | null
+  name: string
+  type: 'Texto' | 'Numérico'
+  required: boolean
+  suffix: string
+  status?: ProductStatus
+  useInSubtotal?: boolean
+  isWeight?: boolean
 }
 export interface AttributeDefinition {
-  id: string;
-  code: string;
-  name: string;
-  type: "Texto" | "Numérico";
-  suffix: string;
-  status: ProductStatus;
-  isWeight: boolean;
+  id: string
+  code: string
+  name: string
+  type: 'Texto' | 'Numérico'
+  suffix: string
+  status: ProductStatus
+  isWeight: boolean
 }
 export interface ProductBase {
-  id: string;
-  code: string;
-  name: string;
-  sortOrder?: number;
-  categoryId?: string | null;
-  categoryName?: string | null;
-  subcategoryId?: string | null;
-  subcategoryName?: string | null;
-  roles: ProductRole[];
-  status: ProductStatus;
-  variantType: "Con variantes" | "Básico";
-  immediateConsumption?: boolean;
-  attributes: Attribute[];
+  id: string
+  code: string
+  name: string
+  sortOrder?: number
+  categoryId?: string | null
+  categoryName?: string | null
+  subcategoryId?: string | null
+  subcategoryName?: string | null
+  roles: ProductRole[]
+  status: ProductStatus
+  variantType: 'Con variantes' | 'Básico'
+  immediateConsumption?: boolean
+  attributes: Attribute[]
 }
 export interface ProductVariant {
-  id: string;
-  code: string;
-  baseId: string;
-  values: Record<string, string>;
-  name: string;
-  unit: string;
-  factor: number;
-  minimum: number;
-  stock: number;
-  openingUnitCostPen?: number | null;
-  openingUnitCostUsd?: number | null;
-  openingUnitCostCurrency?: "PEN" | "USD";
-  status: ProductStatus;
+  id: string
+  code: string
+  baseId: string
+  values: Record<string, string>
+  name: string
+  unit: string
+  factor: number
+  minimum: number
+  stock: number
+  openingUnitCostPen?: number | null
+  openingUnitCostUsd?: number | null
+  openingUnitCostCurrency?: 'PEN' | 'USD'
+  status: ProductStatus
+}
+export interface ProductWarehouse {
+  id: string
+  name: string
+  district: string | null
+  site: { id: string; name: string }
+}
+export interface InitialStockEntry {
+  id: string
+  warehouseId: string
+  warehouseName: string
+  siteName: string
+  quantity: number
+  currency: 'PEN' | 'USD'
+  unitCost: number
 }
 export interface Unit {
-  id: string;
-  code: string;
-  description: string;
-  status: ProductStatus;
+  id: string
+  code: string
+  description: string
+  status: ProductStatus
 }
 export interface ConfiguredAttribute extends Attribute {
-  id: string;
-  definitionId?: string | null;
+  id: string
+  definitionId?: string | null
 }
 export interface ProductSubcategory {
-  id: string;
-  code?: string | null;
-  name: string;
-  description?: string | null;
-  status: ProductStatus;
-  isVariable: boolean;
-  attributes: ConfiguredAttribute[];
+  id: string
+  code?: string | null
+  name: string
+  description?: string | null
+  status: ProductStatus
+  isVariable: boolean
+  attributes: ConfiguredAttribute[]
 }
 export interface ProductCategory {
-  id: string;
-  code?: string | null;
-  name: string;
-  description?: string | null;
-  status: ProductStatus;
-  attributes: ConfiguredAttribute[];
-  subcategories: ProductSubcategory[];
+  id: string
+  code?: string | null
+  name: string
+  description?: string | null
+  status: ProductStatus
+  attributes: ConfiguredAttribute[]
+  subcategories: ProductSubcategory[]
 }

@@ -2,27 +2,55 @@ import { Prisma, ProductRoleType, ProductStatus } from '@prisma/client'
 import { prisma } from '../../../infrastructure/database/prisma.client.js'
 import { AppError } from '../../../shared/errors/app-error.js'
 import { productRepository } from '../repositories/product.repository.js'
-import type { CreateProductInput, CreateVariableProductInput, UpdateProductInput } from '../schemas/product.schema.js'
+import type {
+  CreateProductInput,
+  CreateVariableProductInput,
+  UpdateProductInput,
+} from '../schemas/product.schema.js'
 import { codePart } from '../domain/product-code.js'
 import { productConfigurationService } from './product-configuration.service.js'
+import {
+  assertWarehouseScope,
+  resolveOperationScope,
+} from '../../../shared/security/operation-scope.js'
 
 const decimal = (value: number) => new Prisma.Decimal(value)
 /** El código de presentación se ancla al código único de su producto. */
 const presentationCode = (productCode: string, index: number) => `PRE-${productCode}-${index + 1}`
-const configuredCodePart = (configuredCode: string | null | undefined, name: string, fallbackLength: number) => {
-  const configured = configuredCode?.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/[^A-Z0-9]/g, '')
+const configuredCodePart = (
+  configuredCode: string | null | undefined,
+  name: string,
+  fallbackLength: number,
+) => {
+  const configured = configuredCode
+    ?.normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '')
   return configured || codePart(name, fallbackLength)
 }
 const escapeExpression = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 type ProductMutationContext = { companyId: string; userId: string }
-async function nextProductCode(db: Prisma.TransactionClient, categoryId?: string | null, subcategoryId?: string | null) {
-  const category = categoryId ? await db.category.findUnique({ where: { id: categoryId }, include: { subcategories: true } }) : null
-  const subcategory = category?.subcategories.find(item => item.id === subcategoryId)
+async function nextProductCode(
+  db: Prisma.TransactionClient,
+  categoryId?: string | null,
+  subcategoryId?: string | null,
+) {
+  const category = categoryId
+    ? await db.category.findUnique({ where: { id: categoryId }, include: { subcategories: true } })
+    : null
+  const subcategory = category?.subcategories.find((item) => item.id === subcategoryId)
   const categoryCode = category ? configuredCodePart(category.code, category.name, 2) : 'PRO'
-  const subcategoryCode = subcategory ? configuredCodePart(subcategory.code, subcategory.name, 2) : 'GEN'
+  const subcategoryCode = subcategory
+    ? configuredCodePart(subcategory.code, subcategory.name, 2)
+    : 'GEN'
   const prefix = `${categoryCode}-${subcategoryCode}`
   const expression = new RegExp(`^${escapeExpression(prefix)}-(\\d+)$`)
-  const latestProduct = await db.product.findFirst({ where: { code: { startsWith: prefix } }, orderBy: { code: 'desc' }, select: { code: true } })
+  const latestProduct = await db.product.findFirst({
+    where: { code: { startsWith: prefix } },
+    orderBy: { code: 'desc' },
+    select: { code: true },
+  })
   const latest = Number(latestProduct?.code.match(expression)?.[1]) || 0
   return `${prefix}-${String(latest + 1).padStart(3, '0')}`
 }
@@ -30,13 +58,32 @@ async function nextProductSortOrder(db: Prisma.TransactionClient) {
   const latest = await db.product.aggregate({ _max: { sortOrder: true } })
   return (latest._max.sortOrder ?? 0) + 1
 }
-const presentationData = (presentation: CreateProductInput['presentations'][number], index: number, productCode?: string) => ({
-  code: presentation.code ?? (productCode ? presentationCode(productCode, index) : `PRE-${Date.now().toString().slice(-8)}-${index + 1}`), name: presentation.name,
-  unit: { connect: presentation.unitId ? { id: presentation.unitId } : { code: presentation.unitCode! } },
-  attributeValues: presentation.attributeValues, factor: decimal(presentation.factor),
-  minimumStock: decimal(presentation.minimumStock), currentStock: decimal(presentation.currentStock),
-  ...(presentation.openingUnitCostPen !== undefined && { openingUnitCostPen: presentation.openingUnitCostPen === null ? null : decimal(presentation.openingUnitCostPen) }),
-  ...(presentation.openingUnitCostUsd !== undefined && { openingUnitCostUsd: presentation.openingUnitCostUsd === null ? null : decimal(presentation.openingUnitCostUsd) }),
+const presentationData = (
+  presentation: CreateProductInput['presentations'][number],
+  index: number,
+  productCode?: string,
+) => ({
+  code:
+    presentation.code ??
+    (productCode
+      ? presentationCode(productCode, index)
+      : `PRE-${Date.now().toString().slice(-8)}-${index + 1}`),
+  name: presentation.name,
+  unit: {
+    connect: presentation.unitId ? { id: presentation.unitId } : { code: presentation.unitCode! },
+  },
+  attributeValues: presentation.attributeValues,
+  factor: decimal(presentation.factor),
+  minimumStock: decimal(presentation.minimumStock),
+  currentStock: decimal(presentation.currentStock),
+  ...(presentation.openingUnitCostPen !== undefined && {
+    openingUnitCostPen:
+      presentation.openingUnitCostPen === null ? null : decimal(presentation.openingUnitCostPen),
+  }),
+  ...(presentation.openingUnitCostUsd !== undefined && {
+    openingUnitCostUsd:
+      presentation.openingUnitCostUsd === null ? null : decimal(presentation.openingUnitCostUsd),
+  }),
   openingUnitCostCurrency: presentation.openingUnitCostCurrency,
   status: presentation.status,
 })
@@ -54,11 +101,18 @@ async function preserveInventoryQuantityOnFactorChange(
   const next = decimal(nextFactor)
   if (previousFactor.equals(next)) return
 
-  const stocks = await db.stock.findMany({ where: { productId }, select: { id: true, quantity: true } })
-  await Promise.all(stocks.map(stock => db.stock.update({
-    where: { id: stock.id },
-    data: { quantity: stock.quantity.div(previousFactor).mul(next) },
-  })))
+  const stocks = await db.stock.findMany({
+    where: { productId },
+    select: { id: true, quantity: true },
+  })
+  await Promise.all(
+    stocks.map((stock) =>
+      db.stock.update({
+        where: { id: stock.id },
+        data: { quantity: stock.quantity.div(previousFactor).mul(next) },
+      }),
+    ),
+  )
 }
 
 /** Ajusta el saldo total a la toma física declarada, sin borrar su trazabilidad. */
@@ -80,172 +134,452 @@ async function synchronizeDeclaredStock(
   const reference = `TOMA-${product.code}`
   const note = 'Regularización de stock actual desde la ficha del producto.'
   if (delta.greaterThan(0)) {
-    const warehouses = await db.warehouse.findMany({ where: { companyId: context.companyId, status: ProductStatus.ACTIVE }, orderBy: { name: 'asc' } })
-    const preferred = product.roles.includes(ProductRoleType.FINISHED_PRODUCT) ? /terminad/i : product.roles.includes(ProductRoleType.SUPPLY) ? /insumo/i : /principal/i
-    const warehouse = warehouses.find(item => preferred.test(item.name)) ?? warehouses[0]
-    if (!warehouse) throw new AppError('INITIAL_STOCK_WAREHOUSE_REQUIRED', 'Crea un almacén activo antes de registrar el stock actual.', 422)
+    const warehouses = await db.warehouse.findMany({
+      where: { companyId: context.companyId, status: ProductStatus.ACTIVE },
+      orderBy: { name: 'asc' },
+    })
+    const preferred = product.roles.includes(ProductRoleType.FINISHED_PRODUCT)
+      ? /terminad/i
+      : product.roles.includes(ProductRoleType.SUPPLY)
+        ? /insumo/i
+        : /principal/i
+    const warehouse = warehouses.find((item) => preferred.test(item.name)) ?? warehouses[0]
+    if (!warehouse)
+      throw new AppError(
+        'INITIAL_STOCK_WAREHOUSE_REQUIRED',
+        'Crea un almacén activo antes de registrar el stock actual.',
+        422,
+      )
     await db.stock.upsert({
       where: { productId_warehouseId: { productId: product.id, warehouseId: warehouse.id } },
       create: { productId: product.id, warehouseId: warehouse.id, quantity: delta },
       update: { quantity: { increment: delta } },
     })
-    await db.inventoryMovement.create({ data: { productId: product.id, presentationId: presentation.id, warehouseId: warehouse.id, createdByUserId: context.userId, type: 'INITIAL_STOCK', quantity: delta, reference, note } })
+    await db.inventoryMovement.create({
+      data: {
+        productId: product.id,
+        presentationId: presentation.id,
+        warehouseId: warehouse.id,
+        createdByUserId: context.userId,
+        type: 'INITIAL_STOCK',
+        quantity: delta,
+        reference,
+        note,
+      },
+    })
     return
   }
 
   let remaining = delta.abs()
-  for (const stock of [...stocks].sort((left, right) => left.warehouse.name.localeCompare(right.warehouse.name))) {
+  for (const stock of [...stocks].sort((left, right) =>
+    left.warehouse.name.localeCompare(right.warehouse.name),
+  )) {
     if (remaining.isZero()) break
     const reduction = Prisma.Decimal.min(stock.quantity, remaining)
     if (reduction.isZero()) continue
     await db.stock.update({ where: { id: stock.id }, data: { quantity: { decrement: reduction } } })
-    await db.inventoryMovement.create({ data: { productId: product.id, presentationId: presentation.id, warehouseId: stock.warehouseId, createdByUserId: context.userId, type: 'INITIAL_STOCK', quantity: reduction.negated(), reference, note } })
+    await db.inventoryMovement.create({
+      data: {
+        productId: product.id,
+        presentationId: presentation.id,
+        warehouseId: stock.warehouseId,
+        createdByUserId: context.userId,
+        type: 'INITIAL_STOCK',
+        quantity: reduction.negated(),
+        reference,
+        note,
+      },
+    })
     remaining = remaining.minus(reduction)
   }
 }
 const attributeData = (attribute: CreateProductInput['attributes'][number], position: number) => {
   const { id: _id, attributeDefinitionId, ...data } = attribute
-  return { ...data, suffix: data.suffix ?? null, position, ...(attributeDefinitionId && { attributeDefinition: { connect: { id: attributeDefinitionId } } }) }
+  return {
+    ...data,
+    suffix: data.suffix ?? null,
+    position,
+    ...(attributeDefinitionId && {
+      attributeDefinition: { connect: { id: attributeDefinitionId } },
+    }),
+  }
 }
 function productData(input: CreateProductInput | UpdateProductInput): Prisma.ProductUpdateInput {
   const data: Prisma.ProductUpdateInput = {}
   if (input.name !== undefined) data.name = input.name
   if (input.status !== undefined) data.status = input.status
   if (input.variantType !== undefined) data.variantType = input.variantType
-  if (input.immediateConsumption !== undefined) data.immediateConsumption = input.immediateConsumption
+  if (input.immediateConsumption !== undefined)
+    data.immediateConsumption = input.immediateConsumption
   if (input.roles !== undefined) data.roles = { set: input.roles }
-  if (input.categoryId !== undefined) data.category = input.categoryId ? { connect: { id: input.categoryId } } : { disconnect: true }
-  if (input.subcategoryId !== undefined) data.subcategory = input.subcategoryId ? { connect: { id: input.subcategoryId } } : { disconnect: true }
-  if (input.brandId !== undefined) data.brand = input.brandId ? { connect: { id: input.brandId } } : { disconnect: true }
+  if (input.categoryId !== undefined)
+    data.category = input.categoryId ? { connect: { id: input.categoryId } } : { disconnect: true }
+  if (input.subcategoryId !== undefined)
+    data.subcategory = input.subcategoryId
+      ? { connect: { id: input.subcategoryId } }
+      : { disconnect: true }
+  if (input.brandId !== undefined)
+    data.brand = input.brandId ? { connect: { id: input.brandId } } : { disconnect: true }
   return data
 }
-const validateWeightAttributes = (attributes: { dataType: 'TEXT' | 'NUMBER'; isWeight?: boolean }[]) => {
-  const weights = attributes.filter(attribute => attribute.isWeight)
-  if (weights.some(attribute => attribute.dataType !== 'NUMBER')) throw new AppError('WEIGHT_ATTRIBUTE_NOT_NUMERIC', 'El atributo configurado como peso debe ser numérico.', 422)
-  if (weights.length > 1) throw new AppError('PRODUCT_WEIGHT_ATTRIBUTE_DUPLICATE', 'Un producto solo puede tener un atributo configurado como peso.', 422)
+const validateWeightAttributes = (
+  attributes: { dataType: 'TEXT' | 'NUMBER'; isWeight?: boolean }[],
+) => {
+  const weights = attributes.filter((attribute) => attribute.isWeight)
+  if (weights.some((attribute) => attribute.dataType !== 'NUMBER'))
+    throw new AppError(
+      'WEIGHT_ATTRIBUTE_NOT_NUMERIC',
+      'El atributo configurado como peso debe ser numérico.',
+      422,
+    )
+  if (weights.length > 1)
+    throw new AppError(
+      'PRODUCT_WEIGHT_ATTRIBUTE_DUPLICATE',
+      'Un producto solo puede tener un atributo configurado como peso.',
+      422,
+    )
 }
 async function validateSubcategory(categoryId?: string | null, subcategoryId?: string | null) {
   if (!subcategoryId) return
-  if (!categoryId) throw new AppError('SUBCATEGORY_REQUIRES_CATEGORY', 'Selecciona la categoría de la subcategoría.', 422)
+  if (!categoryId)
+    throw new AppError(
+      'SUBCATEGORY_REQUIRES_CATEGORY',
+      'Selecciona la categoría de la subcategoría.',
+      422,
+    )
   const category = await productRepository.findCategory(categoryId)
-  if (!category?.subcategories.some(subcategory => subcategory.id === subcategoryId)) throw new AppError('INVALID_SUBCATEGORY', 'La subcategoría no pertenece a la categoría seleccionada.', 422)
+  if (!category?.subcategories.some((subcategory) => subcategory.id === subcategoryId))
+    throw new AppError(
+      'INVALID_SUBCATEGORY',
+      'La subcategoría no pertenece a la categoría seleccionada.',
+      422,
+    )
 }
-const isAvailableAttribute = (attribute: { status: ProductStatus; attributeDefinition?: { status: ProductStatus } | null }) => attribute.status === ProductStatus.ACTIVE && attribute.attributeDefinition?.status !== ProductStatus.INACTIVE
+const isAvailableAttribute = (attribute: {
+  status: ProductStatus
+  attributeDefinition?: { status: ProductStatus } | null
+}) =>
+  attribute.status === ProductStatus.ACTIVE &&
+  attribute.attributeDefinition?.status !== ProductStatus.INACTIVE
 async function synchronizePresentationAttributeValues(
   db: Prisma.TransactionClient,
   product: { attributes: { id: string }[]; presentations: { id: string; name: string }[] },
   input: Pick<CreateProductInput, 'attributes' | 'presentations'>,
 ) {
-  const persistedAttributeIds = new Map(input.attributes.map((attribute, index) => [attribute.id, product.attributes[index]?.id]))
-  await Promise.all(input.presentations.map(async presentation => {
-    const target = product.presentations.find(item => item.id === presentation.id || item.name === presentation.name)
-    if (!target) return
-    const attributeValues = Object.fromEntries(Object.entries(presentation.attributeValues).map(([temporaryId, value]) => [persistedAttributeIds.get(temporaryId) ?? temporaryId, value]))
-    await db.productPresentation.update({ where: { id: target.id }, data: { attributeValues } })
-  }))
+  const persistedAttributeIds = new Map(
+    input.attributes.map((attribute, index) => [attribute.id, product.attributes[index]?.id]),
+  )
+  await Promise.all(
+    input.presentations.map(async (presentation) => {
+      const target = product.presentations.find(
+        (item) => item.id === presentation.id || item.name === presentation.name,
+      )
+      if (!target) return
+      const attributeValues = Object.fromEntries(
+        Object.entries(presentation.attributeValues).map(([temporaryId, value]) => [
+          persistedAttributeIds.get(temporaryId) ?? temporaryId,
+          value,
+        ]),
+      )
+      await db.productPresentation.update({ where: { id: target.id }, data: { attributeValues } })
+    }),
+  )
 }
 async function initializeProductStock(
   db: Prisma.TransactionClient,
-  product: { id: string; code: string; roles: ProductRoleType[]; presentations: { id: string; name: string; factor: Prisma.Decimal; currentStock: Prisma.Decimal }[] },
+  product: {
+    id: string
+    code: string
+    roles: ProductRoleType[]
+    presentations: {
+      id: string
+      name: string
+      factor: Prisma.Decimal
+      currentStock: Prisma.Decimal
+    }[]
+  },
+  openingStocks: CreateProductInput['openingStocks'],
   context?: ProductMutationContext,
 ) {
   if (!context) return
-  const quantity = product.presentations.reduce((total, presentation) => total.plus(presentation.currentStock.mul(presentation.factor)), new Prisma.Decimal(0))
-  if (quantity.lte(0)) return
-  const warehouses = await db.warehouse.findMany({ where: { companyId: context.companyId, status: ProductStatus.ACTIVE }, orderBy: { name: 'asc' } })
-  const preferredName = product.roles.includes(ProductRoleType.FINISHED_PRODUCT) ? /terminad/i : product.roles.includes(ProductRoleType.SUPPLY) ? /insumo/i : /principal/i
-  const warehouse = warehouses.find(item => preferredName.test(item.name)) ?? warehouses[0]
-  if (!warehouse) throw new AppError('INITIAL_STOCK_WAREHOUSE_REQUIRED', 'Crea un almacén activo antes de registrar un producto con stock inicial.', 422)
+  if (!openingStocks.length) return
+  const warehouseIds = openingStocks.map((entry) => entry.warehouseId)
+  if (new Set(warehouseIds).size !== warehouseIds.length) {
+    throw new AppError(
+      'INITIAL_STOCK_WAREHOUSE_DUPLICATE',
+      'No repitas almacenes en la carga inicial.',
+      422,
+    )
+  }
+  assertWarehouseScope(await resolveOperationScope(context.companyId, context.userId), warehouseIds)
+  const warehouses = await db.warehouse.findMany({
+    where: { companyId: context.companyId, status: ProductStatus.ACTIVE, id: { in: warehouseIds } },
+    select: { id: true },
+  })
+  if (warehouses.length !== warehouseIds.length) {
+    throw new AppError(
+      'INITIAL_STOCK_WAREHOUSE_INVALID',
+      'Uno o más almacenes no están disponibles para el usuario.',
+      422,
+    )
+  }
   const presentation = product.presentations[0]
-  await db.stock.upsert({
-    where: { productId_warehouseId: { productId: product.id, warehouseId: warehouse.id } },
-    create: { productId: product.id, warehouseId: warehouse.id, quantity },
-    update: { quantity: { increment: quantity } },
-  })
-  await db.inventoryMovement.create({
-    data: {
-      productId: product.id,
-      presentationId: presentation?.id,
-      warehouseId: warehouse.id,
-      createdByUserId: context.userId,
-      type: 'INITIAL_STOCK',
-      quantity,
-      reference: product.code,
-      note: 'Stock inicial registrado al crear el producto.',
-    },
-  })
+  await Promise.all(
+    openingStocks.map(async (entry) => {
+      const quantity = decimal(entry.quantity).mul(presentation?.factor ?? 1)
+      const cost = decimal(entry.unitCost)
+      await db.stock.create({
+        data: {
+          productId: product.id,
+          warehouseId: entry.warehouseId,
+          quantity,
+          openingUnitCostCurrency: entry.currency,
+          openingUnitCostPen: entry.currency === 'PEN' ? cost : null,
+          openingUnitCostUsd: entry.currency === 'USD' ? cost : null,
+        },
+      })
+      await db.inventoryMovement.create({
+        data: {
+          productId: product.id,
+          presentationId: presentation?.id,
+          warehouseId: entry.warehouseId,
+          createdByUserId: context.userId,
+          type: 'INITIAL_STOCK',
+          quantity,
+          reference: product.code,
+          note: `Stock inicial · ${entry.currency} ${entry.unitCost.toFixed(4)} por unidad.`,
+        },
+      })
+    }),
+  )
 }
 
 export const productService = {
-  async createFromVariableSubcategory(input: CreateVariableProductInput, db?: Prisma.TransactionClient, context?: ProductMutationContext) {
-    const category = await productRepository.findCategoryBySubcategoryId(input.subcategoryId)
-    const subcategory = category?.subcategories.find(value => value.id === input.subcategoryId)
-    if (!category || !subcategory?.isVariable) throw new AppError('VARIABLE_SUBCATEGORY_INVALID', 'La subcategoría no está habilitada como producto variable.', 422)
-    const attributes = [...category.attributes, ...subcategory.attributes].filter(isAvailableAttribute)
-    const missing = attributes.find(attribute => attribute.required && !input.values[attribute.id]?.trim())
-    if (missing) throw new AppError('VARIABLE_ATTRIBUTE_REQUIRED', `Completa el atributo obligatorio: ${missing.name}.`, 422)
-    const name = input.name ?? [category.name, subcategory.name, ...attributes.map(attribute => input.values[attribute.id] ? `${input.values[attribute.id]}${attribute.suffix ?? ''}` : '')].filter(Boolean).join(' ')
-    return this.create({ name, categoryId: category.id, subcategoryId: subcategory.id, status: input.status, roles: input.roles, variantType: 'BASIC', immediateConsumption: true, attributes: attributes.map(attribute => ({ id: attribute.id, attributeDefinitionId: attribute.attributeDefinitionId, name: attribute.name, dataType: attribute.dataType, suffix: attribute.suffix, required: attribute.required, status: attribute.status, useInSubtotal: false, isWeight: attribute.attributeDefinition?.isWeight ?? false })), presentations: [{ name, unitId: input.unitId, attributeValues: input.values, factor: input.factor, minimumStock: input.minimumStock, currentStock: input.currentStock, openingUnitCostCurrency: 'PEN', status: input.status }] }, db, context)
+  async getWarehouses(companyId: string, userId: string) {
+    const scope = await resolveOperationScope(companyId, userId)
+    return productRepository.listWarehouses(companyId, scope?.warehouseIds)
   },
-  async getCatalog(filters: { search?: string; status?: ProductStatus; role?: 'MERCHANDISE' | 'SUPPLY' | 'FINISHED_PRODUCT' }) {
-    const where: Prisma.ProductWhereInput = { ...(filters.status && { status: filters.status }), ...(filters.role && { roles: { has: filters.role } }), ...(filters.search && { OR: [{ code: { contains: filters.search, mode: 'insensitive' } }, { name: { contains: filters.search, mode: 'insensitive' } }, { presentations: { some: { name: { contains: filters.search, mode: 'insensitive' } } } }] }) }
+  async createFromVariableSubcategory(
+    input: CreateVariableProductInput,
+    db?: Prisma.TransactionClient,
+    context?: ProductMutationContext,
+  ) {
+    const category = await productRepository.findCategoryBySubcategoryId(input.subcategoryId)
+    const subcategory = category?.subcategories.find((value) => value.id === input.subcategoryId)
+    if (!category || !subcategory?.isVariable)
+      throw new AppError(
+        'VARIABLE_SUBCATEGORY_INVALID',
+        'La subcategoría no está habilitada como producto variable.',
+        422,
+      )
+    const attributes = [...category.attributes, ...subcategory.attributes].filter(
+      isAvailableAttribute,
+    )
+    const missing = attributes.find(
+      (attribute) => attribute.required && !input.values[attribute.id]?.trim(),
+    )
+    if (missing)
+      throw new AppError(
+        'VARIABLE_ATTRIBUTE_REQUIRED',
+        `Completa el atributo obligatorio: ${missing.name}.`,
+        422,
+      )
+    const name =
+      input.name ??
+      [
+        category.name,
+        subcategory.name,
+        ...attributes.map((attribute) =>
+          input.values[attribute.id]
+            ? `${input.values[attribute.id]}${attribute.suffix ?? ''}`
+            : '',
+        ),
+      ]
+        .filter(Boolean)
+        .join(' ')
+    return this.create(
+      {
+        name,
+        categoryId: category.id,
+        subcategoryId: subcategory.id,
+        status: input.status,
+        roles: input.roles,
+        variantType: 'BASIC',
+        immediateConsumption: true,
+        openingStocks: [],
+        attributes: attributes.map((attribute) => ({
+          id: attribute.id,
+          attributeDefinitionId: attribute.attributeDefinitionId,
+          name: attribute.name,
+          dataType: attribute.dataType,
+          suffix: attribute.suffix,
+          required: attribute.required,
+          status: attribute.status,
+          useInSubtotal: false,
+          isWeight: attribute.attributeDefinition?.isWeight ?? false,
+        })),
+        presentations: [
+          {
+            name,
+            unitId: input.unitId,
+            attributeValues: input.values,
+            factor: input.factor,
+            minimumStock: input.minimumStock,
+            currentStock: input.currentStock,
+            openingUnitCostCurrency: 'PEN',
+            status: input.status,
+          },
+        ],
+      },
+      db,
+      context,
+    )
+  },
+  async getCatalog(filters: {
+    search?: string
+    status?: ProductStatus
+    role?: 'MERCHANDISE' | 'SUPPLY' | 'FINISHED_PRODUCT'
+  }) {
+    const where: Prisma.ProductWhereInput = {
+      ...(filters.status && { status: filters.status }),
+      ...(filters.role && { roles: { has: filters.role } }),
+      ...(filters.search && {
+        OR: [
+          { code: { contains: filters.search, mode: 'insensitive' } },
+          { name: { contains: filters.search, mode: 'insensitive' } },
+          { presentations: { some: { name: { contains: filters.search, mode: 'insensitive' } } } },
+        ],
+      }),
+    }
     return productRepository.findMany(where)
   },
-  async getById(id: string) { const product = await productRepository.findById(id); if (!product) throw new AppError('PRODUCT_NOT_FOUND', 'Producto no encontrado.', 404); return product },
-  async create(input: CreateProductInput, existingTransaction?: Prisma.TransactionClient, context?: ProductMutationContext) {
+  async getById(id: string) {
+    const product = await productRepository.findById(id)
+    if (!product) throw new AppError('PRODUCT_NOT_FOUND', 'Producto no encontrado.', 404)
+    return product
+  },
+  async create(
+    input: CreateProductInput,
+    existingTransaction?: Prisma.TransactionClient,
+    context?: ProductMutationContext,
+  ) {
     validateWeightAttributes(input.attributes)
     await validateSubcategory(input.categoryId, input.subcategoryId)
     const persist = async (db: Prisma.TransactionClient) => {
       const code = await nextProductCode(db, input.categoryId, input.subcategoryId)
       const sortOrder = await nextProductSortOrder(db)
-      const product = await productRepository.create(db, { code, name: input.name, sortOrder, status: input.status, roles: { set: input.roles }, variantType: input.variantType, immediateConsumption: input.immediateConsumption, ...(input.categoryId && { category: { connect: { id: input.categoryId } } }), ...(input.subcategoryId && { subcategory: { connect: { id: input.subcategoryId } } }), ...(input.brandId && { brand: { connect: { id: input.brandId } } }), attributes: { create: input.attributes.map(attributeData) }, presentations: { create: input.presentations.map((presentation, index) => presentationData(presentation, index, code)) } })
+      const product = await productRepository.create(db, {
+        code,
+        name: input.name,
+        sortOrder,
+        status: input.status,
+        roles: { set: input.roles },
+        variantType: input.variantType,
+        immediateConsumption: input.immediateConsumption,
+        ...(input.categoryId && { category: { connect: { id: input.categoryId } } }),
+        ...(input.subcategoryId && { subcategory: { connect: { id: input.subcategoryId } } }),
+        ...(input.brandId && { brand: { connect: { id: input.brandId } } }),
+        attributes: { create: input.attributes.map(attributeData) },
+        presentations: {
+          create: input.presentations.map((presentation, index) =>
+            presentationData(presentation, index, code),
+          ),
+        },
+      })
       await synchronizePresentationAttributeValues(db, product, input)
-      await initializeProductStock(db, product, context)
+      await initializeProductStock(db, product, input.openingStocks, context)
       return product
     }
-    return existingTransaction ? persist(existingTransaction) : prisma.$transaction(persist, { maxWait: 10_000, timeout: 30_000 })
+    return existingTransaction
+      ? persist(existingTransaction)
+      : prisma.$transaction(persist, { maxWait: 10_000, timeout: 30_000 })
   },
   async update(id: string, input: UpdateProductInput, context?: ProductMutationContext) {
     const existing = await this.getById(id)
-    if (input.subcategoryId !== undefined) await validateSubcategory(input.categoryId, input.subcategoryId)
+    if (input.subcategoryId !== undefined)
+      await validateSubcategory(input.categoryId, input.subcategoryId)
     const data = productData(input)
     // No permitimos que un producto quede activo si todas las presentaciones
     // recibidas están inactivas. Esto mantiene consistente el estado que usan
     // Inventario, reportes y los selectores operativos.
-    if (input.presentations?.length && input.presentations.every(presentation => presentation.status === ProductStatus.INACTIVE)) {
+    if (
+      input.presentations?.length &&
+      input.presentations.every((presentation) => presentation.status === ProductStatus.INACTIVE)
+    ) {
       data.status = ProductStatus.INACTIVE
     }
     if (input.attributes !== undefined) {
       validateWeightAttributes(input.attributes)
-      const retainedIds = input.attributes.flatMap(attribute => attribute.id ? [attribute.id] : [])
+      const retainedIds = input.attributes.flatMap((attribute) =>
+        attribute.id ? [attribute.id] : [],
+      )
       data.attributes = {
         deleteMany: retainedIds.length ? { id: { notIn: retainedIds } } : {},
-        update: input.attributes.flatMap((attribute, position) => attribute.id ? [{ where: { id: attribute.id }, data: attributeData(attribute, position) }] : []),
-        create: input.attributes.filter(attribute => !attribute.id).map(attributeData),
+        update: input.attributes.flatMap((attribute, position) =>
+          attribute.id
+            ? [{ where: { id: attribute.id }, data: attributeData(attribute, position) }]
+            : [],
+        ),
+        create: input.attributes.filter((attribute) => !attribute.id).map(attributeData),
       }
     }
-    if (input.presentations !== undefined) data.presentations = {
-      update: input.presentations.flatMap((presentation, index) => presentation.id ? [{ where: { id: presentation.id }, data: presentationData(presentation, index, existing.code) }] : []),
-      create: input.presentations.filter(presentation => !presentation.id).map((presentation, index) => presentationData(presentation, index, existing.code)),
-    }
-    return prisma.$transaction(async db => {
-      const product = await productRepository.update(db, id, data)
-      if (input.presentations !== undefined) {
-        // Stock es un saldo por producto. La vista de inventario utiliza su
-        // presentación principal; por ello solo esa conversión puede
-        // recalibrar el saldo físico, aun cuando el producto tenga variantes.
-        const inventoryPresentation = existing.presentations[0]
-        const updatedPresentation = input.presentations.find(presentation => presentation.id === inventoryPresentation?.id)
-        if (inventoryPresentation && updatedPresentation) {
-          await preserveInventoryQuantityOnFactorChange(db, id, inventoryPresentation.factor, updatedPresentation.factor)
-          if (context && !inventoryPresentation.currentStock.equals(decimal(updatedPresentation.currentStock))) {
-            await synchronizeDeclaredStock(db, product, { id: inventoryPresentation.id, factor: updatedPresentation.factor, currentStock: updatedPresentation.currentStock }, context)
+    if (input.presentations !== undefined)
+      data.presentations = {
+        update: input.presentations.flatMap((presentation, index) =>
+          presentation.id
+            ? [
+                {
+                  where: { id: presentation.id },
+                  data: presentationData(presentation, index, existing.code),
+                },
+              ]
+            : [],
+        ),
+        create: input.presentations
+          .filter((presentation) => !presentation.id)
+          .map((presentation, index) => presentationData(presentation, index, existing.code)),
+      }
+    return prisma.$transaction(
+      async (db) => {
+        const product = await productRepository.update(db, id, data)
+        if (input.presentations !== undefined) {
+          // Stock es un saldo por producto. La vista de inventario utiliza su
+          // presentación principal; por ello solo esa conversión puede
+          // recalibrar el saldo físico, aun cuando el producto tenga variantes.
+          const inventoryPresentation = existing.presentations[0]
+          const updatedPresentation = input.presentations.find(
+            (presentation) => presentation.id === inventoryPresentation?.id,
+          )
+          if (inventoryPresentation && updatedPresentation) {
+            await preserveInventoryQuantityOnFactorChange(
+              db,
+              id,
+              inventoryPresentation.factor,
+              updatedPresentation.factor,
+            )
+            if (
+              context &&
+              !inventoryPresentation.currentStock.equals(decimal(updatedPresentation.currentStock))
+            ) {
+              await synchronizeDeclaredStock(
+                db,
+                product,
+                {
+                  id: inventoryPresentation.id,
+                  factor: updatedPresentation.factor,
+                  currentStock: updatedPresentation.currentStock,
+                },
+                context,
+              )
+            }
           }
         }
-      }
-      if (input.attributes !== undefined && input.presentations !== undefined) await synchronizePresentationAttributeValues(db, product, input as CreateProductInput)
-      return product
-    }, { maxWait: 10_000, timeout: 30_000 })
+        if (input.attributes !== undefined && input.presentations !== undefined)
+          await synchronizePresentationAttributeValues(db, product, input as CreateProductInput)
+        return product
+      },
+      { maxWait: 10_000, timeout: 30_000 },
+    )
   },
   async remove(id: string) {
     await this.getById(id)
@@ -255,7 +589,11 @@ export const productService = {
       await productRepository.delete(id)
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2003') {
-        throw new AppError('PRODUCT_IN_USE', 'No se puede eliminar este producto porque ya tiene operaciones registradas. Puedes inactivarlo para conservar su historial.', 409)
+        throw new AppError(
+          'PRODUCT_IN_USE',
+          'No se puede eliminar este producto porque ya tiene operaciones registradas. Puedes inactivarlo para conservar su historial.',
+          409,
+        )
       }
       throw error
     }

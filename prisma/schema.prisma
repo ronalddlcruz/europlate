@@ -102,6 +102,7 @@ model Company {
   taxId String? @unique
   currency String @default("PEN")
   users User[]
+  sites Site[]
   warehouses Warehouse[]
   suppliers Supplier[]
   customers Customer[]
@@ -119,11 +120,13 @@ model Company {
 model User {
   id String @id @default(cuid())
   companyId String
+  siteId String?
   name String
   email String @unique
   passwordHash String
   status UserStatus @default(ACTIVE)
   company Company @relation(fields: [companyId], references: [id])
+  site Site? @relation(fields: [siteId], references: [id], onDelete: SetNull)
   roles UserRole[]
   permissions UserPermission[]
   sessions Session[]
@@ -133,12 +136,14 @@ model User {
   inventoryAdjustments InventoryAdjustment[]
   createdExchangeRates ExchangeRate[] @relation("ExchangeRateCreator")
   responsibleWarehouses Warehouse[] @relation("WarehouseResponsible")
+  warehouseAssignments UserWarehouse[]
   createdPurchases Purchase[] @relation("PurchaseCreator")
   createdImports Import[] @relation("ImportCreator")
   createdProductionOrders ProductionOrder[] @relation("ProductionOrderCreator")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@index([companyId, status])
+  @@index([companyId, siteId])
 }
 
 model Role {
@@ -391,6 +396,7 @@ model ProductIdentifier {
 model Warehouse {
   id String @id @default(cuid())
   companyId String
+  siteId String
   responsibleUserId String?
   name String
   location String?
@@ -401,7 +407,9 @@ model Warehouse {
   description String?
   status ProductStatus @default(ACTIVE)
   company Company @relation(fields: [companyId], references: [id])
+  site Site @relation(fields: [siteId], references: [id])
   responsible User? @relation("WarehouseResponsible", fields: [responsibleUserId], references: [id], onDelete: SetNull)
+  assignedUsers UserWarehouse[]
   stocks Stock[]
   movements InventoryMovement[]
   purchaseItems PurchaseItem[]
@@ -412,7 +420,32 @@ model Warehouse {
   inboundTransfers StockTransfer[] @relation("TransferDestination")
   inventoryAdjustments InventoryAdjustment[]
   @@unique([companyId, name])
+  @@index([companyId, siteId])
   @@index([companyId, responsibleUserId])
+}
+
+model Site {
+  id String @id @default(cuid())
+  companyId String
+  name String
+  status ProductStatus @default(ACTIVE)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  warehouses Warehouse[]
+  users User[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([companyId, name])
+  @@index([companyId, status])
+}
+
+model UserWarehouse {
+  userId String
+  warehouseId String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  warehouse Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  assignedAt DateTime @default(now())
+  @@id([userId, warehouseId])
+  @@index([warehouseId])
 }
 
 model Stock {
@@ -420,6 +453,9 @@ model Stock {
   productId String
   warehouseId String
   quantity Decimal @default(0) @db.Decimal(14, 3)
+  openingUnitCostPen Decimal? @db.Decimal(14, 4)
+  openingUnitCostUsd Decimal? @db.Decimal(14, 4)
+  openingUnitCostCurrency String @default("PEN")
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
   warehouse Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
   @@unique([productId, warehouseId])

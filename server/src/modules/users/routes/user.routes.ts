@@ -9,6 +9,21 @@ userRoutes.get('/', requirePermission('users.read'), userController.list)
 userRoutes.get('/catalog', requirePermission('users.read'), userController.catalog)
 userRoutes.get('/audit', requirePermission('users.read'), userController.audit)
 userRoutes.post('/', requirePermission('users.manage'), requireGlobalAccess, userController.create)
-userRoutes.patch('/:id', requirePermission('users.manage'), requireGlobalAccess, userController.update)
-userRoutes.delete('/:id', requirePermission('users.manage'), requireGlobalAccess, userController.remove)
-userRoutes.put('/roles/:id/permissions', requirePermission('users.manage'), requireGlobalAccess, userController.updateRolePermissions)
+userRoutes.patch(
+  '/:id',
+  requirePermission('users.manage'),
+  requireGlobalAccess,
+  userController.update,
+)
+userRoutes.delete(
+  '/:id',
+  requirePermission('users.manage'),
+  requireGlobalAccess,
+  userController.remove,
+)
+userRoutes.put(
+  '/roles/:id/permissions',
+  requirePermission('users.manage'),
+  requireGlobalAccess,
+  userController.updateRolePermissions,
+)

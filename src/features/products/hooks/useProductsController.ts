@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { useLocation, useNavigate } from 'react-router-dom'
 import type { ConfigurationTab } from '@/features/products/components/products-navigation'
 import type { ProductModal } from '@/features/products/types/product-modal.types'
@@ -8,6 +9,7 @@ import { useProductOperations } from '@/features/products/hooks/useProductOperat
 import { useUnitOperations } from '@/features/products/hooks/useUnitOperations'
 import { useCategoryOperations } from '@/features/products/hooks/useCategoryOperations'
 import { useAttributeOperations } from '@/features/products/hooks/useAttributeOperations'
+import { loadProductWarehouses } from '@/features/products/services/product-api.service'
 
 export function useProductsController() {
   const navigate = useNavigate()
@@ -24,6 +26,10 @@ export function useProductsController() {
   } = useProductCatalog()
   const [modal, setModal] = useState<ProductModal>(null)
   const [notice, setNotice] = useState('')
+  const warehouses = useQuery({
+    queryKey: ['products', 'warehouses'],
+    queryFn: loadProductWarehouses,
+  })
   const {
     roleFilter,
     setRoleFilter,
@@ -53,29 +59,28 @@ export function useProductsController() {
     setNotice(message)
     window.setTimeout(() => setNotice(''), 2800)
   }
-  const {
-    productMutation,
-    deleteProductMutation,
-    saveVariant,
-    toggleVariantStatus,
-  } = useProductOperations({
-    units,
-    bases,
-    variants,
-    setModal,
-    setSearch,
-    notify,
-    refreshCatalog,
-    refreshProductConsumers,
-  })
+  const { productMutation, deleteProductMutation, saveVariant, toggleVariantStatus } =
+    useProductOperations({
+      units,
+      bases,
+      variants,
+      setModal,
+      setSearch,
+      notify,
+      refreshCatalog,
+      refreshProductConsumers,
+    })
   const { unitMutation, deleteUnitMutation } = useUnitOperations({
     setModal,
     notify,
     refreshCatalog,
   })
   const { categoryMutation } = useCategoryOperations({ setModal, notify })
-  const { createAttributeForCategory, attributeMutation } =
-    useAttributeOperations({ setModal, notify, refreshProductConsumers })
+  const { createAttributeForCategory, attributeMutation } = useAttributeOperations({
+    setModal,
+    notify,
+    refreshProductConsumers,
+  })
   return {
     catalog,
     bases,
@@ -83,6 +88,7 @@ export function useProductsController() {
     units,
     categories,
     attributes,
+    warehouses: warehouses.data ?? [],
     modal,
     setModal,
     roleFilter,

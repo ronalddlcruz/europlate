@@ -4,7 +4,8 @@ import { resolveOperationScope } from '../../../shared/security/operation-scope.
 
 export const reportController = {
   async stock(request: Request, response: Response) {
-    response.json({ data: await reportService.stock(request.auth!.companyId) })
+    const scope = await resolveOperationScope(request.auth!.companyId, request.auth!.id)
+    response.json({ data: await reportService.stock(request.auth!.companyId, scope) })
   },
   async movements(request: Request, response: Response) {
     const scope = await resolveOperationScope(request.auth!.companyId, request.auth!.id)

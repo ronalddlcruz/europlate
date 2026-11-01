@@ -6,8 +6,11 @@ export type WarehouseResponsible = {
   email: string
   roles?: { role: { key: string; name: string } }[]
 }
+export type Site = { id: string; name: string; status: 'ACTIVE' | 'INACTIVE' }
 export type Warehouse = {
   id: string
+  siteId: string
+  site: Site
   name: string
   location: string | null
   department?: string | null
@@ -198,6 +201,7 @@ export const listAdjustments = async () =>
 export const listWarehouses = () => api<Warehouse[]>('/api/inventory/warehouses')
 export const listWarehouseResponsibles = () =>
   api<WarehouseResponsible[]>('/api/inventory/warehouse-responsibles')
+export const listSites = () => api<Site[]>('/api/inventory/sites')
 type MovementActor = { name?: string | null; email?: string | null } | null
 type MovementPresentation = {
   name: string
@@ -312,9 +316,12 @@ export function movementFromAdjustment(adjustment: CreatedAdjustment): Movement 
     reference: adjustment.id,
   }
 }
-export const createWarehouse = (payload: Omit<Warehouse, 'id'>) =>
+export const createWarehouse = (payload: Omit<Warehouse, 'id' | 'site' | 'responsible'>) =>
   api<Warehouse>('/api/inventory/warehouses', { method: 'POST', body: JSON.stringify(payload) })
-export const updateWarehouse = (id: string, payload: Partial<Omit<Warehouse, 'id'>>) =>
+export const updateWarehouse = (
+  id: string,
+  payload: Partial<Omit<Warehouse, 'id' | 'site' | 'responsible'>>,
+) =>
   api<Warehouse>(`/api/inventory/warehouses/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(payload),

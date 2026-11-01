@@ -19,6 +19,7 @@ export function ProductsPage() {
     units,
     categories,
     attributes,
+    warehouses,
     modal,
     setModal,
     notice,
@@ -55,13 +56,15 @@ export function ProductsPage() {
           }
           categories={categories}
           units={units}
+          warehouses={warehouses}
           readOnly={modal.readOnly}
           onClose={() => setModal(null)}
-          onSave={({ base, variants: savedVariants }) =>
+          onSave={({ base, variants: savedVariants, initialStocks }) =>
             productMutation.mutate({
               base,
               nextVariants: savedVariants,
               editing: Boolean(modal.item),
+              initialStocks,
             })
           }
         />

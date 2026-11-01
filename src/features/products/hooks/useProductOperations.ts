@@ -16,6 +16,7 @@ import type {
   ProductRole,
   ProductStatus,
   ProductVariant,
+  InitialStockEntry,
   Unit,
 } from '@/features/products/types/product.types'
 import type { ProductModal } from '@/features/products/types/product-modal.types'
@@ -107,14 +108,16 @@ export function useProductOperations({
       base,
       nextVariants,
       editing,
+      initialStocks,
     }: {
       base: ProductBase
       nextVariants: ProductVariant[]
       editing: boolean
+      initialStocks: InitialStockEntry[]
     }) =>
       editing
         ? updateCatalogProduct(base, nextVariants, units)
-        : createCatalogProduct(base, nextVariants, units),
+        : createCatalogProduct(base, nextVariants, units, initialStocks),
     onMutate: async ({ base, nextVariants, editing }) => {
       await queryClient.cancelQueries({ queryKey: PRODUCT_CATALOG_QUERY_KEY })
       const previous = queryClient.getQueryData<CatalogData>(PRODUCT_CATALOG_QUERY_KEY)
@@ -225,7 +228,7 @@ export function useProductOperations({
           .map((value) => (value.id === item.id ? item : value))
           .filter((value) => value.baseId === base.id)
       : [...variants.filter((value) => value.baseId === base.id), item]
-    productMutation.mutate({ base, nextVariants, editing: true })
+    productMutation.mutate({ base, nextVariants, editing: true, initialStocks: [] })
   }
   const toggleVariantStatus = (item: ProductVariant) => {
     const base = bases.find((value) => value.id === item.baseId)

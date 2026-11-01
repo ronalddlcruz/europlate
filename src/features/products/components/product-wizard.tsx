@@ -7,6 +7,7 @@ import {
   SlidersHorizontal,
   Sparkles,
   Tags,
+  Trash2,
   X,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -19,15 +20,22 @@ import type {
   ProductRole,
   ProductStatus,
   ProductVariant,
+  ProductWarehouse,
+  InitialStockEntry,
   Unit,
 } from '@/features/products/types/product.types'
 
-type SaveValue = { base: ProductBase; variants: ProductVariant[] }
+type SaveValue = {
+  base: ProductBase
+  variants: ProductVariant[]
+  initialStocks: InitialStockEntry[]
+}
 type Props = {
   item?: ProductBase
   variants?: ProductVariant[]
   categories: ProductCategory[]
   units: Unit[]
+  warehouses?: ProductWarehouse[]
   onClose: () => void
   onSave: (value: SaveValue) => void | Promise<void>
   presetSubcategoryId?: string
@@ -163,6 +171,7 @@ export function ProductWizard({
   variants = [],
   categories,
   units,
+  warehouses = [],
   onClose,
   onSave,
   presetSubcategoryId,
@@ -200,6 +209,8 @@ export function ProductWizard({
   const [minimum, setMinimum] = useState(String(variant?.minimum ?? 0))
   // Habilitado temporalmente para la toma física inicial del inventario.
   const [stock, setStock] = useState(String(variant?.stock ?? 0))
+  const [warehouseId, setWarehouseId] = useState('')
+  const [initialStocks, setInitialStocks] = useState<InitialStockEntry[]>([])
   const [openingUnitCostCurrency, setOpeningUnitCostCurrency] = useState<'PEN' | 'USD'>(
     variant?.openingUnitCostCurrency ?? (variant?.openingUnitCostUsd ? 'USD' : 'PEN'),
   )
@@ -240,6 +251,38 @@ export function ProductWizard({
     [attributes, category?.name, subcategory?.name, values],
   )
   const name = automatic ? generatedName : manualName
+  const availableWarehouses = warehouses.filter(
+    (warehouse) => !initialStocks.some((entry) => entry.warehouseId === warehouse.id),
+  )
+  const addInitialStock = () => {
+    const warehouse = warehouses.find((value) => value.id === warehouseId)
+    const quantity = Math.max(0, num(stock, 0))
+    const unitCost = Math.max(0, num(openingUnitCost, 0))
+    if (!warehouse) {
+      setError('Selecciona un almacén para agregar el stock inicial.')
+      return
+    }
+    if (quantity <= 0) {
+      setError('El stock inicial debe ser mayor que cero.')
+      return
+    }
+    setInitialStocks((current) => [
+      ...current,
+      {
+        id: uid(),
+        warehouseId: warehouse.id,
+        warehouseName: warehouse.name,
+        siteName: warehouse.site.name,
+        quantity,
+        currency: openingUnitCostCurrency,
+        unitCost,
+      },
+    ])
+    setWarehouseId('')
+    setStock('0')
+    setOpeningUnitCost('0')
+    setError('')
+  }
   const selectCategory = (id: string) => {
     const next = activeCategories.find((value) => value.id === id)
     setCategoryId(id)
@@ -276,7 +319,13 @@ export function ProductWizard({
       )
       return
     }
-    const initialCost = Math.max(0, num(openingUnitCost, 0))
+    const totalInitialStock = initialStocks.reduce((total, entry) => total + entry.quantity, 0)
+    const selectedCurrency = initialStocks[0]?.currency ?? openingUnitCostCurrency
+    const entriesInCurrency = initialStocks.filter((entry) => entry.currency === selectedCurrency)
+    const initialCost = entriesInCurrency.length
+      ? entriesInCurrency.reduce((total, entry) => total + entry.unitCost * entry.quantity, 0) /
+        entriesInCurrency.reduce((total, entry) => total + entry.quantity, 0)
+      : Math.max(0, num(openingUnitCost, 0))
     const base: ProductBase = {
       id: item?.id ?? uid(),
       code: item?.code ?? '',
@@ -303,13 +352,14 @@ export function ProductWizard({
           unit,
           factor: Math.max(0.001, num(factor, 1)),
           minimum: Math.max(0, num(minimum, 0)),
-          stock: Math.max(0, num(stock, 0)),
-          openingUnitCostCurrency,
-          openingUnitCostPen: openingUnitCostCurrency === 'PEN' ? initialCost : null,
-          openingUnitCostUsd: openingUnitCostCurrency === 'USD' ? initialCost : null,
+          stock: item ? Math.max(0, num(stock, 0)) : totalInitialStock,
+          openingUnitCostCurrency: selectedCurrency,
+          openingUnitCostPen: selectedCurrency === 'PEN' ? initialCost : null,
+          openingUnitCostUsd: selectedCurrency === 'USD' ? initialCost : null,
           status,
         },
       ],
+      initialStocks: item ? [] : initialStocks,
     })
   }
 
@@ -457,7 +507,20 @@ export function ProductWizard({
   )
   const initialInventory = (
     <Section number="4" title="Datos de carga inicial" icon={Boxes}>
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid items-end gap-4 md:grid-cols-2 xl:grid-cols-5">
+        <Field label="Almacén">
+          <ClassificationPicker
+            items={availableWarehouses.map((warehouse) => ({
+              id: warehouse.id,
+              name: warehouse.name,
+              code: `${warehouse.site.name}${warehouse.district ? ` · ${warehouse.district}` : ''}`,
+            }))}
+            value={warehouseId}
+            onChange={setWarehouseId}
+            disabled={readOnly || Boolean(item)}
+            placeholder="Buscar almacén..."
+          />
+        </Field>
         <Field
           label={`Stock actual (${(units.find((value) => value.code === unit)?.description ?? unit) || 'UM'})`}
         >
@@ -496,7 +559,62 @@ export function ProductWizard({
             onChange={(event) => setOpeningUnitCost(event.target.value)}
           />
         </Field>
+        {!item && !readOnly && (
+          <Button type="button" onClick={addInitialStock} disabled={!warehouseId}>
+            Agregar
+          </Button>
+        )}
       </div>
+      {!item && (
+        <div className="mt-4 overflow-hidden rounded-md border border-border">
+          <table className="w-full min-w-[680px] text-left text-sm">
+            <thead className="bg-[#f7f9fc] text-[11px] uppercase tracking-[.4px] text-muted">
+              <tr>
+                <th className="px-3 py-2.5">Almacén</th>
+                <th className="px-3 py-2.5">Sede</th>
+                <th className="px-3 py-2.5 text-right">Stock</th>
+                <th className="px-3 py-2.5">Moneda</th>
+                <th className="px-3 py-2.5 text-right">Costo unitario</th>
+                <th className="w-12 px-3 py-2.5" />
+              </tr>
+            </thead>
+            <tbody>
+              {initialStocks.map((entry) => (
+                <tr key={entry.id} className="border-t border-border">
+                  <td className="px-3 py-2.5 font-medium text-ink">{entry.warehouseName}</td>
+                  <td className="px-3 py-2.5 text-muted">{entry.siteName}</td>
+                  <td className="px-3 py-2.5 text-right">{entry.quantity}</td>
+                  <td className="px-3 py-2.5">{entry.currency}</td>
+                  <td className="px-3 py-2.5 text-right">{entry.unitCost.toFixed(4)}</td>
+                  <td className="px-3 py-2.5 text-right">
+                    {!readOnly && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setInitialStocks((current) =>
+                            current.filter((currentEntry) => currentEntry.id !== entry.id),
+                          )
+                        }
+                        aria-label={`Quitar stock de ${entry.warehouseName}`}
+                        className="text-slate-400 hover:text-red-600"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+              {!initialStocks.length && (
+                <tr>
+                  <td colSpan={6} className="px-3 py-5 text-center text-sm text-muted">
+                    Agrega uno o más registros de stock inicial.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
     </Section>
   )
   const body = (
