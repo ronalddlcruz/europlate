@@ -6,6 +6,7 @@ import {
 import { UnitDialog } from '@/features/products/components/dialogs/UnitDialog'
 import { VariantDialog } from '@/features/products/components/dialogs/VariantDialog'
 import { ProductWizard } from '@/features/products/components/product-wizard'
+import { OpeningStockDialog } from '@/features/products/components/opening-stock-dialog'
 import { ProductsNavigation } from '@/features/products/components/products-navigation'
 import { useProductsController } from '@/features/products/hooks/useProductsController'
 import { ProductsCatalogPage } from '@/features/products/pages/products-catalog-page'
@@ -68,6 +69,9 @@ export function ProductsPage() {
             })
           }
         />
+      )}
+      {modal?.type === 'opening-stock' && (
+        <OpeningStockDialog product={modal.item} warehouses={warehouses} onClose={() => setModal(null)} />
       )}
       {modal?.type === 'variant' && (
         <VariantDialog

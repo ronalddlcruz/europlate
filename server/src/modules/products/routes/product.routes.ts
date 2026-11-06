@@ -7,7 +7,7 @@ export const productRoutes = Router()
 productRoutes.use(requireAuthentication)
 productRoutes.get('/', requirePermission('products.read'), productController.list)
 productRoutes.post('/', requirePermission('products.manage'), productController.create)
-productRoutes.get('/warehouses', requirePermission('products.manage'), productController.warehouses)
+productRoutes.get('/warehouses', requirePermission('products.read'), productController.warehouses)
 productRoutes.get('/units', requirePermission('products.read'), productController.listUnits)
 productRoutes.get(
   '/categories',
@@ -66,5 +66,7 @@ productRoutes.delete(
   productController.removeAttributeDefinition,
 )
 productRoutes.get('/:id', requirePermission('products.read'), productController.get)
+productRoutes.get('/:id/opening-stocks', requirePermission('inventory.read'), productController.openingStocks)
+productRoutes.put('/:id/opening-stocks/:warehouseId', requirePermission('inventory.opening.manage'), productController.setOpeningStock)
 productRoutes.patch('/:id', requirePermission('products.manage'), productController.update)
 productRoutes.delete('/:id', requirePermission('products.manage'), productController.remove)

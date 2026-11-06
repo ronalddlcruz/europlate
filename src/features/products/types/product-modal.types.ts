@@ -9,6 +9,7 @@ import type {
 
 export type ProductModal =
   | { type: 'base'; item?: ProductBase; readOnly?: boolean }
+  | { type: 'opening-stock'; item: ProductBase }
   | { type: 'variant'; item?: ProductVariant; baseId?: string }
   | { type: 'unit'; item?: Unit }
   | { type: 'category'; item?: ProductCategory; editing?: boolean }

@@ -7,7 +7,7 @@ import { API_GROUPS, createOpenApiDocument } from './openapi.document.js'
 test('Swagger cubre cada endpoint declarado por los routers Express', () => {
   for (const group of API_GROUPS) {
     const source = readFileSync(join(process.cwd(), 'server/src/modules', group.source), 'utf8')
-    const actual = [...source.matchAll(/\b\w+Routes\.(get|post|patch|put|delete)\('([^']+)'/g)]
+    const actual = [...source.matchAll(/\b\w+Routes\.(get|post|patch|put|delete)\(\s*'([^']+)'/g)]
       .map((match) => `${match[1].toUpperCase()} ${match[2]}`)
       .sort()
     assert.deepEqual([...group.routes].sort(), actual, group.source)

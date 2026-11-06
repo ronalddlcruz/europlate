@@ -346,6 +346,9 @@ async function initializeProductStock(
           createdByUserId: context.userId,
           type: 'INITIAL_STOCK',
           quantity,
+          openingUnitCostCurrency: entry.currency,
+          openingUnitCostPen: entry.currency === 'PEN' ? cost : null,
+          openingUnitCostUsd: entry.currency === 'USD' ? cost : null,
           reference: product.code,
           note: `Stock inicial · ${entry.currency} ${entry.unitCost.toFixed(4)} por unidad.`,
         },
@@ -439,7 +442,7 @@ export const productService = {
     search?: string
     status?: ProductStatus
     role?: 'MERCHANDISE' | 'SUPPLY' | 'FINISHED_PRODUCT'
-  }) {
+  }, actor?: ProductMutationContext) {
     const where: Prisma.ProductWhereInput = {
       ...(filters.status && { status: filters.status }),
       ...(filters.role && { roles: { has: filters.role } }),
@@ -451,11 +454,47 @@ export const productService = {
         ],
       }),
     }
-    return productRepository.findMany(where)
+    const products = await productRepository.findMany(where)
+    if (!actor) return products
+    const scope = await resolveOperationScope(actor.companyId, actor.userId)
+    if (!scope) return products
+    const totals = await prisma.stock.groupBy({
+      by: ['productId'],
+      where: { productId: { in: products.map((product) => product.id) }, warehouseId: { in: scope.warehouseIds } },
+      _sum: { quantity: true },
+    })
+    const byProduct = new Map(totals.map((item) => [item.productId, item._sum.quantity ?? new Prisma.Decimal(0)]))
+    return products.map((product) => ({
+      ...product,
+      presentations: product.presentations.map((presentation, index) => ({
+        ...presentation,
+        currentStock: index === 0
+          ? (byProduct.get(product.id) ?? new Prisma.Decimal(0)).div(presentation.factor)
+          : presentation.currentStock,
+      })),
+    }))
   },
-  async getById(id: string) {
+  async getById(id: string, actor?: ProductMutationContext) {
     const product = await productRepository.findById(id)
     if (!product) throw new AppError('PRODUCT_NOT_FOUND', 'Producto no encontrado.', 404)
+    if (actor) {
+      const scope = await resolveOperationScope(actor.companyId, actor.userId)
+      if (scope) {
+        const total = await prisma.stock.aggregate({
+          where: { productId: id, warehouseId: { in: scope.warehouseIds } },
+          _sum: { quantity: true },
+        })
+        return {
+          ...product,
+          presentations: product.presentations.map((presentation, index) => ({
+            ...presentation,
+            currentStock: index === 0
+              ? (total._sum.quantity ?? new Prisma.Decimal(0)).div(presentation.factor)
+              : presentation.currentStock,
+          })),
+        }
+      }
+    }
     return product
   },
   async create(

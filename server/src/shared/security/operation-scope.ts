@@ -39,6 +39,10 @@ export async function resolveOperationScope(
         where: { warehouse: { companyId, status: 'ACTIVE' } },
         select: { warehouseId: true },
       },
+      responsibleWarehouses: {
+        where: { companyId, status: 'ACTIVE' },
+        select: { id: true },
+      },
     },
   })
   if (!user) throw new AppError('INVALID_SESSION', 'La sesión no es válida.', 401)
@@ -48,7 +52,10 @@ export async function resolveOperationScope(
       ...user.permissions.map((item) => item.permission.key),
     ],
     userId,
-    user.warehouseAssignments.map((assignment) => assignment.warehouseId),
+    [...new Set([
+      ...user.warehouseAssignments.map((assignment) => assignment.warehouseId),
+      ...user.responsibleWarehouses.map((warehouse) => warehouse.id),
+    ])],
   )
 }
 

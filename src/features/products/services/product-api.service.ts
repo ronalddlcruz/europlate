@@ -214,6 +214,21 @@ export async function loadCatalog() {
 export async function loadProductWarehouses() {
   return api<ProductWarehouse[]>('/api/products/warehouses')
 }
+export type OpeningStockBalance = {
+  warehouseId: string
+  quantity: number
+  currency: 'PEN' | 'USD'
+  unitCost: number
+}
+export async function loadOpeningStocks(productId: string) {
+  return api<OpeningStockBalance[]>(`/api/products/${productId}/opening-stocks`)
+}
+export async function setOpeningStock(productId: string, balance: OpeningStockBalance) {
+  return api<OpeningStockBalance>(`/api/products/${productId}/opening-stocks/${balance.warehouseId}`, {
+    method: 'PUT',
+    body: JSON.stringify({ quantity: balance.quantity, currency: balance.currency, unitCost: balance.unitCost }),
+  })
+}
 function productPayload(
   base: ProductBase,
   variants: ProductVariant[],

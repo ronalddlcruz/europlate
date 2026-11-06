@@ -15,6 +15,9 @@ export function GroupedProductsTable({
   variants,
   units,
   onEditBase,
+  onOpeningStock,
+  canManage,
+  canOpenStock,
   onViewBase,
   onToggleVariant,
   onDeleteProduct,
@@ -23,6 +26,9 @@ export function GroupedProductsTable({
   variants: ProductVariant[];
   units: Unit[];
   onEditBase: (base: ProductBase) => void;
+  onOpeningStock: (base: ProductBase) => void;
+  canManage: boolean;
+  canOpenStock: boolean;
   onViewBase: (base: ProductBase) => void;
   onEditVariant: (variant: ProductVariant) => void;
   onToggleVariant: (variant: ProductVariant) => void;
@@ -128,20 +134,20 @@ export function GroupedProductsTable({
                     )}
                   </td>
                   <td className="px-2 py-3 font-mono text-xs font-semibold tabular-nums text-ink">
-                    {inventory ? stockFormatter.format(inventory.stock) : "—"}
+                    {canOpenStock ? <button type="button" title="Editar carga inicial" onClick={() => onOpeningStock(base)}>{inventory ? stockFormatter.format(inventory.stock) : "—"}</button> : inventory ? stockFormatter.format(inventory.stock) : "—"}
                   </td>
                   <td className="px-2 py-3">
                     <StatusBadge status={status} />
                   </td>
                   <td className="whitespace-nowrap px-1 py-3 text-center">
                     <ActionGroup>
-                      <IconButton
+                      {(canManage || canOpenStock) && <IconButton
                         label="Editar producto"
                         onClick={() => onEditBase(base)}
                       >
                         <Pencil className="h-3.5 w-3.5" />
-                      </IconButton>
-                      {inventory && (
+                      </IconButton>}
+                      {canManage && inventory && (
                         <IconButton
                           label={
                             status === "Activo"
@@ -153,13 +159,13 @@ export function GroupedProductsTable({
                           <Power className="h-3.5 w-3.5" />
                         </IconButton>
                       )}
-                      <IconButton
+                      {canManage && <IconButton
                         label="Eliminar producto"
                         danger
                         onClick={() => onDeleteProduct(base)}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
-                      </IconButton>
+                      </IconButton>}
                     </ActionGroup>
                   </td>
                 </tr>

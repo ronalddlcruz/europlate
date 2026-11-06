@@ -64,7 +64,7 @@ const description = (attributes: Attribute[], values: Record<string, string>) =>
 const isAvailableAttribute = (attribute: Attribute) =>
   attribute.status !== 'Inactivo' && attribute.definitionStatus !== 'Inactivo'
 
-function ClassificationPicker({
+export function ClassificationPicker({
   items,
   value,
   placeholder,

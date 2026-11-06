@@ -471,6 +471,9 @@ model InventoryMovement {
   quantity Decimal @db.Decimal(14, 3)
   reference String?
   note String?
+  openingUnitCostPen Decimal? @db.Decimal(14, 4)
+  openingUnitCostUsd Decimal? @db.Decimal(14, 4)
+  openingUnitCostCurrency String?
   product Product @relation(fields: [productId], references: [id])
   warehouse Warehouse @relation(fields: [warehouseId], references: [id])
   presentation ProductPresentation? @relation(fields: [presentationId], references: [id])

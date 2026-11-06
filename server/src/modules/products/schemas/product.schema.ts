@@ -59,6 +59,11 @@ const openingStockSchema = z.object({
   currency: z.enum(['PEN', 'USD']),
   unitCost: z.coerce.number().nonnegative(),
 })
+export const setOpeningStockSchema = openingStockSchema.omit({ warehouseId: true }).extend({
+  quantity: z.coerce.number().finite().nonnegative().max(99_999_999_999).multipleOf(0.001),
+  unitCost: z.coerce.number().finite().nonnegative().max(9_999_999_999).multipleOf(0.0001),
+})
+export type OpeningStockInput = z.infer<typeof setOpeningStockSchema>
 
 const productPayloadSchema = z.object({
   name: z.string().trim().min(1).max(160),

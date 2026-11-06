@@ -64,16 +64,22 @@ function receivedCosts(
       (item.import.currency === 'PEN' ? lineValue : 0) + Number(item.import.customsCostPen) * share
     add(item.productId, quantity, usd, pen)
   }
+  const openingsByWarehouse = new Map<string, { quantity: number; currency: string; usd: number; pen: number; productId: string }>()
   for (const movement of openingMovements) {
     const factor = Number(movement.presentation?.factor ?? 1)
-    // El movimiento se registra en unidades físicas; se normaliza a la UM
-    // de inventario antes de combinarlo con compras e importaciones.
     const quantity = Number(movement.quantity) / factor
-    const isUsd = movement.presentation?.openingUnitCostCurrency === 'USD'
-    const usd = isUsd ? quantity * Number(movement.presentation?.openingUnitCostUsd ?? 0) : 0
-    const pen = isUsd ? 0 : quantity * Number(movement.presentation?.openingUnitCostPen ?? 0)
-    add(movement.productId, quantity, usd, pen)
+    const key = `${movement.productId}:${movement.warehouseId}`
+    const current = openingsByWarehouse.get(key)
+    openingsByWarehouse.set(key, {
+      productId: movement.productId,
+      quantity: (current?.quantity ?? 0) + quantity,
+      currency: movement.openingUnitCostCurrency ?? movement.presentation?.openingUnitCostCurrency ?? 'PEN',
+      usd: Number(movement.openingUnitCostUsd ?? movement.presentation?.openingUnitCostUsd ?? 0),
+      pen: Number(movement.openingUnitCostPen ?? movement.presentation?.openingUnitCostPen ?? 0),
+    })
   }
+  for (const opening of openingsByWarehouse.values())
+    add(opening.productId, opening.quantity, opening.currency === 'USD' ? opening.quantity * opening.usd : 0, opening.currency === 'PEN' ? opening.quantity * opening.pen : 0)
   return byProduct
 }
 
@@ -169,7 +175,8 @@ export const inventoryService = {
       : new Map<string, ProductCost>()
     const hasUsdCosts = costSources
       ? costSources[0].some((item) => item.purchase.currency === 'USD') ||
-        costSources[1].some((item) => item.import.currency === 'USD')
+        costSources[1].some((item) => item.import.currency === 'USD') ||
+        costSources[2].some((item) => (item.openingUnitCostCurrency ?? item.presentation?.openingUnitCostCurrency) === 'USD')
       : false
     // Reparación transparente para importaciones históricas: si existen costos
     // en USD y aún no hay tasa, se registra una sola tasa vigente. Después de

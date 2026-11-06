@@ -7,8 +7,12 @@ import { Input } from "@/components/ui/input";
 import { Filter,Metric,roles } from '@/features/products/components/shared';
 import { GroupedProductsTable } from '@/features/products/components/tables/GroupedProductsTable';
 import { useProductsController } from '@/features/products/hooks/useProductsController';
+import { useAuth } from '@/features/auth/hooks/use-auth';
 
 export function ProductsCatalogPage({ model }: { model: ReturnType<typeof useProductsController> }) {
+  const { session } = useAuth()
+  const canManage = Boolean(session?.user.permissions.includes('products.manage'))
+  const canOpenStock = Boolean(session?.user.permissions.includes('inventory.opening.manage'))
   const { catalog, bases, variants, units, categories, setModal, roleFilter, setRoleFilter, statusFilter, setStatusFilter, search, setSearch, setProductsPage, deleteProductMutation, orderedBases, pageSize, totalProductPages, currentProductsPage, visibleBases, toggleVariantStatus } = model
   return ((
         <section className="rounded-xl border border-border bg-white p-6 shadow-card">
@@ -19,10 +23,10 @@ export function ProductsCatalogPage({ model }: { model: ReturnType<typeof usePro
                 Gestiona los productos, sus presentaciones y variantes.
               </p>
             </div>
-            <Button size="sm" onClick={() => setModal({ type: "base" })}>
+            {canManage && <Button size="sm" onClick={() => setModal({ type: "base" })}>
               <Plus className="h-4 w-4" />
               Nuevo producto
-            </Button>
+            </Button>}
           </header>
           <div className="mt-5 grid divide-y divide-slate-100 rounded-xl border border-slate-100 bg-slate-50/60 sm:grid-cols-2 sm:divide-x sm:divide-y-0 xl:grid-cols-4">
             <Metric
@@ -115,7 +119,10 @@ export function ProductsCatalogPage({ model }: { model: ReturnType<typeof usePro
                 bases={visibleBases}
                 variants={variants}
                 units={units}
-                onEditBase={(item) => setModal({ type: "base", item })}
+                onEditBase={(item) => setModal(canManage ? { type: 'base', item } : { type: 'opening-stock', item })}
+                onOpeningStock={(item) => setModal({ type: 'opening-stock', item })}
+                canManage={canManage}
+                canOpenStock={canOpenStock}
                 onViewBase={(item) => setModal({ type: "base", item, readOnly: true })}
                 onEditVariant={(variant) => {
                   const base = bases.find((item) => item.id === variant.baseId);

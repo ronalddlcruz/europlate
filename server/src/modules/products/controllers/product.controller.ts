@@ -10,8 +10,10 @@ import {
   updateCategorySchema,
   updateProductSchema,
   updateUnitSchema,
+  setOpeningStockSchema,
 } from '../schemas/product.schema.js'
 import { productService } from '../services/product.service.js'
+import { productOpeningStockService } from '../services/product-opening-stock.service.js'
 
 const paramId = (request: Request) =>
   Array.isArray(request.params.id) ? request.params.id[0] : request.params.id
@@ -19,15 +21,22 @@ const paramId = (request: Request) =>
 export const productController = {
   async list(request: Request, response: Response) {
     const filters = productQuerySchema.parse(request.query)
-    response.json({ data: await productService.getCatalog(filters) })
+    response.json({ data: await productService.getCatalog(filters, { companyId: request.auth!.companyId, userId: request.auth!.id }) })
   },
   async get(request: Request, response: Response) {
-    response.json({ data: await productService.getById(paramId(request)) })
+    response.json({ data: await productService.getById(paramId(request), { companyId: request.auth!.companyId, userId: request.auth!.id }) })
   },
   async warehouses(request: Request, response: Response) {
     response.json({
       data: await productService.getWarehouses(request.auth!.companyId, request.auth!.id),
     })
+  },
+  async openingStocks(request: Request, response: Response) {
+    response.json({ data: await productOpeningStockService.list(paramId(request), { companyId: request.auth!.companyId, userId: request.auth!.id }) })
+  },
+  async setOpeningStock(request: Request, response: Response) {
+    const warehouseId = Array.isArray(request.params.warehouseId) ? request.params.warehouseId[0] : request.params.warehouseId
+    response.json({ data: await productOpeningStockService.set(paramId(request), warehouseId, setOpeningStockSchema.parse(request.body), { companyId: request.auth!.companyId, userId: request.auth!.id }) })
   },
   async create(request: Request, response: Response) {
     const product = await productService.create(

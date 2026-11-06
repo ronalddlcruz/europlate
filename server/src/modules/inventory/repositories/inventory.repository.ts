@@ -77,7 +77,11 @@ export const inventoryRepository = {
         },
         select: {
           productId: true,
+          warehouseId: true,
           quantity: true,
+          openingUnitCostPen: true,
+          openingUnitCostUsd: true,
+          openingUnitCostCurrency: true,
           presentation: {
             select: {
               factor: true,
@@ -87,6 +91,7 @@ export const inventoryRepository = {
             },
           },
         },
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
       }),
     ]),
   currentExchangeRate: (companyId: string) =>
