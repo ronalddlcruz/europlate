@@ -46,6 +46,7 @@ export function OpeningStockEditor({
   const [reason, setReason] = useState('')
   const current = balances.data?.find((entry) => entry.warehouseId === warehouseId)
   const available = current?.quantity ?? 0
+  const stockFormatter = new Intl.NumberFormat('es-PE', { maximumFractionDigits: 3 })
   useEffect(() => {
     setCurrency(current?.currency ?? 'PEN')
     setUnitCost(String(current?.unitCost ?? 0))
@@ -176,6 +177,24 @@ export function OpeningStockEditor({
           />
         </div>
       </div>
+      {balances.isSuccess && (
+        <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs">
+          <p className="font-semibold text-slate-700">Stock por almacén</p>
+          <div className="mt-1 space-y-1">
+            {warehouses.map((warehouse) => (
+              <div className="flex justify-between gap-3" key={warehouse.id}>
+                <span className="text-slate-600">{warehouse.name}</span>
+                <strong className="tabular-nums text-ink">
+                  {stockFormatter.format(
+                    balances.data.find((balance) => balance.warehouseId === warehouse.id)
+                      ?.quantity ?? 0,
+                  )}
+                </strong>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="block text-xs font-semibold text-slate-700">
           Operación
