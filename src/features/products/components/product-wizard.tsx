@@ -44,6 +44,7 @@ type Props = {
   inline?: boolean
   readOnly?: boolean
   canManageOpeningStock?: boolean
+  canAdjustStock?: boolean
 }
 
 const roles: ProductRole[] = ['Mercadería', 'Insumo', 'Producto terminado']
@@ -78,6 +79,7 @@ export function ProductWizard({
   inline = false,
   readOnly = false,
   canManageOpeningStock = false,
+  canAdjustStock = false,
 }: Props) {
   const variant = variants[0]
   const fixedCategory = categories.find((category) =>
@@ -537,8 +539,8 @@ export function ProductWizard({
         <>
           {identification}
           {specifications}
-          {item && canManageOpeningStock && !readOnly ? (
-            <OpeningStockEditor product={item} warehouses={warehouses} onClose={onClose} embedded />
+          {item && (canManageOpeningStock || canAdjustStock) && !readOnly ? (
+            <OpeningStockEditor product={item} warehouses={warehouses} onClose={onClose} embedded canAdjustStock={canAdjustStock} canManageOpeningStock={canManageOpeningStock} />
           ) : !item ? (
             initialInventory
           ) : null}

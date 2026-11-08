@@ -398,6 +398,7 @@ export const inventoryService = {
     const { presentation } = await validateAdjustmentLine(companyId, input)
     const baseDelta = decimal(input.delta).mul(presentation.factor)
     return transaction(async (db) => {
+      await db.$queryRaw`SELECT 1 AS locked FROM pg_advisory_xact_lock(hashtext(${input.productId}), hashtext(${input.warehouseId}))`
       const current = await db.stock.findUnique({
         where: {
           productId_warehouseId: { productId: input.productId, warehouseId: input.warehouseId },

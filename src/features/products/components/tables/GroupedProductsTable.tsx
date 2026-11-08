@@ -134,7 +134,7 @@ export function GroupedProductsTable({
                     )}
                   </td>
                   <td className="px-2 py-3 font-mono text-xs font-semibold tabular-nums text-ink">
-                    {canOpenStock ? <button type="button" title="Editar carga inicial" onClick={() => onOpeningStock(base)}>{inventory ? stockFormatter.format(inventory.stock) : "—"}</button> : inventory ? stockFormatter.format(inventory.stock) : "—"}
+                    {canOpenStock ? <button type="button" title="Editar stock del producto" onClick={() => onOpeningStock(base)}>{inventory ? stockFormatter.format(inventory.stock) : "—"}</button> : inventory ? stockFormatter.format(inventory.stock) : "—"}
                   </td>
                   <td className="px-2 py-3">
                     <StatusBadge status={status} />

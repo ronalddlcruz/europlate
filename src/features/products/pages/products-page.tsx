@@ -64,6 +64,7 @@ export function ProductsPage() {
           canManageOpeningStock={
             session?.user.permissions.includes('inventory.opening.manage') ?? false
           }
+          canAdjustStock={session?.user.permissions.includes('inventory.manage') ?? false}
           onClose={() => setModal(null)}
           onSave={({ base, variants: savedVariants, initialStocks }) =>
             productMutation.mutate({
@@ -79,6 +80,8 @@ export function ProductsPage() {
         <OpeningStockDialog
           product={modal.item}
           warehouses={warehouses}
+          canAdjustStock={session?.user.permissions.includes('inventory.manage') ?? false}
+          canManageOpeningStock={session?.user.permissions.includes('inventory.opening.manage') ?? false}
           onClose={() => setModal(null)}
         />
       )}

@@ -12,7 +12,7 @@ import { useAuth } from '@/features/auth/hooks/use-auth';
 export function ProductsCatalogPage({ model }: { model: ReturnType<typeof useProductsController> }) {
   const { session } = useAuth()
   const canManage = Boolean(session?.user.permissions.includes('products.manage'))
-  const canOpenStock = Boolean(session?.user.permissions.includes('inventory.opening.manage'))
+  const canOpenStock = Boolean(session?.user.permissions.includes('inventory.opening.manage') || session?.user.permissions.includes('inventory.manage'))
   const { catalog, bases, variants, units, categories, setModal, roleFilter, setRoleFilter, statusFilter, setStatusFilter, search, setSearch, setProductsPage, deleteProductMutation, orderedBases, pageSize, totalProductPages, currentProductsPage, visibleBases, toggleVariantStatus } = model
   return ((
         <section className="rounded-xl border border-border bg-white p-6 shadow-card">
