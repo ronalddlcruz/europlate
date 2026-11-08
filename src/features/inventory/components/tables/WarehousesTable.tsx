@@ -2,7 +2,7 @@ import { Pencil, Settings2, Trash2 } from 'lucide-react'
 import { useWarehousesController } from '@/features/inventory/hooks/useWarehousesController'
 
 export function WarehousesTable({ model }: { model: ReturnType<typeof useWarehousesController> }) {
-  const { canManage, canRename, warehouses, setEditing, setRenaming, setModal, remove } = model
+  const { canManage, canEdit, canRename, warehouses, setEditing, setRenaming, setModal, remove } = model
   return (
     <table className="w-full min-w-[1080px] text-left">
       <thead>
@@ -52,7 +52,7 @@ export function WarehousesTable({ model }: { model: ReturnType<typeof useWarehou
                   >
                     <Pencil className="h-3.5 w-3.5" />
                   </button>
-                  {canManage && <button
+                  {canEdit && <button
                     type="button"
                     className="ml-1 inline-flex h-8 w-8 items-center justify-center rounded border border-border"
                     aria-label={'Editar datos de ' + item.name}

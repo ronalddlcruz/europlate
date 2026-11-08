@@ -495,7 +495,8 @@ export const inventoryService = {
       status: input.status,
     })
   },
-  async updateWarehouse(companyId: string, id: string, input: Partial<WarehouseInput>) {
+  async updateWarehouse(companyId: string, actorId: string, id: string, input: Partial<WarehouseInput>) {
+    assertWarehouseScope(await resolveOperationScope(companyId, actorId), [id])
     if (!(await inventoryRepository.findWarehouse(id, companyId)))
       throw new AppError('WAREHOUSE_NOT_FOUND', 'El almacén no existe.', 404)
     if (input.name) {

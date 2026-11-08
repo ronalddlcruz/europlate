@@ -83,6 +83,7 @@ export const inventoryController = {
     response.json({
       data: await inventoryService.updateWarehouse(
         request.auth!.companyId,
+        request.auth!.id,
         idFrom(request),
         updateWarehouseSchema.parse(request.body),
       ),

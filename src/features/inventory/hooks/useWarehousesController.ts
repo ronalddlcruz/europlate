@@ -20,7 +20,8 @@ export function useWarehousesController() {
   const canManage =
     (permissions.includes('*') || permissions.includes('users.manage')) &&
     (permissions.includes('*') || permissions.includes('operations.global'))
-  const canRename = canManage || permissions.includes('inventory.manage')
+  const canEdit = canManage || permissions.includes('inventory.manage')
+  const canRename = canEdit
   const warehouses = useQuery({
     queryKey: ['inventory', 'warehouses'],
     queryFn: listWarehouses,
@@ -30,12 +31,12 @@ export function useWarehousesController() {
   const responsibles = useQuery({
     queryKey: ['inventory', 'warehouse-responsibles'],
     queryFn: listWarehouseResponsibles,
-    enabled: canManage,
+    enabled: canEdit,
   })
   const sites = useQuery({
     queryKey: ['inventory', 'sites'],
     queryFn: listSites,
-    enabled: canManage,
+    enabled: canEdit,
   })
   const [editing, setEditing] = useState<Warehouse>()
   const [renaming, setRenaming] = useState<Warehouse>()
@@ -89,6 +90,7 @@ export function useWarehousesController() {
     client,
     session,
     canManage,
+    canEdit,
     canRename,
     warehouses,
     responsibles,

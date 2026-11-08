@@ -28,14 +28,12 @@ inventoryRoutes.get(
 )
 inventoryRoutes.get(
   '/warehouse-responsibles',
-  requirePermission('users.manage'),
-  requireGlobalAccess,
+  requirePermission('inventory.manage'),
   inventoryController.warehouseResponsibles,
 )
 inventoryRoutes.get(
   '/sites',
-  requirePermission('users.manage'),
-  requireGlobalAccess,
+  requirePermission('inventory.manage'),
   inventoryController.sites,
 )
 inventoryRoutes.get('/catalog', requirePermission('inventory.read'), inventoryController.catalog)
@@ -62,8 +60,7 @@ inventoryRoutes.patch(
 )
 inventoryRoutes.patch(
   '/warehouses/:id',
-  requirePermission('users.manage'),
-  requireGlobalAccess,
+  requirePermission('inventory.manage'),
   inventoryController.updateWarehouse,
 )
 inventoryRoutes.delete(
