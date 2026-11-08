@@ -9,11 +9,13 @@ import { ProductWizard } from '@/features/products/components/product-wizard'
 import { OpeningStockDialog } from '@/features/products/components/opening-stock-dialog'
 import { ProductsNavigation } from '@/features/products/components/products-navigation'
 import { useProductsController } from '@/features/products/hooks/useProductsController'
+import { useAuth } from '@/features/auth/hooks/use-auth'
 import { ProductsCatalogPage } from '@/features/products/pages/products-catalog-page'
 import { ProductsConfigurationPage } from '@/features/products/pages/products-configuration-page'
 
 export function ProductsPage() {
   const model = useProductsController()
+  const { session } = useAuth()
   const {
     bases,
     variants,
@@ -59,6 +61,9 @@ export function ProductsPage() {
           units={units}
           warehouses={warehouses}
           readOnly={modal.readOnly}
+          canManageOpeningStock={
+            session?.user.permissions.includes('inventory.opening.manage') ?? false
+          }
           onClose={() => setModal(null)}
           onSave={({ base, variants: savedVariants, initialStocks }) =>
             productMutation.mutate({
@@ -71,7 +76,11 @@ export function ProductsPage() {
         />
       )}
       {modal?.type === 'opening-stock' && (
-        <OpeningStockDialog product={modal.item} warehouses={warehouses} onClose={() => setModal(null)} />
+        <OpeningStockDialog
+          product={modal.item}
+          warehouses={warehouses}
+          onClose={() => setModal(null)}
+        />
       )}
       {modal?.type === 'variant' && (
         <VariantDialog

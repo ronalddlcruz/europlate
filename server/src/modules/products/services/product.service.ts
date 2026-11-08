@@ -535,6 +535,7 @@ export const productService = {
   },
   async update(id: string, input: UpdateProductInput, context?: ProductMutationContext) {
     const existing = await this.getById(id)
+    const scope = context && await resolveOperationScope(context.companyId, context.userId)
     if (input.subcategoryId !== undefined)
       await validateSubcategory(input.categoryId, input.subcategoryId)
     const data = productData(input)
@@ -569,7 +570,17 @@ export const productService = {
             ? [
                 {
                   where: { id: presentation.id },
-                  data: presentationData(presentation, index, existing.code),
+                  data: {
+                    ...presentationData(presentation, index, existing.code),
+                    // El saldo de un usuario de sede es solo el de sus almacenes.
+                    // Al editar la ficha no debe sobrescribir el total global.
+                    ...(scope && {
+                      currentStock: undefined,
+                      openingUnitCostPen: undefined,
+                      openingUnitCostUsd: undefined,
+                      openingUnitCostCurrency: undefined,
+                    }),
+                  },
                 },
               ]
             : [],
@@ -597,7 +608,7 @@ export const productService = {
               updatedPresentation.factor,
             )
             if (
-              context &&
+              context && !scope &&
               !inventoryPresentation.currentStock.equals(decimal(updatedPresentation.currentStock))
             ) {
               await synchronizeDeclaredStock(

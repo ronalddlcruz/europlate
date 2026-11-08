@@ -135,17 +135,29 @@ export function useProductOperations({
       return { previous, optimisticId: base.id, editing }
     },
     onSuccess: (saved, _variables, context) => {
+      const previousProduct = context?.editing
+        ? context.previous?.products.find((product) => product.base.id === saved.base.id)
+        : undefined
+      const visibleProduct = previousProduct
+        ? {
+            ...saved,
+            variants: saved.variants.map((variant, index) => ({
+              ...variant,
+              stock: previousProduct.variants[index]?.stock ?? variant.stock,
+            })),
+          }
+        : saved
       queryClient.setQueryData<CatalogData>(PRODUCT_CATALOG_QUERY_KEY, (current) => {
         if (!current) return current
         const products = context?.editing
-          ? current.products.map((product) => (product.base.id === saved.base.id ? saved : product))
+          ? current.products.map((product) => (product.base.id === saved.base.id ? visibleProduct : product))
           : current.products.map((product) =>
               product.base.id === context?.optimisticId ? saved : product,
             )
         return { ...current, products }
       })
       setSearch('')
-      syncProductionCatalogProduct(saved)
+      syncProductionCatalogProduct(visibleProduct)
       warmProductionCatalog()
       void refreshProductConsumers()
       notify('Producto guardado y verificado en la base de datos')
