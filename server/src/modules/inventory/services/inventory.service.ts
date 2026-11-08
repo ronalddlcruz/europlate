@@ -525,6 +525,26 @@ export const inventoryService = {
       ...(input.description !== undefined && { description: input.description || null }),
     })
   },
+  async renameWarehouse(companyId: string, actorId: string, id: string, name: string) {
+    assertWarehouseScope(await resolveOperationScope(companyId, actorId), [id])
+    const warehouse = await inventoryRepository.findWarehouse(id, companyId)
+    if (!warehouse)
+      throw new AppError('WAREHOUSE_NOT_FOUND', 'El almacén no existe.', 404)
+    if (warehouse.name === name) return warehouse
+    const duplicate = await prisma.warehouse.findFirst({
+      where: { companyId, name: { equals: name, mode: 'insensitive' }, NOT: { id } },
+      select: { id: true },
+    })
+    if (duplicate)
+      throw new AppError('WAREHOUSE_EXISTS', 'Ya existe un almacén con ese nombre.', 409)
+    try {
+      return await inventoryRepository.updateWarehouse(id, { name })
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002')
+        throw new AppError('WAREHOUSE_EXISTS', 'Ya existe un almacén con ese nombre.', 409)
+      throw error
+    }
+  },
   async removeWarehouse(companyId: string, id: string) {
     if (!(await inventoryRepository.findWarehouse(id, companyId)))
       throw new AppError('WAREHOUSE_NOT_FOUND', 'El almacén no existe.', 404)

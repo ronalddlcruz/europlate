@@ -1,8 +1,8 @@
-import { Pencil, Trash2 } from 'lucide-react'
+import { Pencil, Settings2, Trash2 } from 'lucide-react'
 import { useWarehousesController } from '@/features/inventory/hooks/useWarehousesController'
 
 export function WarehousesTable({ model }: { model: ReturnType<typeof useWarehousesController> }) {
-  const { canManage, warehouses, setEditing, setModal, remove } = model
+  const { canManage, canRename, warehouses, setEditing, setRenaming, setModal, remove } = model
   return (
     <table className="w-full min-w-[1080px] text-left">
       <thead>
@@ -16,7 +16,7 @@ export function WarehousesTable({ model }: { model: ReturnType<typeof useWarehou
             'Distrito',
             'Calle / dirección',
             'Estado',
-            ...(canManage ? [''] : []),
+            ...(canRename ? [''] : []),
           ].map((value, index) => (
             <th key={value || index} className="border-y border-border px-3 py-3">
               {value}
@@ -27,7 +27,7 @@ export function WarehousesTable({ model }: { model: ReturnType<typeof useWarehou
       <tbody>
         {warehouses.isLoading ? (
           <tr>
-            <td colSpan={canManage ? 9 : 8} className="p-10 text-center text-muted">
+            <td colSpan={canRename ? 9 : 8} className="p-10 text-center text-muted">
               Cargando almacenes…
             </td>
           </tr>
@@ -42,20 +42,28 @@ export function WarehousesTable({ model }: { model: ReturnType<typeof useWarehou
               <td className="px-3 py-3">{item.district ?? '—'}</td>
               <td className="max-w-[250px] px-3 py-3">{item.address ?? item.location ?? '—'}</td>
               <td className="px-3 py-3">{item.status === 'ACTIVE' ? 'Activo' : 'Inactivo'}</td>
-              {canManage && (
+              {canRename && (
                 <td className="whitespace-nowrap px-3 py-3 text-right">
                   <button
                     type="button"
                     className="inline-flex h-8 w-8 items-center justify-center rounded border border-border"
-                    aria-label={'Editar ' + item.name}
+                    aria-label={'Cambiar nombre de ' + item.name}
+                    onClick={() => setRenaming(item)}
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
+                  {canManage && <button
+                    type="button"
+                    className="ml-1 inline-flex h-8 w-8 items-center justify-center rounded border border-border"
+                    aria-label={'Editar datos de ' + item.name}
                     onClick={() => {
                       setEditing(item)
                       setModal(true)
                     }}
                   >
-                    <Pencil className="h-3.5 w-3.5" />
-                  </button>
-                  <button
+                    <Settings2 className="h-3.5 w-3.5" />
+                  </button>}
+                  {canManage && <button
                     type="button"
                     disabled={remove.isPending}
                     className="ml-1 inline-flex h-8 w-8 items-center justify-center rounded border border-red-200 bg-red-50 text-red-600 disabled:opacity-50"
@@ -66,14 +74,14 @@ export function WarehousesTable({ model }: { model: ReturnType<typeof useWarehou
                     }}
                   >
                     <Trash2 className="h-3.5 w-3.5" />
-                  </button>
+                  </button>}
                 </td>
               )}
             </tr>
           ))
         ) : (
           <tr>
-            <td colSpan={canManage ? 9 : 8} className="p-10 text-center text-muted">
+            <td colSpan={canRename ? 9 : 8} className="p-10 text-center text-muted">
               Aún no hay almacenes registrados.
             </td>
           </tr>

@@ -8,6 +8,7 @@ import {
   listSites,
   listWarehouseResponsibles,
   listWarehouses,
+  renameWarehouse,
   updateWarehouse,
   type Warehouse,
 } from '@/features/inventory/services/inventory-api.service'
@@ -15,9 +16,11 @@ import {
 export function useWarehousesController() {
   const client = useQueryClient()
   const { session } = useAuth()
-  const canManage = Boolean(
-    session?.user.permissions.includes('*') || session?.user.permissions.includes('users.manage'),
-  )
+  const permissions = session?.user.permissions ?? []
+  const canManage =
+    (permissions.includes('*') || permissions.includes('users.manage')) &&
+    (permissions.includes('*') || permissions.includes('operations.global'))
+  const canRename = canManage || permissions.includes('inventory.manage')
   const warehouses = useQuery({
     queryKey: ['inventory', 'warehouses'],
     queryFn: listWarehouses,
@@ -35,6 +38,7 @@ export function useWarehousesController() {
     enabled: canManage,
   })
   const [editing, setEditing] = useState<Warehouse>()
+  const [renaming, setRenaming] = useState<Warehouse>()
   const [modal, setModal] = useState(false)
   const [notice, setNotice] = useState('')
   const notify = (message: string) => {
@@ -58,6 +62,19 @@ export function useWarehousesController() {
     onError: (error) =>
       notify(error instanceof Error ? error.message : 'No se pudo guardar el almacén.'),
   })
+  const rename = useMutation({
+    mutationFn: ({ id, name }: { id: string; name: string }) => renameWarehouse(id, name),
+    onSuccess: (saved) => {
+      client.setQueryData<Warehouse[]>(['inventory', 'warehouses'], (current) =>
+        current?.map((warehouse) => (warehouse.id === saved.id ? saved : warehouse)),
+      )
+      setRenaming(undefined)
+      void sync()
+      notify('Nombre del almacén actualizado.')
+    },
+    onError: (error) =>
+      notify(error instanceof Error ? error.message : 'No se pudo cambiar el nombre.'),
+  })
   const remove = useMutation({
     mutationFn: deleteWarehouse,
     onSuccess: () => {
@@ -72,11 +89,14 @@ export function useWarehousesController() {
     client,
     session,
     canManage,
+    canRename,
     warehouses,
     responsibles,
     sites,
     editing,
     setEditing,
+    renaming,
+    setRenaming,
     modal,
     setModal,
     notice,
@@ -84,6 +104,7 @@ export function useWarehousesController() {
     notify,
     sync,
     save,
+    rename,
     remove,
   }
 }

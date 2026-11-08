@@ -51,6 +51,7 @@ export const warehouseSchema = z.object({
   status: z.enum(['ACTIVE', 'INACTIVE']).default('ACTIVE'),
 })
 export const updateWarehouseSchema = warehouseSchema.partial()
+export const renameWarehouseSchema = warehouseSchema.pick({ name: true })
 export const inventoryQuerySchema = z.object({
   search: z.string().trim().max(160).optional(),
   warehouseId: databaseIdSchema.optional(),

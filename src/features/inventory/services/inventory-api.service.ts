@@ -326,5 +326,10 @@ export const updateWarehouse = (
     method: 'PATCH',
     body: JSON.stringify(payload),
   })
+export const renameWarehouse = (id: string, name: string) =>
+  api<Warehouse>(`/api/inventory/warehouses/${id}/name`, {
+    method: 'PATCH',
+    body: JSON.stringify({ name }),
+  })
 export const deleteWarehouse = (id: string) =>
   api<void>(`/api/inventory/warehouses/${id}`, { method: 'DELETE' })

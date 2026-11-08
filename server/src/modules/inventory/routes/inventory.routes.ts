@@ -56,6 +56,11 @@ inventoryRoutes.post(
   inventoryController.createWarehouse,
 )
 inventoryRoutes.patch(
+  '/warehouses/:id/name',
+  requirePermission('inventory.manage'),
+  inventoryController.renameWarehouse,
+)
+inventoryRoutes.patch(
   '/warehouses/:id',
   requirePermission('users.manage'),
   requireGlobalAccess,

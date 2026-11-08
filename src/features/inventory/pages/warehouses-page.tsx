@@ -2,12 +2,15 @@ import { Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { WarehousesTable } from '@/features/inventory/components/tables/WarehousesTable'
 import { WarehouseDialog } from '@/features/inventory/components/warehouse-dialogs/WarehouseDialog'
+import { RenameWarehouseDialog } from '@/features/inventory/components/warehouse-dialogs/RenameWarehouseDialog'
 import { useWarehousesController } from '@/features/inventory/hooks/useWarehousesController'
 
 export function WarehousesPage() {
   const model = useWarehousesController()
-  const { canManage, responsibles, sites, editing, setEditing, modal, setModal, notice, save } =
-    model
+  const {
+    canManage, responsibles, sites, editing, setEditing, renaming, setRenaming,
+    modal, setModal, notice, save, rename,
+  } = model
   return (
     <div className="mx-auto max-w-7xl">
       <section className="card">
@@ -44,6 +47,15 @@ export function WarehousesPage() {
           saving={save.isPending}
           onClose={() => setModal(false)}
           onSave={(payload) => save.mutate({ id: editing?.id, payload })}
+        />
+      )}
+      {renaming && (
+        <RenameWarehouseDialog
+          key={renaming.id}
+          warehouse={renaming}
+          saving={rename.isPending}
+          onClose={() => setRenaming(undefined)}
+          onSave={(name) => rename.mutate({ id: renaming.id, name })}
         />
       )}
       {notice && (

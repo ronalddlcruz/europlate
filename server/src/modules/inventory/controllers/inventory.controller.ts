@@ -4,6 +4,7 @@ import {
   inventoryQuerySchema,
   stockTransferSchema,
   updateWarehouseSchema,
+  renameWarehouseSchema,
   warehouseSchema,
 } from '../schemas/inventory.schema.js'
 import { inventoryService } from '../services/inventory.service.js'
@@ -84,6 +85,16 @@ export const inventoryController = {
         request.auth!.companyId,
         idFrom(request),
         updateWarehouseSchema.parse(request.body),
+      ),
+    })
+  },
+  async renameWarehouse(request: Request, response: Response) {
+    response.json({
+      data: await inventoryService.renameWarehouse(
+        request.auth!.companyId,
+        request.auth!.id,
+        idFrom(request),
+        renameWarehouseSchema.parse(request.body).name,
       ),
     })
   },
